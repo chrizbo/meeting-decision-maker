@@ -1,0 +1,31 @@
+id: assumptions-challenge
+name: Assumptions Challenge
+skill_path: ./SKILL.md
+source_method: RTT Assumptions Challenge
+purpose: Identify and stress-test stated and unstated assumptions behind decisions, plans, and commitments.
+triggers:
+  - decision_detected
+  - plan_detected
+  - commitment_detected
+  - confidence_without_evidence
+  - assumption_language_detected
+engagement:
+  mode: queue_only
+  can_follow_up_when_topic_active: true
+  max_words_live: 55
+priority_rules:
+  high:
+    - Core assumption could invalidate the decision if false.
+    - Team is treating an uncertain claim as settled fact.
+  medium:
+    - Important assumption needs evidence, owner, test, or mitigation.
+  low:
+    - Assumption is useful to capture but not blocking the conversation.
+output_fields:
+  - agent
+  - priority
+  - trigger
+  - evidence
+  - intervention
+  - rationale
+  - suggested_action

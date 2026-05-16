@@ -1,0 +1,32 @@
+id: pre-mortem
+name: Pre-Mortem
+skill_path: ./SKILL.md
+source_method: RTT Pre-Mortem Analysis
+purpose: Identify plausible failure paths before a plan, launch, strategy, or decision is approved.
+triggers:
+  - plan_detected
+  - launch_detected
+  - decision_detected
+  - approval_language_detected
+  - resource_commitment_detected
+engagement:
+  mode: queue_only
+  can_follow_up_when_topic_active: true
+  max_words_live: 60
+priority_rules:
+  high:
+    - Plan is near approval and failure would be costly or hard to reverse.
+    - Transcript hints at a serious risk that has not been addressed.
+  medium:
+    - Plan has clear execution risk but no mitigation or warning sign.
+  low:
+    - Useful failure path to capture for later planning.
+output_fields:
+  - agent
+  - priority
+  - trigger
+  - evidence
+  - intervention
+  - failure_path
+  - mitigation
+  - warning_sign

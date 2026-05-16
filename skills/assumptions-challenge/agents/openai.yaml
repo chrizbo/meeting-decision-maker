@@ -1,0 +1,4 @@
+interface:
+  display_name: "Assumptions Challenge"
+  short_description: "Surface and stress-test assumptions behind decisions."
+  default_prompt: "Use this skill to identify stated and unstated assumptions behind a meeting decision or plan, challenge their strength, and suggest concise interventions."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pre-Mortem"
+  short_description: "Find plausible failure paths before a plan is approved."
+  default_prompt: "Use this skill to imagine that a proposed plan failed, work backward to likely causes, and suggest mitigations and warning signs."

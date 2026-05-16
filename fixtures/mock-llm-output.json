@@ -1,0 +1,237 @@
+{
+  "source": "mock-llm-output.v1",
+  "transcript": "sample-transcripts/product-decision-demo.vtt",
+  "events": [
+    {
+      "at": 31.5,
+      "items": [
+        {
+          "type": "decision",
+          "status": "pending",
+          "title": "MVP focus",
+          "summary": "Choose whether the MVP optimizes for implementation speed or for testing the live facilitation experience."
+        }
+      ]
+    },
+    {
+      "at": 47.5,
+      "items": [
+        {
+          "type": "agent_issue",
+          "agent": "Assumptions Challenge",
+          "priority": "high",
+          "summary": "Ask what must be true for the host to monitor the page while also running the meeting."
+        }
+      ]
+    },
+    {
+      "at": 56.5,
+      "items": [
+        {
+          "type": "risk",
+          "title": "Host attention risk",
+          "summary": "The host may not be able to facilitate the meeting and monitor the shared board at the same time."
+        }
+      ]
+    },
+    {
+      "at": 64.5,
+      "items": [
+        {
+          "type": "agent_issue",
+          "agent": "Assumptions Challenge",
+          "priority": "medium",
+          "summary": "Ask whether participants will tolerate a shared page during a live conversation."
+        },
+        {
+          "type": "risk",
+          "title": "Screen-share distraction risk",
+          "summary": "The shared page may distract participants or create visual noise during the meeting."
+        }
+      ]
+    },
+    {
+      "at": 81.5,
+      "items": [
+        {
+          "type": "agent_issue",
+          "agent": "Pre-Mortem",
+          "priority": "high",
+          "summary": "Test the failure path where agent suggestions arrive too late or feel too generic to change the discussion."
+        },
+        {
+          "type": "risk",
+          "title": "Agent timing and quality risk",
+          "summary": "Agent suggestions may arrive too late or be too generic to influence the conversation."
+        }
+      ]
+    },
+    {
+      "at": 117.5,
+      "items": [
+        {
+          "type": "agent_issue",
+          "agent": "Argument Dissection",
+          "priority": "high",
+          "summary": "Separate the live-board claim from the evidence that people actually want an artifact during the meeting."
+        }
+      ]
+    },
+    {
+      "at": 135.5,
+      "items": [
+        {
+          "type": "decision",
+          "status": "pending",
+          "title": "Build the live board first",
+          "summary": "Use a human-shared page with timed mock transcript playback before Zoom-native integration."
+        }
+      ]
+    },
+    {
+      "at": 162.5,
+      "items": [
+        {
+          "type": "action",
+          "title": "Build playback and queue",
+          "summary": "Implement the transcript playback loop and agent queue before Zoom integration."
+        }
+      ]
+    },
+    {
+      "at": 169,
+      "items": [
+        {
+          "type": "decision",
+          "status": "pending",
+          "title": "Make transcript optional",
+          "summary": "Allow the host to hide or show the transcript rail during screen share."
+        }
+      ]
+    },
+    {
+      "at": 187.5,
+      "items": [
+        {
+          "type": "risk",
+          "title": "Evidence visibility risk",
+          "summary": "Hiding the transcript could make captured items feel less grounded in evidence."
+        }
+      ]
+    },
+    {
+      "at": 205.5,
+      "items": [
+        {
+          "type": "decision",
+          "status": "pending",
+          "title": "Open guidance modals",
+          "summary": "Clicking decisions, risks, actions, and agent issues should open facilitation guidance."
+        }
+      ]
+    },
+    {
+      "at": 234.5,
+      "items": [
+        {
+          "type": "risk",
+          "title": "Modal interaction burden",
+          "summary": "Opening modals during a live meeting may add too much interaction burden for the host."
+        }
+      ]
+    },
+    {
+      "at": 244.5,
+      "items": [
+        {
+          "type": "decision",
+          "status": "pending",
+          "title": "Allow cleanup of captures",
+          "summary": "Risks and actions can be removed when the host decides they are not useful."
+        }
+      ]
+    },
+    {
+      "at": 254.5,
+      "items": [
+        {
+          "type": "risk",
+          "title": "Dismissal of useful dissent",
+          "summary": "Hosts may remove useful dissent or unresolved risks too quickly."
+        }
+      ]
+    },
+    {
+      "at": 263.5,
+      "items": [
+        {
+          "type": "risk",
+          "title": "Premature agent dismissal",
+          "summary": "Agent issues may be dismissed before the team has considered them."
+        }
+      ]
+    },
+    {
+      "at": 272.5,
+      "items": [
+        {
+          "type": "action",
+          "title": "Track dismissed items",
+          "summary": "Keep a record of removed items so the meeting record shows what was dismissed and why."
+        }
+      ]
+    },
+    {
+      "at": 282.5,
+      "items": [
+        {
+          "type": "decision",
+          "status": "pending",
+          "title": "Use unguessable shared links",
+          "summary": "Prototype dashboards are open-by-link but should not be easy to guess."
+        }
+      ]
+    },
+    {
+      "at": 292.5,
+      "items": [
+        {
+          "type": "risk",
+          "title": "Access control risk",
+          "summary": "Open dashboard links may not be appropriate for sensitive meetings without account-based access controls."
+        }
+      ]
+    },
+    {
+      "at": 302.5,
+      "items": [
+        {
+          "type": "decision",
+          "status": "pending",
+          "title": "Retain full transcript",
+          "summary": "Keep the full transcript attached to the meeting record during the prototype."
+        }
+      ]
+    },
+    {
+      "at": 323.5,
+      "items": [
+        {
+          "type": "risk",
+          "title": "Transcript retention risk",
+          "summary": "Full transcript retention may need configurable controls earlier than planned."
+        }
+      ]
+    },
+    {
+      "at": 334.5,
+      "items": [
+        {
+          "type": "action",
+          "title": "Add retention settings later",
+          "summary": "Add retention settings to production readiness without blocking the static prototype."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Argument Dissection"
+  short_description: "Check claims, evidence, and reasoning quality."
+  default_prompt: "Use this skill to assess a meeting claim, recommendation, or decision argument for evidence quality, ambiguity, bias, missing information, and alternative conclusions."

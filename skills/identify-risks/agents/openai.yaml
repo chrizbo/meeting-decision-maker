@@ -1,0 +1,4 @@
+interface:
+  display_name: "Identify Risks"
+  short_description: "Capture risks and warning signs from meetings."
+  default_prompt: "Use this skill to identify risks, concerns, failure modes, assumptions, mitigations, warning signs, and owners from meeting transcripts or notes."

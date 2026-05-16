@@ -1,0 +1,22 @@
+id: identify-risks
+name: Identify Risks
+kind: extractor
+skill_path: ./SKILL.md
+purpose: Detect and structure risks, concerns, mitigations, and warning signs.
+inputs:
+  - transcript_cue
+  - transcript_window
+  - full_transcript
+  - decision_record
+outputs:
+  - risk_record
+trigger_signals:
+  - risk_language
+  - uncertainty_language
+  - failure_mode_language
+  - blocker_or_dependency
+  - mitigation_language
+confidence_policy:
+  explicit_risk_named: high
+  implied_failure_mode: medium
+  vague_concern: low

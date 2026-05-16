@@ -1,0 +1,32 @@
+id: argument-dissection
+name: Argument Dissection
+skill_path: ./SKILL.md
+source_method: RTT Argument Dissection
+purpose: Evaluate claims and recommendations for evidence quality, ambiguity, missing information, rival explanations, and reasoning weaknesses.
+triggers:
+  - claim_detected
+  - recommendation_detected
+  - rationale_detected
+  - weak_evidence_detected
+  - alternative_explanation_possible
+engagement:
+  mode: queue_only
+  can_follow_up_when_topic_active: true
+  max_words_live: 60
+priority_rules:
+  high:
+    - Weak argument is directly driving a decision or commitment.
+    - Missing evidence or rival explanation could materially change the decision.
+  medium:
+    - Argument needs clarification, evidence, or context before being relied on.
+  low:
+    - Useful reasoning issue to capture but not urgent for the live conversation.
+output_fields:
+  - agent
+  - priority
+  - trigger
+  - evidence
+  - intervention
+  - weakness
+  - missing_information
+  - alternative_explanation

@@ -1,0 +1,32 @@
+version: 1
+purpose: Portable meeting skills that can be loaded by the meeting decision tool, future LLM workers, or CLI agents.
+skill_loader:
+  codex_cli: Read each skill's SKILL.md. Optional UI metadata lives in agents/openai.yaml.
+  meeting_tool: Load red-team agent.yaml files for queue behavior and extractor.yaml files for capture behavior. Use SKILL.md as the LLM instruction layer when invoking a model.
+skills:
+  - id: assumptions-challenge
+    path: ./assumptions-challenge
+    agent_config: ./assumptions-challenge/agent.yaml
+    skill_file: ./assumptions-challenge/SKILL.md
+  - id: pre-mortem
+    path: ./pre-mortem
+    agent_config: ./pre-mortem/agent.yaml
+    skill_file: ./pre-mortem/SKILL.md
+  - id: argument-dissection
+    path: ./argument-dissection
+    agent_config: ./argument-dissection/agent.yaml
+    skill_file: ./argument-dissection/SKILL.md
+
+extractors:
+  - id: identify-decisions
+    path: ./identify-decisions
+    extractor_config: ./identify-decisions/extractor.yaml
+    skill_file: ./identify-decisions/SKILL.md
+  - id: identify-risks
+    path: ./identify-risks
+    extractor_config: ./identify-risks/extractor.yaml
+    skill_file: ./identify-risks/SKILL.md
+  - id: identify-action-items
+    path: ./identify-action-items
+    extractor_config: ./identify-action-items/extractor.yaml
+    skill_file: ./identify-action-items/SKILL.md

@@ -1,0 +1,23 @@
+id: identify-action-items
+name: Identify Action Items
+kind: extractor
+skill_path: ./SKILL.md
+purpose: Detect and structure action items, owners, timing, and dependencies.
+inputs:
+  - transcript_cue
+  - transcript_window
+  - full_transcript
+  - decision_record
+  - risk_record
+outputs:
+  - action_item_record
+trigger_signals:
+  - action_language
+  - owner_language
+  - follow_up_language
+  - deliverable_language
+  - due_date_or_review_language
+confidence_policy:
+  explicit_owner_and_task: high
+  task_without_owner: medium
+  vague_follow_up: low

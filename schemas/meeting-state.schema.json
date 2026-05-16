@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meeting-decision-maker.local/schemas/meeting-state.schema.json",
+  "title": "Meeting Decision Maker Board State",
+  "type": "object",
+  "required": [
+    "meeting",
+    "decisions",
+    "risks",
+    "actions",
+    "agents",
+    "audit"
+  ],
+  "properties": {
+    "meeting": {
+      "type": "object",
+      "required": [
+        "topic",
+        "host",
+        "attendees",
+        "dashboardSlug"
+      ],
+      "properties": {
+        "topic": {
+          "type": "string"
+        },
+        "meetingId": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "attendees": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dashboardSlug": {
+          "type": "string"
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/decision"
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/boardItem"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/boardItem"
+      }
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/agentItem"
+      }
+    },
+    "audit": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/auditItem"
+      }
+    }
+  },
+  "$defs": {
+    "boardItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "detail",
+        "evidence",
+        "transcriptReference"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "transcriptReference": {
+          "type": "string"
+        },
+        "conversation": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "decision": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/boardItem"
+        },
+        {
+          "type": "object",
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "pending",
+                "accepted"
+              ]
+            },
+            "suggestedStatus": {
+              "enum": [
+                "pending",
+                "accepted",
+                "rejected"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "agentItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "agent",
+        "status",
+        "priority",
+        "intervention",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "agent": {
+          "enum": [
+            "Assumptions Challenge",
+            "Pre-Mortem",
+            "Argument Dissection"
+          ]
+        },
+        "status": {
+          "enum": [
+            "open",
+            "discussed"
+          ]
+        },
+        "priority": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "discussionSuggested": {
+          "type": "boolean"
+        },
+        "intervention": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "transcriptReference": {
+          "type": "string"
+        },
+        "followUp": {
+          "type": "string"
+        },
+        "topics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "auditItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "disposition",
+        "title",
+        "detail"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "decision",
+            "risk",
+            "action",
+            "agent"
+          ]
+        },
+        "disposition": {
+          "enum": [
+            "dismissed",
+            "rejected"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "transcriptReference": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

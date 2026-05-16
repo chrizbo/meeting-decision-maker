@@ -1,0 +1,4 @@
+interface:
+  display_name: "Identify Action Items"
+  short_description: "Capture action items from meeting transcripts."
+  default_prompt: "Use this skill to identify action items, owners, due dates, dependencies, and decision or risk links from meeting transcripts or notes."

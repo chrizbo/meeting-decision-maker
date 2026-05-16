@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meeting Decision Maker</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-block">
+        <div class="brand-mark">MD</div>
+        <div>
+          <h1>Meeting Decision Maker</h1>
+          <p id="meetingStatus">Demo meeting · waiting to start</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <label class="file-control">
+          <input id="transcriptFile" type="file" accept=".vtt,.txt,text/vtt,text/plain">
+          <span>Load Transcript</span>
+        </label>
+        <button id="toggleTranscriptButton" type="button">Hide Transcript</button>
+        <button id="resetButton" type="button">Reset</button>
+        <button id="playButton" type="button" class="primary">Start</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="panel transcript-panel" aria-labelledby="transcriptTitle">
+        <div class="panel-header compact">
+          <div>
+            <p class="eyebrow">Transcript</p>
+            <h2 id="transcriptTitle">Live Feed</h2>
+          </div>
+          <div class="timer" id="clock">00:00</div>
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
+        <div class="playback-row">
+          <label for="speedSelect">Speed</label>
+          <select id="speedSelect">
+            <option value="0.75">0.75x</option>
+            <option value="1" selected>1x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2x</option>
+            <option value="4">4x</option>
+          </select>
+        </div>
+        <div id="transcriptList" class="transcript-list" aria-live="polite"></div>
+      </section>
+
+      <section class="board" aria-labelledby="boardTitle">
+        <div class="board-header">
+          <div>
+            <p class="eyebrow">Decision Board</p>
+            <h2 id="boardTitle">Product Direction</h2>
+            <div class="meeting-context">
+              <strong id="meetingName">Product Decision Review</strong>
+              <span id="meetingAttendees">Bryce Hoffman, Chris Butler</span>
+            </div>
+          </div>
+          <div class="meeting-link">
+            <span>dashboard</span>
+            <strong id="dashboardUrl">/m/7QK4-MVP</strong>
+          </div>
+        </div>
+
+        <div class="decision-strip" id="decisionStrip">
+          <article class="decision-card empty-state">
+            <span class="status-pill">listening</span>
+            <h3>No decision captured yet</h3>
+            <p>The board will fill as the transcript replays.</p>
+          </article>
+        </div>
+
+        <div class="board-grid">
+          <section class="board-section" aria-labelledby="risksTitle">
+            <div class="section-title-row">
+              <h3 id="risksTitle">Risks</h3>
+              <span id="riskCount">0</span>
+            </div>
+            <div id="riskList" class="stack-list"></div>
+          </section>
+
+          <section class="board-section" aria-labelledby="actionsTitle">
+            <div class="section-title-row">
+              <h3 id="actionsTitle">Actions</h3>
+              <span id="actionCount">0</span>
+            </div>
+            <div id="actionList" class="stack-list"></div>
+          </section>
+        </div>
+
+        <section class="audit-section" id="auditSection" aria-labelledby="auditTitle">
+          <div class="section-title-row">
+            <h3 id="auditTitle">Audit Tray</h3>
+            <span id="auditCount">0</span>
+          </div>
+          <div id="auditList" class="audit-list"></div>
+        </section>
+      </section>
+
+      <aside class="panel agents-panel" aria-labelledby="agentsTitle">
+        <div class="panel-header compact">
+          <div>
+            <p class="eyebrow">Red Team</p>
+            <h2 id="agentsTitle">Agent Queue</h2>
+          </div>
+          <div class="queue-count" id="queueCount">0</div>
+        </div>
+
+        <div class="agent-tabs" role="tablist" aria-label="Agent filters">
+          <button class="agent-filter active" data-filter="all" type="button">All</button>
+          <button class="agent-filter" data-filter="open" type="button">Open</button>
+          <button class="agent-filter" data-filter="discussed" type="button">Discussed</button>
+        </div>
+
+        <div id="agentQueue" class="agent-queue"></div>
+      </aside>
+    </main>
+    <div id="detailModal" class="modal-backdrop" aria-hidden="true">
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <button id="modalClose" class="modal-close" type="button" aria-label="Close detail">x</button>
+        <p id="modalEyebrow" class="eyebrow">Detail</p>
+        <h2 id="modalTitle">Meeting item</h2>
+        <p id="modalSummary" class="modal-summary"></p>
+        <div class="modal-body">
+          <h3>Transcript Reference</h3>
+          <p id="modalTranscript" class="modal-transcript"></p>
+          <h3>Suggested Conversation</h3>
+          <p id="modalConversation"></p>
+          <h3>Next Steps</h3>
+          <ul id="modalSteps"></ul>
+          <div id="modalDecisionActions" class="modal-agent-actions" hidden>
+            <button id="modalAcceptDecision" type="button">Accept Decision</button>
+            <button id="modalRejectDecision" type="button">Reject Decision</button>
+          </div>
+          <div id="modalAgentActions" class="modal-agent-actions" hidden>
+            <button id="modalDiscussed" type="button">Mark Discussed</button>
+            <button id="modalDismiss" type="button">Dismiss Issue</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

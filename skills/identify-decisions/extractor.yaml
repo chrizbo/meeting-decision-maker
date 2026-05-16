@@ -1,0 +1,21 @@
+id: identify-decisions
+name: Identify Decisions
+kind: extractor
+skill_path: ./SKILL.md
+purpose: Detect and structure meeting decisions and decision candidates.
+inputs:
+  - transcript_cue
+  - transcript_window
+  - full_transcript
+outputs:
+  - decision_record
+trigger_signals:
+  - decision_language
+  - agreement_language
+  - option_tradeoff_resolved
+  - scope_boundary_set
+  - decision_deferred
+confidence_policy:
+  explicit_agreement: high
+  convergence_without_confirmation: medium
+  single_speaker_proposal: low

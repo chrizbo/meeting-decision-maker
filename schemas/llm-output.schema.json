@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meeting-decision-maker.local/schemas/llm-output.schema.json",
+  "title": "Meeting Decision Maker LLM Output",
+  "type": "object",
+  "required": [
+    "source",
+    "events"
+  ],
+  "properties": {
+    "source": {
+      "type": "string"
+    },
+    "transcript": {
+      "type": "string"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "at",
+          "items"
+        ],
+        "properties": {
+          "at": {
+            "type": "number",
+            "description": "Cue start time in seconds."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "type",
+                "title",
+                "summary"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "decision",
+                    "risk",
+                    "action",
+                    "agent_issue"
+                  ]
+                },
+                "status": {
+                  "enum": [
+                    "pending",
+                    "accepted",
+                    "rejected"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "agent": {
+                  "enum": [
+                    "Assumptions Challenge",
+                    "Pre-Mortem",
+                    "Argument Dissection"
+                  ]
+                },
+                "priority": {
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high"
+                  ]
+                }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "type": {
+                        "const": "agent_issue"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "agent",
+                      "priority"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

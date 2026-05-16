@@ -1,0 +1,4 @@
+interface:
+  display_name: "Identify Decisions"
+  short_description: "Capture decisions from meeting transcripts."
+  default_prompt: "Use this skill to identify decisions, decision candidates, options, evidence, owners, and next review points from meeting transcripts or notes."
