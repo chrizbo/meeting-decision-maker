@@ -119,7 +119,7 @@ function showZoomDiagnostics(parts) {
   const text = parts.filter(Boolean).join(' · ');
   if (!text || !els.zoomDiagnostics) return;
   els.zoomDiagnostics.textContent = text;
-  els.zoomDiagnostics.hidden = false;
+  console.info('Meeting Decision Maker Zoom diagnostics', text);
 }
 
 async function openDashboard() {
@@ -253,7 +253,7 @@ async function maybeInitializeZoomApp() {
     state.zoomSession = session;
     applyMeetingContext(meeting);
     if (contextResult.ok) {
-      els.meetingStatus.textContent = meeting.topic + ' · Zoom session ready';
+      els.meetingStatus.textContent = meeting.topic + ' · ready';
     } else {
       const runningContext = runningContextResult.value && (runningContextResult.value.runningContext || runningContextResult.value.context);
       const supportedCount = Array.isArray(supportedApisResult.value && supportedApisResult.value.apis)
@@ -261,7 +261,7 @@ async function maybeInitializeZoomApp() {
         : 0;
       const userRole = userContextResult.value && (userContextResult.value.role || userContextResult.value.userRole);
       const note = runningContext ? ' · ' + runningContext : '';
-      els.meetingStatus.textContent = meeting.topic + note + ' · limited Zoom context';
+      els.meetingStatus.textContent = meeting.topic + note + ' · ready';
       showZoomDiagnostics([
         'meeting context: ' + contextResult.error,
         uuidResult.ok && meeting.meetingId ? 'uuid: yes' : 'uuid: ' + (uuidResult.error || 'none'),
