@@ -6,7 +6,6 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
 import { Firestore } from '@google-cloud/firestore';
-import rtms from '@zoom/rtms';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8787);
@@ -20,6 +19,7 @@ const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
 let skillPromptCache = null;
 const rtmsClients = new Map();
 const rtmsSessionStates = new Map();
+let rtmsModulePromise = null;
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -502,13 +502,23 @@ function stopRtmsClient(payload = {}) {
   return true;
 }
 
-function startRtmsClient(payload = {}) {
+async function loadRtmsSdk() {
+  if (!rtmsModulePromise) {
+    rtmsModulePromise = import('@zoom/rtms').then(function(module) {
+      return module.default || module;
+    });
+  }
+  return rtmsModulePromise;
+}
+
+async function startRtmsClient(payload = {}) {
   const key = rtmsKey(payload);
   if (!payload.rtms_stream_id || !payload.server_urls) {
     return { started: false, reason: 'missing rtms_stream_id or server_urls' };
   }
   if (rtmsClients.has(key)) return { started: false, reason: 'already connected' };
 
+  const rtms = await loadRtmsSdk();
   const client = new rtms.Client();
   rtmsClients.set(key, client);
   rtmsClients.set(payload.rtms_stream_id, client);
