@@ -1,12 +1,12 @@
 # Zoom Integration Options
 
-Current recommendation: keep the first prototype as a human-operated shared dashboard, then build a Zoom App wrapper once the board behavior is stable. Zoom's current Apps SDK supports getting meeting context, participant context, app sharing, invitations, and RTMS controls, so the eventual experience can be native without making the red-team agents appear as meeting attendees.
+Current recommendation: keep the human-operated shared dashboard as the product surface, and use the Zoom App wrapper to launch the board, request RTMS, and create meeting sessions. Zoom's Apps SDK supports getting meeting context, participant context, app sharing, invitations, and RTMS controls, but `startRTMS` may be blocked until the app passes Zoom marketplace verification or entitlement review.
 
 ## Option 1: Human-Shared Dashboard First
 
 The host opens the dashboard in a browser and screen-shares it in Zoom. The dashboard creates or loads a hard-to-guess meeting URL and uses mock transcript playback while we tune board behavior.
 
-This is still the best next step because it isolates the core product question: does a live decision board help the host facilitate the meeting?
+This remains useful because it isolates the core product question: does a live decision board help the host facilitate the meeting?
 
 Build now:
 
@@ -38,7 +38,7 @@ What this means for our desired flow:
 
 ## Option 3: Zoom App + RTMS Transcript Stream
 
-After the static board format works, the Zoom App can request Realtime Media Streams. The Zoom Apps SDK currently lists `startRTMS`, `stopRTMS`, `pauseRTMS`, `resumeRTMS`, `getRTMSStatus`, and `onRTMSStatusChange`. Zoom's RTMS materials describe access to live audio, video, chat, screen sharing, and transcript data over WebSocket, with host/admin controls and disclosure moments.
+The Zoom App can request Realtime Media Streams when Zoom exposes the RTMS APIs to the app. The Zoom Apps SDK currently lists `startRTMS`, `stopRTMS`, `pauseRTMS`, `resumeRTMS`, `getRTMSStatus`, and `onRTMSStatusChange`. Zoom's RTMS materials describe access to live audio, video, chat, screen sharing, and transcript data over WebSocket, with host/admin controls and disclosure moments.
 
 Likely architecture:
 
@@ -46,7 +46,7 @@ Likely architecture:
 2. Zoom sends RTMS webhook events to our backend.
 3. Backend connects to the RTMS stream with `@zoom/rtms` and receives `onTranscriptData` callbacks.
 4. Backend normalizes transcript callbacks into cue objects and sends them through the Gemini cue analyzer with rolling transcript and board-state context.
-5. Shared dashboard receives structured meeting-state updates over WebSocket or Server-Sent Events.
+5. Shared dashboard can poll matching RTMS session state today; WebSocket or Server-Sent Events can replace polling later.
 
 Current backend route:
 
@@ -63,7 +63,7 @@ GET /api/rtms/sessions/:id
 
 Open implementation checks:
 
-- Confirm required Zoom Marketplace scopes and RTMS entitlement for the app.
+- Resolve Zoom Marketplace verification / entitlement requirements for `zoomSdk.startRTMS()` if the SDK returns `40316`.
 - Confirm host/admin approval behavior for meetings outside our account.
 - Decide whether the Zoom App view is the operator UI, the screen-share UI, or just the launcher.
 - Add account-based access before sensitive real meetings: Google login, Zoom login, or workspace SSO.
@@ -76,13 +76,14 @@ This is the easiest path technically, but it does not test whether live facilita
 
 ## Recommended Integration Sequence
 
-1. Finish static shared-screen dashboard behavior with mock transcript fixtures.
-2. Move extraction into a structured mock LLM output contract.
-3. Add a tiny backend that creates meeting sessions and serves unguessable dashboard URLs.
-4. Add a Zoom App shell that reads meeting context and launches/opens the dashboard.
-5. Add account access controls.
-6. Add RTMS transcript streaming.
-7. Replace mock LLM fixture generation with real LLM worker calls using the skills in `skills/`.
+1. Finish static shared-screen dashboard behavior with mock transcript fixtures. Done.
+2. Move extraction into a structured mock LLM output contract. Done.
+3. Add a backend that creates meeting sessions and serves unguessable dashboard URLs. Done.
+4. Add a Zoom App shell that reads meeting context and launches/opens the dashboard. Done.
+5. Add Gemini cue analysis using skills in `skills/`. Done.
+6. Add RTMS webhook ingestion and transcript session state. Done.
+7. Resolve Zoom marketplace verification for `startRTMS`.
+8. Add account access controls and durable meeting-state storage before sensitive production use.
 
 ## Sources
 

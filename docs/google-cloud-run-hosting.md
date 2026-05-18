@@ -15,7 +15,7 @@ Cloud Run is a good fit for the current prototype because it gives us:
 
 Start with one Cloud Run service:
 
-- `meeting-decision-maker-web`: serves the board, creates meeting sessions, and exposes placeholder Zoom webhook routes.
+- `meeting-decision-maker-web`: serves the board, creates meeting sessions, runs Gemini cue analysis, receives signed Zoom RTMS webhooks, and maintains in-memory RTMS session state.
 
 Add these later when the product behavior is stable:
 
@@ -68,6 +68,18 @@ gcloud run deploy meeting-decision-maker-web \
   --allow-unauthenticated
 ```
 
+For the current Zoom/Gemini path, deploy with all secret-backed variables attached:
+
+```bash
+gcloud run deploy meeting-decision-maker-web \
+  --source . \
+  --region "$REGION" \
+  --allow-unauthenticated \
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest
+```
+
+Use `--update-secrets` with the full set above when redeploying from local source so a later deploy does not accidentally remove previously attached secret-backed environment variables.
+
 After deploy, check:
 
 ```bash
@@ -98,6 +110,8 @@ Current backend routes:
 
 - `POST /api/sessions`: create a dashboard session for a meeting.
 - `GET /api/sessions/:id`: fetch session metadata.
-- `POST /api/zoom/rtms-webhook`: placeholder for RTMS webhook events.
+- `POST /api/zoom/rtms-webhook`: validate Zoom webhook URL challenges, verify signed webhook events, and handle RTMS start/stop/transcript events.
+- `GET /api/rtms/sessions`: list in-memory RTMS sessions.
+- `GET /api/rtms/sessions/:id`: inspect transcript and Gemini-derived board state for one RTMS session.
 
-The Zoom App launcher calls the Zoom Apps SDK, reads meeting context, posts to `/api/sessions`, and opens or shares the returned dashboard URL.
+The Zoom App launcher calls the Zoom Apps SDK, reads meeting context, posts to `/api/sessions`, opens or shares the returned dashboard URL, and attempts `zoomSdk.startRTMS()` when Zoom exposes that API. Browser dashboards do not run the Zoom Apps SDK; they can view mock playback and poll matching RTMS session state from the backend.

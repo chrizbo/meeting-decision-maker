@@ -32,7 +32,7 @@ The LLM should preserve evidence, including timestamp and speaker when available
 
 ## Gemini Cue Analysis
 
-The service exposes `POST /api/analyze-cue` as the first live worker boundary. The browser calls it once per newly played cue when `GEMINI_API_KEY` is configured.
+The service exposes `POST /api/analyze-cue` as the first live worker boundary. The browser calls it once per newly played mock/uploaded cue when `GEMINI_API_KEY` is configured. The RTMS backend path calls the same Gemini request builder after receiving Zoom transcript callbacks.
 
 Each request includes:
 
@@ -47,12 +47,12 @@ Gemini can either create a new board item or update an existing one:
 - Use `updateMode: "create"` for genuinely new decisions, risks, actions, or agent issues.
 - Use `updateMode: "update"` plus `targetId` when the latest cue changes the status, wording, evidence, or nuance of an existing item.
 
-This same boundary should be reused for Zoom RTMS. A live Zoom transcript handler should normalize incoming transcript events into cue objects, append them to the meeting transcript buffer, build the rolling window, and call the analyzer. The shared board can then consume the same item shape whether the source was mock playback, uploaded VTT/TXT, or Zoom live transcript data.
+Zoom RTMS uses the same analysis contract. The backend normalizes `onTranscriptData` callbacks into cue objects, appends them to an in-memory RTMS session buffer, builds the rolling window, calls Gemini, and applies create/update records to the server-side RTMS board state. Browser dashboards can poll matching RTMS session records and consume the same item shape whether the source was mock playback, uploaded VTT/TXT, or Zoom live transcript data.
 
 
 ## Structured Contracts
 
-- `schemas/llm-output.schema.json` describes the mock output contract the board can consume now and the future LLM worker should emit.
+- `schemas/llm-output.schema.json` describes the mock output contract the board can consume now and the shape the Gemini worker emits.
 - `schemas/meeting-state.schema.json` describes the dashboard state after host confirmation, including pending/accepted decisions, open/discussed agent issues, and the audit tray.
 - Decisions should enter the board as `pending` until the host accepts or rejects them.
 - Agent discussion detection should only set a suggestion flag. The host confirms with Discussed or Dismissed.

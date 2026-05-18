@@ -4,7 +4,7 @@ A prototype meeting decision assistant for capturing decisions from meeting tran
 
 ## Current Direction
 
-Start with Option A: a human-shared web page using mock transcript playback. After the decision-board format feels right, move toward Option C: a Zoom App plus RTMS integration.
+Start with a human-shared web page using mock transcript playback, then use the Zoom App as the launcher for RTMS when Zoom grants the app access to `startRTMS`.
 
 ## Contents
 
@@ -71,12 +71,14 @@ The service currently provides:
 - `POST /api/sessions`
 - `GET /api/sessions/:id`
 - `POST /api/zoom/rtms-webhook`
+- `GET /api/rtms/sessions`
+- `GET /api/rtms/sessions/:id`
 
 See `docs/google-cloud-run-hosting.md` for the new Google Cloud project and deploy path.
 
 ## Zoom App Setup
 
-The first Zoom-native step is a Zoom App launcher that runs inside the Zoom desktop client, reads meeting context with the Zoom Apps SDK, creates a backend session, and gives the host a shareable dashboard URL.
+The Zoom-native path is a Zoom App launcher that runs inside the Zoom desktop client, reads meeting context with the Zoom Apps SDK, creates a backend session, gives the host a shareable dashboard URL, and attempts to start RTMS when the Zoom SDK exposes `startRTMS`.
 
 Install path:
 
@@ -87,14 +89,15 @@ Install path:
 5. Install the development app into your Zoom account.
 6. Launch it from the Zoom desktop app during a test meeting.
 
-The current codebase includes a minimal Zoom Apps SDK launcher path and development OAuth callback. Full setup notes are in `docs/zoom-app-installation.md`.
+The current codebase includes the Zoom Apps SDK launcher path, OAuth callback, RTMS webhook receiver, Gemini cue analysis, browser dashboard polling for RTMS session state, and marketplace support pages. Full setup notes are in `docs/zoom-app-installation.md`.
 
-Zoom OAuth uses these environment variables in Cloud Run:
+Cloud Run should be deployed with all active secrets attached. The current required Zoom/Gemini environment variables are:
 
 - `ZOOM_CLIENT_ID`
 - `ZOOM_CLIENT_SECRET`
 - `ZOOM_REDIRECT_URI`
 - `ZOOM_WEBHOOK_SECRET_TOKEN`
+- `GEMINI_API_KEY`
 
 Zoom RTMS uses the same Zoom client credentials by default. If your RTMS app has separate credentials, set:
 
@@ -110,7 +113,7 @@ Local development defaults to in-memory sessions. Use `SESSION_STORE=firestore n
 
 ## LLM Path
 
-The static prototype now loads `fixtures/mock-llm-output.json` as the first version of the LLM output contract, with simple JavaScript keyword rules as a direct-file fallback. The intended future implementation is to invoke real LLM workers using the portable skills in `skills/` as the instruction layer. See `docs/llm-integration-notes.md`.
+The static prototype still loads `fixtures/mock-llm-output.json` when Gemini is not configured. The live service can invoke Gemini using the portable skills in `skills/` as the instruction layer. See `docs/llm-integration-notes.md`.
 
 The Node service can now invoke Gemini for live cue analysis. By default it uses `gemini-2.5-flash-lite`, which is the fast/cost-efficient Gemini API option. Override it with `GEMINI_MODEL` when needed.
 
@@ -146,7 +149,9 @@ When Zoom sends `meeting.rtms_started`, the service creates an `@zoom/rtms` clie
 
 Incoming Zoom webhook events are verified with `ZOOM_WEBHOOK_SECRET_TOKEN`, `x-zm-request-timestamp`, and `x-zm-signature`. URL validation events use the same secret token to return Zoom's encrypted validation token.
 
-Inside the Zoom client, the meeting controls menu shows a **Start RTMS** button when the Zoom Apps SDK exposes `startRTMS`. That button starts or stops RTMS and the backend receives the resulting webhook events.
+Inside the Zoom client, the meeting controls menu shows a **Start RTMS** button and an RTMS status line. The app attempts to call `zoomSdk.startRTMS()` after Zoom SDK initialization. If Zoom blocks the API with `40316` / marketplace verification errors, the backend remains ready but live RTMS cannot start until Zoom grants the app access.
+
+Opening the dashboard in a normal browser is supported for viewing and mock transcript testing. The Zoom Apps SDK does not run in a normal browser, so browser mode does not start RTMS. Browser dashboards poll matching `/api/rtms/sessions/:id` records and will display RTMS transcript/analysis state when a matching server-side RTMS session exists.
 
 Inspect RTMS sessions:
 

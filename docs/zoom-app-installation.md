@@ -2,11 +2,11 @@
 
 ## Current Zoom Shape
 
-The first Zoom version should be a Zoom App launcher, not a full RTMS integration yet.
+The current Zoom version is a Zoom App launcher with RTMS plumbing.
 
-The launcher runs inside the Zoom desktop client, reads meeting context with the Zoom Apps SDK, creates a Meeting Decision Maker session through the Cloud Run service, then shows or opens the dashboard URL.
+The launcher runs inside the Zoom desktop client, reads meeting context with the Zoom Apps SDK, creates a Meeting Decision Maker session through the Cloud Run service, then shows or opens the dashboard URL. When Zoom exposes RTMS APIs to the app, the launcher attempts `zoomSdk.startRTMS()` and the backend receives the resulting RTMS webhook events.
 
-RTMS can come after the app shell is installable and the live board behavior is stable.
+If the Zoom SDK returns `40316` / "API hasn't passed marketplace verification", the local app and backend are configured, but Zoom has not yet granted the app access to `startRTMS`.
 
 ## Prerequisites
 
@@ -32,6 +32,7 @@ For the current prototype, the important routes are:
 - `https://YOUR-CLOUD-RUN-URL/api/sessions`
 - `https://YOUR-CLOUD-RUN-URL/api/zoom/oauth/callback`
 - `https://YOUR-CLOUD-RUN-URL/api/zoom/rtms-webhook`
+- `https://YOUR-CLOUD-RUN-URL/api/rtms/sessions`
 
 ## 2. Create the Zoom App
 
@@ -62,6 +63,7 @@ ZOOM_CLIENT_ID=<Zoom development client id>
 ZOOM_CLIENT_SECRET=<Zoom development client secret from Secret Manager>
 ZOOM_REDIRECT_URI=https://YOUR-CLOUD-RUN-URL/api/zoom/oauth/callback
 ZOOM_WEBHOOK_SECRET_TOKEN=<Zoom webhook secret token from Secret Manager>
+GEMINI_API_KEY=<Gemini API key from Secret Manager>
 ```
 
 The RTMS SDK uses `ZM_RTMS_CLIENT` and `ZM_RTMS_SECRET`. If those are not set, the backend falls back to `ZOOM_CLIENT_ID` and `ZOOM_CLIENT_SECRET`.
@@ -73,9 +75,21 @@ SESSION_STORE=firestore
 FIRESTORE_SESSIONS_COLLECTION=meetingSessions
 ```
 
+When deploying from local source, preserve all secret-backed environment variables:
+
+```bash
+gcloud run deploy meeting-decision-maker-web \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest
+```
+
+Using `--set-secrets` with only one secret can replace the existing set of secret-backed variables. Prefer the full command above or inspect the service after deployment.
+
 ## 3. Configure Initial Capabilities
 
-For the launcher-only prototype, keep permissions minimal.
+For the launcher and RTMS prototype, keep permissions minimal but include RTMS capabilities.
 
 Start with capabilities/scopes that let the app:
 
@@ -83,8 +97,20 @@ Start with capabilities/scopes that let the app:
 - Read meeting context.
 - Read participant context if available for host/co-host users.
 - Open or share a URL/app surface.
+- Start, stop, and inspect RTMS status when Zoom grants the app those APIs.
+- Receive RTMS webhook events and transcript data.
 
-Do not enable RTMS until the app shell is working. RTMS needs additional Zoom configuration, host/admin approval, disclosure behavior, and backend processing.
+Enable event subscriptions for:
+
+- `meeting.rtms_started`
+- `meeting.rtms_stopped`
+- interrupted/failed RTMS events if Zoom exposes them.
+
+Set the event notification endpoint URL to:
+
+```text
+https://YOUR-CLOUD-RUN-URL/api/zoom/rtms-webhook
+```
 
 ## 4. Add the Zoom Apps SDK to the Launcher
 
@@ -108,6 +134,7 @@ The launcher should:
 4. Display the returned `dashboardPath`.
 5. Let the host open the dashboard in a browser or share the app surface from Zoom.
 6. Let the host call `zoomSdk.startRTMS()` from the meeting controls menu when RTMS APIs are available.
+7. In normal browser mode, hide the unsupported Zoom SDK error and treat the page as a read-only/shared dashboard.
 
 ## 5. Install and Test the Development App
 
@@ -121,20 +148,21 @@ Before the app is public, install it only for development/testing:
 6. Open Apps and launch `Meeting Decision Maker`.
 7. Confirm the app loads from Cloud Run.
 8. Create a session and verify the board URL opens.
+9. Open the app controls menu and check the RTMS status line.
+10. If Zoom allows the API, start RTMS and confirm `/api/rtms/sessions` shows transcript activity.
 
 If Zoom shows `Request pre-approve` instead of `Add` or `Install`, the Zoom account owner/admin must approve the app first.
 
-## 6. RTMS Installation Path Later
+## 6. Current RTMS Behavior
 
-When the launcher works, extend the Zoom app with RTMS:
+Current backend behavior:
 
-1. Enable RTMS in the Zoom app configuration if available for the account.
-2. Configure Zoom webhooks to call `POST /api/zoom/rtms-webhook`.
-3. Store Zoom app credentials in Google Secret Manager, not in this repo.
-4. Confirm webhook URL validation succeeds with `ZOOM_WEBHOOK_SECRET_TOKEN`.
-5. Confirm `meeting.rtms_started` reaches `/api/zoom/rtms-webhook`.
-6. Confirm the backend joins the stream and receives transcript callbacks.
-7. Push transcript-derived meeting-state updates to dashboard sessions.
+1. Zoom validates `/api/zoom/rtms-webhook` using `ZOOM_WEBHOOK_SECRET_TOKEN`.
+2. Signed Zoom webhook events are verified with `x-zm-request-timestamp` and `x-zm-signature`.
+3. `meeting.rtms_started` causes the backend to create an `@zoom/rtms` client and join the stream.
+4. `onTranscriptData` callbacks are normalized into transcript cues.
+5. Cues are analyzed with Gemini and accumulated in in-memory RTMS session state.
+6. Browser dashboard pages can poll matching RTMS session records and display transcript-derived board state.
 
 RTMS should not be used with real meetings until the app has clear consent, retention, and access-control behavior.
 
