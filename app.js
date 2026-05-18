@@ -99,6 +99,22 @@ function normalizeZoomMeetingContext(context) {
   };
 }
 
+function zoomErrorMessage(error) {
+  if (!error) return 'unknown';
+  return error.reason || error.message || error.errorMessage || error.errorCode || String(error);
+}
+
+async function safeZoomCall(name, fallback) {
+  if (!window.zoomSdk || typeof window.zoomSdk[name] !== 'function') {
+    return { ok: false, value: fallback, error: name + ' unavailable' };
+  }
+  try {
+    return { ok: true, value: await window.zoomSdk[name]() };
+  } catch (error) {
+    return { ok: false, value: fallback, error: zoomErrorMessage(error) };
+  }
+}
+
 async function createMeetingSession(meeting) {
   const response = await fetch('/api/sessions', {
     method: 'POST',
@@ -126,7 +142,10 @@ async function maybeInitializeZoomApp() {
       version: '0.16.0',
       capabilities: [
         'getMeetingContext',
+        'getMeetingUUID',
         'getMeetingParticipants',
+        'getRunningContext',
+        'getSupportedJsApis',
         'openUrl',
         'shareApp'
       ]
@@ -142,8 +161,14 @@ async function maybeInitializeZoomApp() {
   els.toggleTranscriptButton.textContent = 'Show Transcript';
 
   try {
-    const context = await window.zoomSdk.getMeetingContext();
-    const meeting = normalizeZoomMeetingContext(context || {});
+    const contextResult = await safeZoomCall('getMeetingContext', {});
+    const uuidResult = contextResult.ok ? { ok: true, value: {} } : await safeZoomCall('getMeetingUUID', {});
+    const runningContextResult = await safeZoomCall('getRunningContext', {});
+    const supportedApisResult = await safeZoomCall('getSupportedJsApis', {});
+    const meeting = normalizeZoomMeetingContext(contextResult.value || {});
+    if (!meeting.meetingId && uuidResult.value) {
+      meeting.meetingId = uuidResult.value.meetingUUID || uuidResult.value.meetingId || uuidResult.value.meetingID || '';
+    }
     let participants = [];
     if (typeof window.zoomSdk.getMeetingParticipants === 'function') {
       try {
@@ -161,9 +186,26 @@ async function maybeInitializeZoomApp() {
     meeting.dashboardSlug = absoluteDashboardPath(session.dashboardPath);
     state.zoomSession = session;
     applyMeetingContext(meeting);
-    els.meetingStatus.textContent = meeting.topic + ' · Zoom session ready';
+    if (contextResult.ok) {
+      els.meetingStatus.textContent = meeting.topic + ' · Zoom session ready';
+    } else {
+      const runningContext = runningContextResult.value && (runningContextResult.value.runningContext || runningContextResult.value.context);
+      const supportedCount = Array.isArray(supportedApisResult.value && supportedApisResult.value.apis)
+        ? supportedApisResult.value.apis.length
+        : 0;
+      const note = runningContext ? ' · ' + runningContext : '';
+      els.meetingStatus.textContent = meeting.topic + note + ' · limited Zoom context';
+      console.info('Meeting Decision Maker Zoom diagnostics', {
+        getMeetingContext: contextResult.error,
+        getMeetingUUID: uuidResult.ok ? uuidResult.value : uuidResult.error,
+        getRunningContext: runningContextResult.ok ? runningContextResult.value : runningContextResult.error,
+        supportedApiCount: supportedCount,
+        getSupportedJsApis: supportedApisResult.ok ? supportedApisResult.value : supportedApisResult.error
+      });
+    }
   } catch (error) {
-    els.meetingStatus.textContent = fakeZoomMeeting.topic + ' · Zoom context unavailable';
+    els.meetingStatus.textContent = fakeZoomMeeting.topic + ' · Zoom session unavailable';
+    console.info('Meeting Decision Maker Zoom session error', error);
   }
 }
 
