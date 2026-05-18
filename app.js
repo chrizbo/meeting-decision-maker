@@ -81,6 +81,8 @@ const els = {
   modalDismiss: document.querySelector('#modalDismiss')
 };
 
+let rtmsPollTimer = null;
+
 function applyMeetingContext(meeting) {
   state.meetingContext = meeting;
   els.boardTitle.textContent = meeting.topic;
@@ -158,6 +160,10 @@ function showZoomDiagnostics(parts) {
   els.zoomDiagnostics.textContent = text;
   els.zoomDiagnostics.hidden = false;
   console.info('Meeting Decision Maker Zoom diagnostics', text);
+}
+
+function isBrowserUnsupportedZoomError(error) {
+  return zoomErrorMessage(error).toLowerCase().includes('zoom apps sdk is not supported by this browser');
 }
 
 async function openDashboard() {
@@ -336,6 +342,11 @@ async function maybeInitializeZoomApp() {
         : ''
     ]);
   } catch (error) {
+    if (isBrowserUnsupportedZoomError(error)) {
+      els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + ' · browser dashboard';
+      if (els.rtmsStatus) els.rtmsStatus.textContent = 'RTMS starts inside Zoom';
+      return;
+    }
     els.meetingStatus.textContent = fakeZoomMeeting.topic + ' · Zoom SDK unavailable';
     showZoomDiagnostics(['config error: ' + zoomErrorMessage(error)]);
     return;
@@ -489,6 +500,106 @@ function loadTranscript(raw, filename) {
   resetState(false);
   renderTranscript();
   renderAll();
+}
+
+function applyRtmsSessionState(session) {
+  if (!session || !Array.isArray(session.transcript)) return;
+  state.cues = session.transcript.map(function(cue, index) {
+    return {
+      id: cue.id || 'rtms-' + index,
+      start: Number(cue.start || 0),
+      end: Number(cue.end || cue.start || 0) || Number(cue.start || 0) + 3,
+      speaker: cue.speaker || 'Zoom participant',
+      text: cue.text || ''
+    };
+  });
+  state.duration = Math.max.apply(null, state.cues.map(function(cue) { return cue.end; }).concat([1]));
+  state.decisions = (session.decisions || []).map(function(item) {
+    return {
+      id: item.id,
+      key: 'decision:' + item.title,
+      status: item.status || 'pending',
+      suggestedStatus: item.status || 'pending',
+      title: item.title,
+      detail: item.summary,
+      evidence: item.evidence,
+      transcriptReference: buildTranscriptReference(item.evidence, item.summary),
+      conversation: 'Review this RTMS-derived decision and confirm whether it belongs in the meeting record.',
+      steps: ['Confirm the commitment.', 'Ask for objections or missing evidence.', 'Accept or reject the decision.']
+    };
+  });
+  state.risks = (session.risks || []).map(function(item) {
+    return {
+      id: item.id,
+      title: item.title,
+      detail: item.summary,
+      evidence: item.evidence,
+      transcriptReference: buildTranscriptReference(item.evidence, item.summary),
+      conversation: 'Ask whether this risk needs mitigation, monitoring, or dismissal.',
+      steps: ['Choose mitigate, monitor, or dismiss.', 'Assign an owner if needed.', 'Define a warning sign.']
+    };
+  });
+  state.actions = (session.actions || []).map(function(item) {
+    return {
+      id: item.id,
+      title: item.title,
+      detail: item.summary,
+      evidence: item.evidence,
+      transcriptReference: buildTranscriptReference(item.evidence, item.summary),
+      conversation: 'Confirm the owner, output, and review point for this action.',
+      steps: ['Assign an owner.', 'Set a review checkpoint.', 'Connect the action to a decision or risk.']
+    };
+  });
+  state.agents = (session.openAgentIssues || []).map(function(item) {
+    return {
+      id: item.id,
+      key: item.agent + ':' + item.summary,
+      status: item.status || 'open',
+      agent: item.agent,
+      priority: item.priority || 'medium',
+      intervention: item.summary,
+      evidence: item.evidence,
+      discussionSuggested: false,
+      discussedByTranscript: false,
+      followUp: '',
+      topics: agentTopics(item.agent),
+      transcriptReference: buildTranscriptReference(item.evidence, item.summary),
+      conversation: agentConversation(item.agent),
+      steps: agentSteps(item.agent)
+    };
+  });
+  state.currentTime = state.duration;
+  state.boardDirty = true;
+  renderTranscript();
+  renderAll();
+  els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + ' · RTMS transcript ' + state.cues.length + ' cues';
+}
+
+async function loadRtmsSessionState(id) {
+  if (!id) return false;
+  try {
+    const response = await fetch('/api/rtms/sessions/' + encodeURIComponent(id), { cache: 'no-store' });
+    if (!response.ok) return false;
+    applyRtmsSessionState(await response.json());
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function startRtmsPolling() {
+  const meeting = state.meetingContext || {};
+  const candidates = [meeting.meetingId, state.zoomSession && state.zoomSession.zoomMeetingId, currentDashboardSessionId()].filter(Boolean);
+  if (!candidates.length || rtmsPollTimer) return;
+
+  async function poll() {
+    for (const id of candidates) {
+      if (await loadRtmsSessionState(id)) return;
+    }
+  }
+
+  poll();
+  rtmsPollTimer = setInterval(poll, 4000);
 }
 
 function resetState(keepTranscript) {
@@ -1296,6 +1407,7 @@ async function initializeApp() {
   await loadLlmOutput();
   loadTranscript(demoVtt, 'product-decision-demo.vtt');
   applyMeetingContext(state.meetingContext || fakeZoomMeeting);
+  startRtmsPolling();
 }
 
 initializeApp();
