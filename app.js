@@ -17,6 +17,8 @@ const state = {
   agents: [],
   audit: [],
   llmOutput: null,
+  analysisConfig: { enabled: false, provider: 'fixture', model: '' },
+  pendingAnalysisCueIds: new Set(),
   currentTime: 0,
   duration: 0,
   playing: false,
@@ -527,6 +529,12 @@ function analyzeCue(cue) {
   const text = cue.text.toLowerCase();
   const evidence = formatTime(cue.start) + ' · ' + cue.speaker;
 
+  if (state.analysisConfig.enabled) {
+    requestCueAnalysis(cue, evidence);
+    detectAgentDiscussion(cue, evidence);
+    return;
+  }
+
   if (applyLlmFixtureForCue(cue, evidence)) {
     detectAgentDiscussion(cue, evidence);
     return;
@@ -568,6 +576,86 @@ function analyzeCue(cue) {
   maybeAddAgent(cue, evidence);
 }
 
+function transcriptWindowForCue(cue) {
+  const index = state.cues.findIndex(function(item) { return item.id === cue.id; });
+  const end = index >= 0 ? index + 1 : state.cues.length;
+  const windowStart = Math.max(0, cue.start - 90);
+  return state.cues.slice(0, end).filter(function(item) {
+    return item.start >= windowStart;
+  }).slice(-12).map(function(item) {
+    return {
+      id: item.id,
+      start: item.start,
+      end: item.end,
+      speaker: item.speaker,
+      text: item.text
+    };
+  });
+}
+
+function meetingStateForAnalysis() {
+  return {
+    decisions: state.decisions.slice(0, 8).map(function(item) {
+      return { title: item.title, status: item.status, summary: item.detail };
+    }),
+    risks: state.risks.slice(0, 8).map(function(item) {
+      return { title: item.title, summary: item.detail };
+    }),
+    actions: state.actions.slice(0, 8).map(function(item) {
+      return { title: item.title, summary: item.detail };
+    }),
+    openAgentIssues: state.agents.filter(function(item) { return item.status === 'open'; }).slice(0, 8).map(function(item) {
+      return { agent: item.agent, priority: item.priority, summary: item.intervention };
+    })
+  };
+}
+
+async function requestCueAnalysis(cue, evidence) {
+  if (state.pendingAnalysisCueIds.has(cue.id)) return;
+  state.pendingAnalysisCueIds.add(cue.id);
+  try {
+    const response = await fetch('/api/analyze-cue', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        cue: {
+          id: cue.id,
+          start: cue.start,
+          end: cue.end,
+          speaker: cue.speaker,
+          text: cue.text
+        },
+        transcriptWindow: transcriptWindowForCue(cue),
+        meetingState: meetingStateForAnalysis()
+      })
+    });
+    if (!response.ok) throw new Error('analysis unavailable');
+    const result = await response.json();
+    applyAnalysisItems(result.items || [], cue, evidence);
+    renderAll();
+  } catch (error) {
+    if (!applyLlmFixtureForCue(cue, evidence)) {
+      maybeAddAgent(cue, evidence);
+    }
+  } finally {
+    state.pendingAnalysisCueIds.delete(cue.id);
+  }
+}
+
+function applyAnalysisItems(items, cue, evidence) {
+  items.forEach(function(item) {
+    if (item.type === 'decision') addDecision(item.status || 'pending', item.title, item.summary, evidence, { transcriptText: cue.text });
+    if (item.type === 'risk') addRisk(item.title, item.summary, evidence, cue.text);
+    if (item.type === 'action') addAction(item.title, item.summary, evidence);
+    if (item.type === 'agent_issue') addAgent({
+      agent: item.agent,
+      priority: item.priority || 'medium',
+      intervention: item.summary,
+      evidence: evidence,
+      createdCueId: cue.id
+    });
+  });
+}
 
 function applyLlmFixtureForCue(cue, evidence) {
   if (!state.llmOutput || !Array.isArray(state.llmOutput.events)) return false;
@@ -590,7 +678,24 @@ function applyLlmFixtureForCue(cue, evidence) {
   return true;
 }
 
+async function loadAnalysisConfig() {
+  try {
+    const response = await fetch('/api/analysis/config', { cache: 'no-store' });
+    if (!response.ok) throw new Error('analysis config unavailable');
+    state.analysisConfig = await response.json();
+    if (state.analysisConfig.enabled) {
+      els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + ' · ' + state.analysisConfig.model + ' analysis ready';
+    }
+  } catch (error) {
+    state.analysisConfig = { enabled: false, provider: 'fixture', model: '' };
+  }
+}
+
 async function loadLlmOutput() {
+  if (state.analysisConfig.enabled) {
+    state.llmOutput = null;
+    return;
+  }
   try {
     const response = await fetch('/fixtures/mock-llm-output.json', { cache: 'no-store' });
     if (!response.ok) throw new Error('fixture unavailable');
@@ -1013,6 +1118,7 @@ async function initializeApp() {
   applyMeetingContext(fakeZoomMeeting);
   await loadDashboardSession();
   await maybeInitializeZoomApp();
+  await loadAnalysisConfig();
   await loadLlmOutput();
   loadTranscript(demoVtt, 'product-decision-demo.vtt');
   applyMeetingContext(state.meetingContext || fakeZoomMeeting);

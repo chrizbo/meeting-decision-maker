@@ -30,6 +30,20 @@ A likely processing loop is:
 
 The LLM should preserve evidence, including timestamp and speaker when available, and should avoid inventing owners, decisions, or agreement that are not supported by the transcript.
 
+## Gemini Cue Analysis
+
+The service exposes `POST /api/analyze-cue` as the first live worker boundary. The browser calls it once per newly played cue when `GEMINI_API_KEY` is configured.
+
+Each request includes:
+
+- `cue`: the new transcript cue that just became active.
+- `transcriptWindow`: cues from the last 90 seconds, capped at 12 cues, including the current cue.
+- `meetingState`: compact lists of current decisions, risks, actions, and open agent issues.
+
+The backend loads `skills/manifest.yaml`, reads each referenced `SKILL.md`, and sends those instructions with the cue block to Gemini. The default model is `gemini-2.5-flash-lite`; set `GEMINI_MODEL` to use another Gemini API model.
+
+This same boundary should be reused for Zoom RTMS. A live Zoom transcript handler should normalize incoming transcript events into cue objects, append them to the meeting transcript buffer, build the rolling window, and call the analyzer. The shared board can then consume the same item shape whether the source was mock playback, uploaded VTT/TXT, or Zoom live transcript data.
+
 
 ## Structured Contracts
 
