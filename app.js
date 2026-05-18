@@ -38,6 +38,7 @@ const els = {
   playButton: document.querySelector('#playButton'),
   resetButton: document.querySelector('#resetButton'),
   rtmsButton: document.querySelector('#rtmsButton'),
+  rtmsStatus: document.querySelector('#rtmsStatus'),
   toggleTranscriptButton: document.querySelector('#toggleTranscriptButton'),
   workspace: document.querySelector('.workspace'),
   transcriptFile: document.querySelector('#transcriptFile'),
@@ -205,6 +206,7 @@ function rtmsStatusText(response) {
 function setRtmsButton(status) {
   if (!els.rtmsButton) return;
   const normalized = String(status || '').toLowerCase();
+  if (els.rtmsStatus) els.rtmsStatus.textContent = status ? 'RTMS: ' + status : 'RTMS status unknown';
   if (normalized.includes('start') || normalized.includes('active') || normalized.includes('running')) {
     els.rtmsButton.textContent = 'Stop RTMS';
     els.rtmsButton.dataset.rtmsActive = 'true';
@@ -215,7 +217,10 @@ function setRtmsButton(status) {
 }
 
 async function refreshRtmsStatus() {
-  if (!window.zoomSdk || typeof window.zoomSdk.getRTMSStatus !== 'function') return;
+  if (!window.zoomSdk || typeof window.zoomSdk.getRTMSStatus !== 'function') {
+    setRtmsButton('API unavailable');
+    return;
+  }
   try {
     const response = await window.zoomSdk.getRTMSStatus();
     const status = rtmsStatusText(response);
@@ -227,10 +232,15 @@ async function refreshRtmsStatus() {
 }
 
 async function toggleRtms() {
-  if (!window.zoomSdk) return;
+  if (!window.zoomSdk) {
+    setRtmsButton('Zoom SDK unavailable');
+    showZoomDiagnostics(['Zoom SDK unavailable']);
+    return;
+  }
   const active = els.rtmsButton.dataset.rtmsActive === 'true';
   const method = active ? 'stopRTMS' : 'startRTMS';
   if (typeof window.zoomSdk[method] !== 'function') {
+    setRtmsButton(method + ' unavailable');
     showZoomDiagnostics([method + ' unavailable']);
     return;
   }
@@ -251,6 +261,7 @@ async function toggleRtms() {
 
 async function maybeAutoStartRtms() {
   if (!window.zoomSdk || typeof window.zoomSdk.startRTMS !== 'function') {
+    setRtmsButton('startRTMS unavailable');
     showZoomDiagnostics(['startRTMS unavailable']);
     return;
   }
@@ -335,6 +346,7 @@ async function maybeInitializeZoomApp() {
   els.workspace.classList.add('transcript-hidden');
   els.toggleTranscriptButton.textContent = 'Show Transcript';
   if (els.rtmsButton) els.rtmsButton.hidden = false;
+  setRtmsButton('checking APIs');
 
   if (currentDashboardSessionId()) return;
 

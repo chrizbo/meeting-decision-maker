@@ -147,6 +147,15 @@ h1 {
   justify-content: center;
 }
 
+.rtms-control-status {
+  margin: 0;
+  padding: 2px 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.25;
+  text-align: center;
+}
+
 .file-control input {
   position: absolute;
   inline-size: 1px;

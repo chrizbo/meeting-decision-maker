@@ -26,7 +26,8 @@
           </label>
           <button id="toggleTranscriptButton" type="button">Hide Transcript</button>
           <button id="resetButton" type="button">Reset</button>
-          <button id="rtmsButton" type="button" hidden>Start RTMS</button>
+          <button id="rtmsButton" type="button">Start RTMS</button>
+          <p id="rtmsStatus" class="rtms-control-status">RTMS status unknown</p>
           <button id="playButton" type="button" class="primary">Start</button>
         </div>
       </div>
@@ -159,6 +160,6 @@
   </div>
 
   <script src="https://appssdk.zoom.us/sdk.js"></script>
-  <script src="/app.js?v=20260518-absolute-assets"></script>
+  <script src="/app.js?v=20260518-rtms-autostart"></script>
 </body>
 </html>
