@@ -103,13 +103,10 @@ button.primary {
 .brand-mark {
   width: 46px;
   height: 46px;
-  display: grid;
-  place-items: center;
   border-radius: 8px;
-  background: var(--ink);
-  color: #f8f4e8;
-  font-weight: 760;
-  letter-spacing: 0;
+  display: block;
+  object-fit: cover;
+  box-shadow: 0 6px 16px rgba(35, 37, 36, 0.16);
 }
 
 h1, h2, h3, p { margin: 0; }
