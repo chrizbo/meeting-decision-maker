@@ -155,6 +155,7 @@ function showZoomDiagnostics(parts) {
   const text = parts.filter(Boolean).join(' · ');
   if (!text || !els.zoomDiagnostics) return;
   els.zoomDiagnostics.textContent = text;
+  els.zoomDiagnostics.hidden = false;
   console.info('Meeting Decision Maker Zoom diagnostics', text);
 }
 
@@ -248,6 +249,25 @@ async function toggleRtms() {
   }
 }
 
+async function maybeAutoStartRtms() {
+  if (!window.zoomSdk || typeof window.zoomSdk.startRTMS !== 'function') {
+    showZoomDiagnostics(['startRTMS unavailable']);
+    return;
+  }
+  if (els.rtmsButton && els.rtmsButton.dataset.rtmsActive === 'true') return;
+
+  try {
+    const response = await window.zoomSdk.startRTMS();
+    const status = rtmsStatusText(response) || 'start requested';
+    setRtmsButton('started');
+    showZoomDiagnostics(['RTMS ' + status]);
+  } catch (error) {
+    showZoomDiagnostics(['RTMS auto-start: ' + zoomErrorMessage(error)]);
+  } finally {
+    await refreshRtmsStatus();
+  }
+}
+
 async function safeZoomCall(name, fallback) {
   if (!window.zoomSdk || typeof window.zoomSdk[name] !== 'function') {
     return { ok: false, value: fallback, error: name + ' unavailable' };
@@ -318,7 +338,7 @@ async function maybeInitializeZoomApp() {
   state.transcriptVisible = false;
   els.workspace.classList.add('transcript-hidden');
   els.toggleTranscriptButton.textContent = 'Show Transcript';
-  if (els.rtmsButton) els.rtmsButton.hidden = typeof window.zoomSdk.startRTMS !== 'function';
+  if (els.rtmsButton) els.rtmsButton.hidden = false;
 
   if (currentDashboardSessionId()) return;
 
@@ -340,6 +360,7 @@ async function maybeInitializeZoomApp() {
       }
     }
     await refreshRtmsStatus();
+    await maybeAutoStartRtms();
     const meeting = normalizeZoomMeetingContext(contextResult.value || {});
     if (!meeting.meetingId && uuidResult.value) {
       meeting.meetingId = uuidResult.value.meetingUUID || uuidResult.value.meetingId || uuidResult.value.meetingID || '';
