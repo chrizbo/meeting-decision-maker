@@ -84,7 +84,7 @@ async function serveStatic(req, res, pathname) {
 }
 
 async function handleApi(req, res, pathname) {
-  if (req.method === 'GET' && pathname === '/healthz') {
+  if (req.method === 'GET' && (pathname === '/api/healthz' || pathname === '/healthz')) {
     sendJson(res, 200, { ok: true });
     return;
   }

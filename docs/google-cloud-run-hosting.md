@@ -63,7 +63,7 @@ gcloud run deploy meeting-decision-maker-web \
 After deploy, check:
 
 ```bash
-curl https://YOUR-CLOUD-RUN-URL/healthz
+curl https://YOUR-CLOUD-RUN-URL/api/healthz
 ```
 
 The board should be available at the service root and at meeting URLs like:

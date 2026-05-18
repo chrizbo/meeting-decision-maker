@@ -66,7 +66,7 @@ Then visit `http://localhost:8787` or `http://localhost:8787/m/demo-session`.
 
 The service currently provides:
 
-- `GET /healthz`
+- `GET /api/healthz`
 - `POST /api/sessions`
 - `GET /api/sessions/:id`
 - `POST /api/zoom/rtms-webhook`
