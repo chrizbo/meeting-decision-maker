@@ -53,6 +53,6 @@ Zoom RTMS uses the same analysis contract. The backend normalizes `onTranscriptD
 ## Structured Contracts
 
 - `schemas/llm-output.schema.json` describes the mock output contract the board can consume now and the shape the Gemini worker emits.
-- `schemas/meeting-state.schema.json` describes the dashboard state after host confirmation, including pending/accepted decisions, open/discussed agent issues, and the audit tray.
-- Decisions should enter the board as `pending` until the host accepts or rejects them.
+- `schemas/meeting-state.schema.json` describes the dashboard state after host confirmation, including forming/pending/accepted decisions, open/discussed agent issues, and the audit tray.
+- Decisions should use `forming` while a decision topic is being discussed, `pending` when a concrete proposal is ready for host confirmation, and `accepted` only when the transcript shows clear agreement. The host can still accept or reject decisions from the modal.
 - Agent discussion detection should only set a suggestion flag. The host confirms with Discussed or Dismissed.

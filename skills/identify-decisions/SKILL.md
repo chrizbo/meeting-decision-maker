@@ -27,15 +27,25 @@ Common signals:
 
 Do not capture every opinion as a decision. If the conversation is only exploratory, mark it as a decision candidate or ignore it.
 
+Capture a `forming` decision when the team is doing decision discourse: naming a decision question, comparing good options, surfacing disagreement, deciding how to decide, or clarifying who should be involved before commitment. A forming decision should not imply agreement.
+
 ## Workflow
 
 1. Identify the decision statement or candidate.
-2. Determine status: proposed, accepted, rejected, parked, or superseded.
+2. Determine status: forming, pending, accepted, or rejected.
 3. Capture the options or tradeoff if present.
 4. Capture rationale, evidence, assumptions, and unresolved questions.
 5. Capture owner, action link, or review point if present.
 6. Preserve source evidence using timestamp and speaker when available.
 7. Keep the visible decision card short; put nuance in detail fields.
+
+When the transcript shows meta-decision work, capture it in the decision detail:
+
+- decision_type: strategic, product, operational, personnel, policy, technical, or unknown
+- discourse_needed: who should be involved and how
+- decision_maker: person, role, group, or unknown
+- decision_tempo: chronos/planned, kairos/urgent, or unclear
+- tradeoff_statement: "choose X even over Y" when the discussion names two good options
 
 ## Output Shape
 
@@ -43,7 +53,7 @@ Return one or more records with these fields:
 
 - type: decision
 - title
-- status: proposed, accepted, rejected, parked, superseded
+- status: forming, pending, accepted, rejected
 - summary
 - options_considered
 - rationale
@@ -55,12 +65,17 @@ Return one or more records with these fields:
 
 ## Live Meeting Guidance
 
-For live meeting mode, prefer fewer, clearer decisions. When uncertain, surface a low-confidence decision candidate that the host can confirm instead of silently creating a confident record.
+For live meeting mode, prefer fewer, clearer decision topics. Use `forming` when the group is actively discussing a decision question, tradeoff, or option set but has not committed. Use `pending` when there is a concrete proposed decision ready for host confirmation. Use `accepted` only when the transcript contains clear agreement or decision language.
+
+If a decision is forming, prefer updating the existing forming record as discourse develops. Escalate from `forming` to `pending` only when the group has a concrete proposal to confirm. Escalate to `accepted` only when the transcript shows explicit commitment.
 
 ## Guardrails
 
 - Separate decisions from actions and risks.
 - Do not invent agreement when only one person suggested something.
+- Do not create separate decision records for each side of one tradeoff; update the existing forming decision topic.
+- Preserve the discourse/decision boundary: do not treat useful disagreement, option generation, or critique as final commitment.
+- If the team has not decided how to decide, surface that as an unresolved question instead of forcing a decision.
 - Preserve dissent or unresolved concerns in open questions.
 - Keep evidence short and traceable.
 - Prefer the team's language for the title when it is clear.
@@ -68,3 +83,5 @@ For live meeting mode, prefer fewer, clearer decisions. When uncertain, surface 
 ## Reference
 
 For examples and schemas, read [references/extraction-schema.md](references/extraction-schema.md).
+
+For Chris Butler decision-making principles, read [../references/chris-butler-decision-principles.md](../references/chris-butler-decision-principles.md).

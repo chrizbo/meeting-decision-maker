@@ -28,7 +28,8 @@ Preserve timestamp and speaker evidence when available. If the plan is not yet c
 5. Prioritize failure paths by likelihood, impact, and whether the team can act on them.
 6. Suggest mitigations that improve the plan.
 7. Identify early warning signs the team could monitor.
-8. Produce the most useful live intervention or a fuller CLI analysis depending on context.
+8. Identify whether the failure would come from the decision process, the strategy boundary, the timing model, or execution.
+9. Produce the most useful live intervention or a fuller CLI analysis depending on context.
 
 ## Meeting Agent Behavior
 
@@ -40,6 +41,9 @@ Raise priority when:
 - The team is committing resources, people, reputation, or timing.
 - The downside risk is large and no mitigation is named.
 - A failure path is already hinted at in the transcript.
+- A forming decision is about to close without enough discourse.
+- The team is treating a kairos decision like a normal planning-cycle decision, or vice versa.
+- A strategy does not name what is out of bounds, making drift likely.
 
 If the team begins discussing the same risk, add follow-up text that names mitigation options or warning signs.
 
@@ -65,7 +69,11 @@ For CLI use, include a concise list of top failure paths, mitigations, and warni
 - Avoid listing every possible risk; pick the few that could materially alter the decision.
 - Distinguish evidence from inference.
 - In live-meeting mode, keep the intervention short enough for a host to use immediately.
+- Prefer tripwires, survival metrics, review points, and decision logs over vague "monitor this" language.
+- Consider whether an autonomous agent should only surface the risk while a human keeps judgment, exception handling, and final commitment.
 
 ## Reference
 
 For the underlying RTT method, read [references/rtt-source.md](references/rtt-source.md).
+
+For Chris Butler decision-making principles, read [../references/chris-butler-decision-principles.md](../references/chris-butler-decision-principles.md).

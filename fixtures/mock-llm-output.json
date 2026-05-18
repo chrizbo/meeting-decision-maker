@@ -7,7 +7,7 @@
       "items": [
         {
           "type": "decision",
-          "status": "pending",
+          "status": "forming",
           "title": "MVP focus",
           "summary": "Choose whether the MVP optimizes for implementation speed or for testing the live facilitation experience."
         }

@@ -16,6 +16,7 @@ const firestore = useFirestore ? new Firestore() : null;
 const sessionsCollection = process.env.FIRESTORE_SESSIONS_COLLECTION || 'meetingSessions';
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+const publicBaseUrl = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
 let skillPromptCache = null;
 const rtmsClients = new Map();
 const rtmsSessionStates = new Map();
@@ -82,6 +83,7 @@ function escapeHtml(value) {
 }
 
 function appUrl(req, path) {
+  if (publicBaseUrl) return `${publicBaseUrl}${path}`;
   const proto = req.headers['x-forwarded-proto'] || 'http';
   const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
   return `${proto}://${host}${path}`;
@@ -147,6 +149,7 @@ function cleanAnalysisItem(item) {
   const allowedTypes = new Set(['decision', 'risk', 'action', 'agent_issue']);
   const allowedAgents = new Set(['Assumptions Challenge', 'Pre-Mortem', 'Argument Dissection']);
   const allowedPriorities = new Set(['low', 'medium', 'high']);
+  const allowedStatuses = new Set(['forming', 'pending', 'accepted', 'rejected']);
   const type = allowedTypes.has(item.type) ? item.type : '';
   if (!type || !item.title || !item.summary) return null;
 
@@ -156,7 +159,7 @@ function cleanAnalysisItem(item) {
     summary: String(item.summary).slice(0, 320)
   };
 
-  if (['pending', 'accepted', 'rejected'].includes(item.status)) clean.status = item.status;
+  if (allowedStatuses.has(item.status)) clean.status = item.status;
   if (['create', 'update'].includes(item.updateMode)) clean.updateMode = item.updateMode;
   if (item.targetId) clean.targetId = String(item.targetId).slice(0, 120);
   if (type === 'agent_issue') {
@@ -227,7 +230,7 @@ function applyServerAnalysisItems(state, items, cue) {
     };
 
     if (item.type === 'decision') {
-      state.decisions.unshift(Object.assign(record, { status: item.status || 'pending' }));
+      state.decisions.unshift(Object.assign(record, { status: item.status || 'forming' }));
     }
     if (item.type === 'risk') state.risks.unshift(record);
     if (item.type === 'action') state.actions.unshift(record);
@@ -296,9 +299,11 @@ function buildGeminiRequest(input, skillSet) {
             text: [
               'You are the analysis worker for Meeting Decision Maker.',
               'Use the loaded meeting skills to analyze one live transcript cue.',
-              'Return only JSON with this shape: {"items":[{"type":"decision|risk|action|agent_issue","updateMode":"create|update","targetId":"existing item id when updating","title":"short title","summary":"short board-ready summary","status":"pending|accepted|rejected","agent":"Assumptions Challenge|Pre-Mortem|Argument Dissection","priority":"low|medium|high"}]}.',
-              'Rules: emit no more than 3 items; prefer no item over weak speculation; preserve uncertainty; do not invent owners or agreement; for agent_issue items include agent and priority.',
-              'Use Current meeting state before creating new items. If the latest cue adds nuance, evidence, stronger wording, or changed status for an existing decision, risk, action, or agent issue, return updateMode "update" with that item targetId. Only use updateMode "create" when the cue introduces a genuinely new item.',
+              'Return only JSON with this shape: {"items":[{"type":"decision|risk|action|agent_issue","updateMode":"create|update","targetId":"existing item id when updating","title":"short title","summary":"short board-ready summary","status":"forming|pending|accepted|rejected","agent":"Assumptions Challenge|Pre-Mortem|Argument Dissection","priority":"low|medium|high"}]}.',
+              'Rules: emit no more than 2 items; prefer no item over weak speculation; preserve uncertainty; do not invent owners or agreement; for agent_issue items include agent and priority.',
+              'Decision status rules: use "forming" when a real decision topic, tradeoff, option set, or decision question is being discussed but the group has not committed. Use "pending" when there is a concrete proposed decision ready for host confirmation. Use "accepted" only when the transcript contains explicit agreement or decision language. Do not mark a decision accepted because one person favors it.',
+              'Use Current meeting state before creating new items. If the latest cue continues, clarifies, strengthens, or changes an existing decision, risk, action, or agent issue, return updateMode "update" with that item targetId. Only use updateMode "create" when the cue introduces a genuinely new item.',
+              'Do not create separate decision items for each side of the same tradeoff. Keep one forming decision topic and update it as the conversation evolves. Do not emit a risk just because the cue names uncertainty; emit a risk only when there is a plausible negative outcome, dependency, blocker, mitigation, or warning sign. Do not emit an item on every cue.',
               '',
               '# Skill instructions',
               skillInstructions,
@@ -362,6 +367,7 @@ function cleanSession(input) {
   return {
     id: input.id,
     dashboardPath: input.dashboardPath,
+    dashboardUrl: input.dashboardUrl || null,
     topic: input.topic,
     host: input.host,
     attendees: Array.isArray(input.attendees) ? input.attendees : [],
@@ -391,9 +397,11 @@ async function getSession(id) {
 async function createSession(input = {}) {
   const slug = randomUUID().slice(0, 8);
   const createdAt = new Date().toISOString();
+  const dashboardPath = `/m/${slug}`;
   const session = {
     id: slug,
-    dashboardPath: `/m/${slug}`,
+    dashboardPath,
+    dashboardUrl: publicBaseUrl ? `${publicBaseUrl}${dashboardPath}` : null,
     topic: input.topic || 'Untitled meeting',
     host: input.host || 'Meeting host',
     attendees: Array.isArray(input.attendees) ? input.attendees : [],
@@ -643,11 +651,13 @@ async function exchangeZoomOAuthCode(code) {
 }
 
 function renderOAuthPage(req, res, status, title, message) {
-  sendHtml(res, status, '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Meeting Decision Maker</title><style>body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f6f4ef;color:#232524;display:grid;min-height:100vh;place-items:center}.card{max-width:560px;background:#fffdf8;border:1px solid #d9d5ca;border-radius:10px;padding:28px;box-shadow:0 18px 50px rgba(35,37,36,.1)}a{color:#2d5f91}</style></head><body><main class="card"><h1>' + escapeHtml(title) + '</h1><p>' + escapeHtml(message) + '</p><p><a href="' + escapeHtml(appUrl(req, '/')) + '">Open Meeting Decision Maker</a></p></main></body></html>');
+  sendHtml(res, status, '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Room Clarity</title><style>body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f6f4ef;color:#232524;display:grid;min-height:100vh;place-items:center}.card{max-width:560px;background:#fffdf8;border:1px solid #d9d5ca;border-radius:10px;padding:28px;box-shadow:0 18px 50px rgba(35,37,36,.1)}a{color:#2d5f91}</style></head><body><main class="card"><h1>' + escapeHtml(title) + '</h1><p>' + escapeHtml(message) + '</p><p><a href="' + escapeHtml(appUrl(req, '/')) + '">Open Room Clarity</a></p></main></body></html>');
 }
 
 function resolveStaticPath(pathname) {
-  const rawPath = pathname === '/' || pathname.startsWith('/m/') ? '/index.html' : pathname;
+  const rawPath = pathname === '/'
+    ? '/home.html'
+    : (pathname === '/app' || pathname === '/app/' || pathname.startsWith('/m/') ? '/index.html' : pathname);
   const decoded = decodeURIComponent(rawPath);
   const safePath = normalize(decoded).replace(/^(\.\.[/\\])+/, '');
   return join(rootDir, safePath);
@@ -735,7 +745,7 @@ async function handleApi(req, res, pathname) {
         expiresAt: Date.now() + Number(token.expires_in || 0) * 1000,
         installedAt: new Date().toISOString()
       });
-      renderOAuthPage(req, res, 200, 'Meeting Decision Maker connected', 'Zoom authorized the development app. You can now open it from the Zoom Apps panel during a meeting.');
+      renderOAuthPage(req, res, 200, 'Room Clarity connected', 'Zoom authorized the development app. You can now open it from the Zoom Apps panel during a meeting.');
     } catch (error) {
       const status = error.status || 500;
       renderOAuthPage(req, res, status, 'Zoom authorization could not finish', error.message || 'Unknown error');

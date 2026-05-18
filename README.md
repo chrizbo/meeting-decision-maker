@@ -17,6 +17,7 @@ Start with a human-shared web page using mock transcript playback, then use the 
 - `sample-transcripts/`: synthetic transcript fixtures for prototyping
 - `fixtures/`: mock structured LLM outputs loaded by the static app
 - `schemas/`: JSON schemas for meeting state and LLM output contracts
+- `evals/`: prompt and extraction eval harness for transcript analysis
 
 ## Prototype Agents
 
@@ -84,10 +85,11 @@ Install path:
 
 1. Deploy this service to Cloud Run so Zoom has a public HTTPS URL.
 2. Create a Zoom App in the Zoom App Marketplace.
-3. Set the app home/development URL to the Cloud Run URL.
-4. Add the Cloud Run origin to Zoom's allow list fields.
-5. Install the development app into your Zoom account.
-6. Launch it from the Zoom desktop app during a test meeting.
+3. Map `roomclarity.com` to the Cloud Run service.
+4. Set the app home/development URL to `https://roomclarity.com/app`.
+5. Add the `https://roomclarity.com` origin to Zoom's allow list fields.
+6. Install the development app into your Zoom account.
+7. Launch it from the Zoom desktop app during a test meeting.
 
 The current codebase includes the Zoom Apps SDK launcher path, OAuth callback, RTMS webhook receiver, Gemini cue analysis, browser dashboard polling for RTMS session state, and marketplace support pages. Full setup notes are in `docs/zoom-app-installation.md`.
 
@@ -98,6 +100,7 @@ Cloud Run should be deployed with all active secrets attached. The current requi
 - `ZOOM_REDIRECT_URI`
 - `ZOOM_WEBHOOK_SECRET_TOKEN`
 - `GEMINI_API_KEY`
+- `PUBLIC_BASE_URL=https://roomclarity.com`
 
 Zoom RTMS uses the same Zoom client credentials by default. If your RTMS app has separate credentials, set:
 
@@ -136,6 +139,18 @@ Gemini setup:
    The response should include `"enabled":true`.
 
 When `GEMINI_API_KEY` is present, the browser sends each newly played transcript cue to `POST /api/analyze-cue` with a short rolling transcript window and compact board state. That state includes already captured decisions, risks, actions, and open agent issues with IDs so Gemini can update existing items when the latest transcript adds nuance. When the key is absent, the app keeps using the mock fixture and browser fallback rules.
+
+Evaluate the current prompt path:
+
+```bash
+npm run eval
+```
+
+The default eval replays the synthetic product decision transcript against the curated mock LLM fixture. To score a live local Gemini-backed service, start the app with `GEMINI_API_KEY`, then run:
+
+```bash
+node evals/run-evals.js --live http://localhost:8787
+```
 
 ## RTMS Transcript Ingestion
 

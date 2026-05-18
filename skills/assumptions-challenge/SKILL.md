@@ -32,7 +32,8 @@ Preserve timestamp and speaker evidence when available. If evidence is thin, say
    - What would make it false?
    - If it is false, how does the decision or plan change?
    - How could the team strengthen the plan or mitigate the assumption failing?
-6. Produce only the highest-value intervention for a live meeting unless asked for a fuller analysis.
+6. Check whether the assumption is about the decision content, the decision process, the timing, or the strategy boundary.
+7. Produce only the highest-value intervention for a live meeting unless asked for a fuller analysis.
 
 ## Meeting Agent Behavior
 
@@ -44,6 +45,9 @@ Raise priority when:
 - The transcript shows confidence without evidence.
 - The team treats an uncertain belief as settled fact.
 - The assumption would materially change the plan if false.
+- The team is skipping discourse and moving directly to decision.
+- A kairos/urgent decision is using chronos assumptions about available time, data, or consensus.
+- A strategy discussion is too specific to allow local adaptation or too ambiguous to encode a hard choice.
 
 If the team begins discussing the same assumption, add follow-up text that responds to the discussion rather than repeating the first concern.
 
@@ -68,7 +72,11 @@ For CLI use, include a short table of assumptions when useful, then the top reco
 - Avoid generic objections like "validate this" unless paired with a concrete test.
 - Prefer one sharp question over a long critique in live-meeting mode.
 - Do not frame uncertainty as failure; frame it as something the team can strengthen.
+- Challenge the decision container when needed: who should be in the discourse, who decides, and what would count as enough evidence?
+- When two good options are competing, ask whether the team can express the tradeoff as an "even over" statement.
 
 ## Reference
 
 For the underlying RTT method, read [references/rtt-source.md](references/rtt-source.md).
+
+For Chris Butler decision-making principles, read [../references/chris-butler-decision-principles.md](../references/chris-butler-decision-principles.md).

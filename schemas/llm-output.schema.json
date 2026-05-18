@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://meeting-decision-maker.local/schemas/llm-output.schema.json",
+  "$id": "https://roomclarity.com/schemas/llm-output.schema.json",
   "title": "Meeting Decision Maker LLM Output",
   "type": "object",
   "required": [
@@ -47,6 +47,7 @@
                 },
                 "status": {
                   "enum": [
+                    "forming",
                     "pending",
                     "accepted",
                     "rejected"

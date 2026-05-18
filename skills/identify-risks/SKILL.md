@@ -24,6 +24,9 @@ Common signals:
 - A downside of a decision is identified
 - A mitigation or contingency is discussed
 - A stakeholder, security, privacy, adoption, timing, quality, or trust concern appears
+- The decision process itself may fail: missing discourse, unclear decision-maker, wrong people involved, or unclear escalation/opt-out path
+- The team may be using the wrong decision tempo: slow chronos analysis during a kairos moment, or rushed kairos improvisation for a planned decision
+- Strategic guidance may be too specific to allow useful adaptation or too ambiguous to constrain choices
 
 Do not capture simple preferences or complaints unless they could materially affect the decision or plan.
 
@@ -35,7 +38,8 @@ Do not capture simple preferences or complaints unless they could materially aff
 4. Capture evidence and speaker/timestamp.
 5. Capture mitigation, owner, warning sign, or open question if present.
 6. Assign severity and confidence.
-7. Keep the visible risk card short and actionable.
+7. Identify whether the risk is about execution, evidence, stakeholders, timing, discourse, automation, or strategy boundary.
+8. Keep the visible risk card short and actionable.
 
 ## Output Shape
 
@@ -57,6 +61,8 @@ Return one or more records with these fields:
 
 In live meeting mode, surface risks that are actionable or decision-relevant. If a risk is speculative but important, phrase it as a question the host can ask.
 
+For process risks, prefer phrasing that helps the host improve the decision container: "Who needs to be in this discourse?", "Who decides?", "Are we in planned chronos time or urgent kairos time?", or "What tripwire would tell us to revisit this?"
+
 ## Guardrails
 
 - Separate risks from action items.
@@ -64,7 +70,11 @@ In live meeting mode, surface risks that are actionable or decision-relevant. If
 - Prefer concrete failure modes over vague anxiety.
 - Capture mitigation when the team offers one.
 - If the team dismisses a risk, preserve the dismissal rationale when available.
+- Prefer tripwires, survival metrics, review points, or decision-log follow-ups over generic monitoring.
+- Do not treat agent output as settled authority. If automation bias, opt-out, escalation, or edge-case harm appears, capture it as a risk.
 
 ## Reference
 
 For examples and schemas, read [references/extraction-schema.md](references/extraction-schema.md).
+
+For Chris Butler decision-making principles, read [../references/chris-butler-decision-principles.md](../references/chris-butler-decision-principles.md).

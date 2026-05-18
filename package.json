@@ -5,6 +5,7 @@
   "description": "Live meeting decision board prototype and future Zoom app backend.",
   "type": "module",
   "scripts": {
+    "eval": "node evals/run-evals.js",
     "start": "node server.js",
     "dev": "node server.js"
   },

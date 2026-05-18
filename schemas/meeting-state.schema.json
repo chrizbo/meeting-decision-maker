@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://meeting-decision-maker.local/schemas/meeting-state.schema.json",
+  "$id": "https://roomclarity.com/schemas/meeting-state.schema.json",
   "title": "Meeting Decision Maker Board State",
   "type": "object",
   "required": [
@@ -122,12 +122,14 @@
           "properties": {
             "status": {
               "enum": [
+                "forming",
                 "pending",
                 "accepted"
               ]
             },
             "suggestedStatus": {
               "enum": [
+                "forming",
                 "pending",
                 "accepted",
                 "rejected"

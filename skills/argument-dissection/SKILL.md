@@ -28,7 +28,8 @@ Preserve timestamp and speaker evidence when available. If the argument is incom
 5. Identify descriptive assumptions about how things are and prescriptive assumptions about how things should be.
 6. Evaluate evidence quality, statistics, analogies, and context.
 7. Look for bias, logical fallacies, missing information, rival causes, or alternative conclusions.
-8. Produce the most useful live intervention or a fuller CLI analysis depending on context.
+8. Check whether the argument separates discourse from decision, names the decision-maker, and states what kind of decision tempo is needed.
+9. Produce the most useful live intervention or a fuller CLI analysis depending on context.
 
 ## Meeting Agent Behavior
 
@@ -40,6 +41,9 @@ Raise priority when:
 - Evidence is anecdotal, vague, missing, or presented without context.
 - The same evidence could support a different conclusion.
 - The recommendation may not address the real problem.
+- The discussion hides a hard tradeoff instead of naming what is being chosen even over another good option.
+- Strategic language is too specific to allow adaptation or too ambiguous to guide choices.
+- The team is using agent output as authority rather than as a provocation, pattern, or candidate artifact.
 
 If the team starts discussing the same argument, add follow-up text that sharpens the evidence question, missing information, or rival explanation.
 
@@ -65,7 +69,11 @@ For CLI use, include a concise assessment of conclusion, evidence, assumptions, 
 - Do not overclaim fallacies; name them only when clear.
 - Prefer questions that improve the decision over debate-club objections.
 - In live-meeting mode, make the intervention short and usable by the host.
+- Look for "bizarro" or reasonable-opposite strategies: if the opposite would not make sense, the strategy may be fluff.
+- When a strategy claim is broad, ask what is explicitly in bounds, out of bounds, proven today, and aspirational.
 
 ## Reference
 
 For the underlying RTT method, read [references/rtt-source.md](references/rtt-source.md).
+
+For Chris Butler decision-making principles, read [../references/chris-butler-decision-principles.md](../references/chris-butler-decision-principles.md).

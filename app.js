@@ -124,7 +124,7 @@ async function loadDashboardSession() {
       meetingId: session.zoomMeetingId || '',
       host: session.host || 'Meeting host',
       attendees: Array.isArray(session.attendees) ? session.attendees : [],
-      dashboardSlug: absoluteDashboardPath(session.dashboardPath)
+      dashboardSlug: session.dashboardUrl || absoluteDashboardPath(session.dashboardPath)
     };
     state.zoomSession = session;
     applyMeetingContext(meeting);
@@ -407,7 +407,7 @@ async function maybeInitializeZoomApp() {
     if (participants.length) meeting.attendees = participants;
 
     const session = await createMeetingSession(meeting);
-    meeting.dashboardSlug = absoluteDashboardPath(session.dashboardPath);
+    meeting.dashboardSlug = session.dashboardUrl || absoluteDashboardPath(session.dashboardPath);
     state.zoomSession = session;
     applyMeetingContext(meeting);
     if (contextResult.ok) {
@@ -518,8 +518,8 @@ function applyRtmsSessionState(session) {
     return {
       id: item.id,
       key: 'decision:' + item.title,
-      status: item.status || 'pending',
-      suggestedStatus: item.status || 'pending',
+      status: item.status || 'forming',
+      suggestedStatus: item.status || 'forming',
       title: item.title,
       detail: item.summary,
       evidence: item.evidence,
@@ -760,7 +760,7 @@ function analyzeCue(cue) {
   }
 
   if (text.includes('product decision') || text.includes('decision is whether')) {
-    addDecision('pending', 'MVP focus', 'Choose between implementation speed and testing the live facilitation experience.', evidence);
+    addDecision('forming', 'MVP focus', 'Choose between implementation speed and testing the live facilitation experience.', evidence);
   }
   if (text.includes("let's make the decision") || text.includes('agreed') || text.includes('capture that as the decision')) {
     addDecision('accepted', 'Build the live board first', 'Use a human-shared page with timed mock transcript playback before Zoom-native integration.', evidence);
@@ -888,7 +888,7 @@ async function requestCueAnalysis(cue, evidence) {
 function applyAnalysisItems(items, cue, evidence) {
   items.forEach(function(item) {
     if (item.updateMode === 'update' && updateBoardItem(item, cue, evidence)) return;
-    if (item.type === 'decision') addDecision(item.status || 'pending', item.title, item.summary, evidence, { transcriptText: cue.text });
+    if (item.type === 'decision') addDecision(item.status || 'forming', item.title, item.summary, evidence, { transcriptText: cue.text });
     if (item.type === 'risk') addRisk(item.title, item.summary, evidence, cue.text);
     if (item.type === 'action') addAction(item.title, item.summary, evidence);
     if (item.type === 'agent_issue') addAgent({
@@ -914,7 +914,13 @@ function updateBoardItem(item, cue, evidence) {
       existing.detail = item.summary;
     }
   }
-  if (item.status && item.type === 'decision') existing.suggestedStatus = item.status;
+  if (item.status && item.type === 'decision') {
+    const normalizedStatus = normalizeDecisionStatus(item.status);
+    existing.status = normalizedStatus === 'rejected' ? existing.status : normalizedStatus;
+    existing.suggestedStatus = normalizedStatus;
+    existing.conversation = decisionConversation(normalizedStatus);
+    existing.steps = decisionSteps(normalizedStatus);
+  }
   if (item.priority && item.type === 'agent_issue') existing.priority = item.priority;
 
   existing.evidence = evidence;
@@ -948,7 +954,7 @@ function applyLlmFixtureForCue(cue, evidence) {
   });
   if (!event || !Array.isArray(event.items)) return false;
   event.items.forEach(function(item) {
-    if (item.type === 'decision') addDecision(item.status || 'pending', item.title, item.summary, evidence, { transcriptText: cue.text });
+    if (item.type === 'decision') addDecision(item.status || 'forming', item.title, item.summary, evidence, { transcriptText: cue.text });
     if (item.type === 'risk') addRisk(item.title, item.summary, evidence, cue.text);
     if (item.type === 'action') addAction(item.title, item.summary, evidence);
     if (item.type === 'agent_issue') addAgent({
@@ -1060,7 +1066,8 @@ function buildTranscriptReference(evidence, detail) {
 }
 
 function addDecision(status, title, detail, evidence, options) {
-  const decisionStatus = 'pending';
+  const suggestedStatus = normalizeDecisionStatus(status);
+  const decisionStatus = suggestedStatus === 'accepted' ? 'accepted' : suggestedStatus;
   const key = 'decision:' + title;
   if (state.decisions.some(function(item) { return item.key === key; })) return;
   state.boardDirty = true;
@@ -1068,14 +1075,39 @@ function addDecision(status, title, detail, evidence, options) {
     id: makeId('decision'),
     key: key,
     status: decisionStatus,
-    suggestedStatus: status || 'pending',
+    suggestedStatus: suggestedStatus,
     title: title,
     detail: detail,
     evidence: evidence,
     transcriptReference: buildTranscriptReference(evidence, options && options.transcriptText ? options.transcriptText : detail),
-    conversation: 'Name the pending decision out loud and ask whether the room accepts, rejects, or needs to revise it before it becomes part of the meeting record.',
-    steps: ['Confirm the exact commitment.', 'Ask for blocking objections or missing evidence.', 'Accept or reject the decision from this modal.']
+    conversation: decisionConversation(suggestedStatus),
+    steps: decisionSteps(suggestedStatus)
   });
+}
+
+function normalizeDecisionStatus(status) {
+  if (['forming', 'pending', 'accepted', 'rejected'].includes(status)) return status;
+  return 'forming';
+}
+
+function decisionConversation(status) {
+  if (status === 'forming') {
+    return 'Name the decision that appears to be forming and ask what options, tradeoffs, or missing evidence the group needs before it becomes a commitment.';
+  }
+  if (status === 'accepted') {
+    return 'The transcript suggests this decision was accepted. Confirm the wording, owner, and any unresolved assumptions before relying on it later.';
+  }
+  return 'Name the pending decision out loud and ask whether the room accepts, rejects, or needs to revise it before it becomes part of the meeting record.';
+}
+
+function decisionSteps(status) {
+  if (status === 'forming') {
+    return ['Clarify the decision question.', 'Name the options still in play.', 'Ask what evidence or objection would change the direction.'];
+  }
+  if (status === 'accepted') {
+    return ['Confirm the exact commitment.', 'Capture owner or review point.', 'Log unresolved assumptions as risks if needed.'];
+  }
+  return ['Confirm the exact commitment.', 'Ask for blocking objections or missing evidence.', 'Accept or reject the decision from this modal.'];
 }
 
 function addRisk(title, detail, evidence, transcriptText) {

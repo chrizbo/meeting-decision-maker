@@ -68,13 +68,14 @@ gcloud run deploy meeting-decision-maker-web \
   --allow-unauthenticated
 ```
 
-For the current Zoom/Gemini path, deploy with all secret-backed variables attached:
+For the current Zoom/Gemini path, deploy with all secret-backed variables attached and set the canonical public URL:
 
 ```bash
 gcloud run deploy meeting-decision-maker-web \
   --source . \
   --region "$REGION" \
   --allow-unauthenticated \
+  --set-env-vars=PUBLIC_BASE_URL=https://roomclarity.com \
   --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest
 ```
 
@@ -83,13 +84,14 @@ Use `--update-secrets` with the full set above when redeploying from local sourc
 After deploy, check:
 
 ```bash
-curl https://YOUR-CLOUD-RUN-URL/api/healthz
+curl https://roomclarity.com/api/healthz
 ```
 
-The board should be available at the service root and at meeting URLs like:
+The homepage should be available at the service root. The board should be available at `/app` and meeting URLs like:
 
 ```text
-https://YOUR-CLOUD-RUN-URL/m/demo-session
+https://roomclarity.com/app
+https://roomclarity.com/m/demo-session
 ```
 
 Enable Firestore-backed sessions in Cloud Run:
@@ -102,9 +104,31 @@ gcloud run services update meeting-decision-maker-web \
 
 For local service testing, `npm start` uses port `8787` unless `PORT` is set. Cloud Run injects `PORT`, and the Docker image defaults to `8080`. Local development defaults to in-memory sessions; set `SESSION_STORE=firestore` only when you have Google application credentials available locally.
 
+## Custom Domain: roomclarity.com
+
+Map `roomclarity.com` to the Cloud Run service after the first deploy:
+
+```bash
+gcloud beta run domain-mappings create \
+  --service meeting-decision-maker-web \
+  --domain roomclarity.com \
+  --region "$REGION"
+```
+
+Google Cloud will return DNS records to add at the registrar or DNS host for `roomclarity.com`. Add those records, then wait for the managed certificate to become active.
+
+Verify the mapping:
+
+```bash
+gcloud beta run domain-mappings describe roomclarity.com --region "$REGION"
+curl https://roomclarity.com/api/healthz
+```
+
+Once the domain responds, keep `PUBLIC_BASE_URL=https://roomclarity.com` on the service. This makes dashboard links and OAuth success pages use the branded domain even if a request reaches the underlying Cloud Run URL.
+
 ## Zoom App Path
 
-Use the Cloud Run URL as the Zoom App development URL once HTTPS is available.
+Use `https://roomclarity.com/app` as the Zoom App development URL once HTTPS is available. The root URL, `https://roomclarity.com/`, is the consumer-facing homepage.
 
 Current backend routes:
 

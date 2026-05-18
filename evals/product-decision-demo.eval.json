@@ -1,0 +1,6 @@
+{
+  "name": "product-decision-demo",
+  "transcript": "../sample-transcripts/product-decision-demo.vtt",
+  "expected": "../fixtures/mock-llm-output.json",
+  "description": "Seed eval for the synthetic product decision meeting. Expected items mirror the curated mock LLM output used by the prototype."
+}

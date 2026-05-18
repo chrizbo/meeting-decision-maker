@@ -31,7 +31,7 @@ Useful SDK capabilities to design around:
 What this means for our desired flow:
 
 1. Host joins Zoom meeting.
-2. Host opens Meeting Decision Maker from Zoom Apps.
+2. Host opens Room Clarity from Zoom Apps.
 3. App reads meeting context and asks backend for a session URL like `/m/<unguessable-id>`.
 4. Host can either share the Zoom App surface directly or open the dashboard URL in a browser and screen-share that.
 5. Participants can follow the URL if the host shares it, but agents remain page elements, not attendees.
