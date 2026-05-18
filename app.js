@@ -594,7 +594,7 @@ function applyLlmFixtureForCue(cue, evidence) {
 
 async function loadLlmOutput() {
   try {
-    const response = await fetch('./fixtures/mock-llm-output.json', { cache: 'no-store' });
+    const response = await fetch('/fixtures/mock-llm-output.json', { cache: 'no-store' });
     if (!response.ok) throw new Error('fixture unavailable');
     state.llmOutput = await response.json();
     els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + ' · mock LLM fixture loaded';
