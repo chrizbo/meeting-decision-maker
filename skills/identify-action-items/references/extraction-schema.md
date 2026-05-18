@@ -13,7 +13,7 @@ Example compact record:
   "linked_decision_or_risk": "Build the live board first",
   "expected_output": "A static prototype that replays transcript cues and updates the board.",
   "dependencies": ["Synthetic VTT fixture", "Agent skill configs"],
-  "evidence": { "time": "02:42", "speaker": "Chris Butler" },
+  "evidence": { "time": "02:42", "speaker": "Jordan Lee" },
   "suggested_next_step": "Confirm owner and review checkpoint."
 }
 ```

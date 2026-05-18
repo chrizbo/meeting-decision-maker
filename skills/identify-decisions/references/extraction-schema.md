@@ -13,7 +13,7 @@ Example compact record:
   "assumptions": ["The host can use the page while facilitating."],
   "open_questions": ["Will the page distract participants?"],
   "owner": null,
-  "evidence": { "time": "02:33", "speaker": "Bryce Hoffman" },
+  "evidence": { "time": "02:33", "speaker": "Maya Patel" },
   "suggested_next_step": "Confirm the exact MVP scope and owner."
 }
 ```

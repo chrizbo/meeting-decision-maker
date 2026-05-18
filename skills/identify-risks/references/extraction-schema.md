@@ -13,7 +13,7 @@ Example compact record:
   "mitigation": "Keep the queue low-friction and evidence-backed.",
   "warning_sign": "The host repeatedly ignores suggestions or says the team already covered them.",
   "owner": null,
-  "evidence": { "time": "01:21", "speaker": "Bryce Hoffman" },
+  "evidence": { "time": "01:21", "speaker": "Maya Patel" },
   "suggested_next_step": "Test whether the host can use suggestions without interrupting the meeting flow."
 }
 ```
