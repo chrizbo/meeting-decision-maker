@@ -44,7 +44,6 @@ const els = {
   meetingName: document.querySelector('#meetingName'),
   meetingAttendees: document.querySelector('#meetingAttendees'),
   boardTitle: document.querySelector('#boardTitle'),
-  dashboardUrl: document.querySelector('#dashboardUrl'),
   openDashboardButton: document.querySelector('#openDashboardButton'),
   copyDashboardButton: document.querySelector('#copyDashboardButton'),
   shareDashboardButton: document.querySelector('#shareDashboardButton'),
@@ -83,7 +82,6 @@ function applyMeetingContext(meeting) {
   els.boardTitle.textContent = meeting.topic;
   els.meetingName.textContent = meeting.meetingId ? 'Zoom meeting ' + meeting.meetingId : 'Meeting session';
   els.meetingAttendees.textContent = meeting.attendees.join(', ');
-  els.dashboardUrl.textContent = meeting.dashboardSlug;
   els.meetingStatus.textContent = meeting.topic + ' · host ' + meeting.host;
 }
 

@@ -319,23 +319,14 @@ select {
 }
 
 .meeting-link {
-  text-align: right;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.meeting-link strong {
-  display: block;
-  margin-top: 3px;
-  color: var(--ink);
-  font-size: 14px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .dashboard-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 10px;
 }
 
 .dashboard-actions button {
@@ -687,8 +678,6 @@ button:disabled {
 
   .meeting-link {
     width: 100%;
-    text-align: left;
-    overflow-wrap: anywhere;
   }
 
   .dashboard-actions {
