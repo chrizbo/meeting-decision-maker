@@ -87,7 +87,13 @@ Install path:
 5. Install the development app into your Zoom account.
 6. Launch it from the Zoom desktop app during a test meeting.
 
-The current codebase has the backend routes needed for the launcher shape, but does not yet include the Zoom Apps SDK launcher UI or OAuth callback implementation. Full setup notes are in `docs/zoom-app-installation.md`.
+The current codebase includes a minimal Zoom Apps SDK launcher path and development OAuth callback. Full setup notes are in `docs/zoom-app-installation.md`.
+
+Zoom OAuth uses these environment variables in Cloud Run:
+
+- `ZOOM_CLIENT_ID`
+- `ZOOM_CLIENT_SECRET`
+- `ZOOM_REDIRECT_URI`
 
 ## LLM Path
 

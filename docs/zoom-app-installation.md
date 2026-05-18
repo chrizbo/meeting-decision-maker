@@ -53,7 +53,15 @@ Redirect URL: https://YOUR-CLOUD-RUN-URL/api/zoom/oauth/callback
 Allow list: https://YOUR-CLOUD-RUN-URL
 ```
 
-The OAuth callback route is a placeholder until user/account auth is implemented.
+The OAuth callback route exchanges development install codes when Zoom credentials are configured in the Cloud Run environment. Tokens are held only in memory for the current development prototype.
+
+For development OAuth, configure the Cloud Run service with:
+
+```text
+ZOOM_CLIENT_ID=<Zoom development client id>
+ZOOM_CLIENT_SECRET=<Zoom development client secret from Secret Manager>
+ZOOM_REDIRECT_URI=https://YOUR-CLOUD-RUN-URL/api/zoom/oauth/callback
+```
 
 ## 3. Configure Initial Capabilities
 
