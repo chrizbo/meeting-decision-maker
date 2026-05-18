@@ -160,9 +160,12 @@ async function serveStatic(req, res, pathname) {
 
   const data = await readFile(filePath);
   const contentType = mimeTypes[extname(filePath)] || 'application/octet-stream';
+  const shouldCache = !contentType.includes('text/html') &&
+    !contentType.includes('text/javascript') &&
+    !contentType.includes('text/css');
   res.writeHead(200, withSecurityHeaders({
     'content-type': contentType,
-    'cache-control': contentType.includes('text/html') ? 'no-store' : 'public, max-age=300'
+    'cache-control': shouldCache ? 'public, max-age=300' : 'no-store'
   }));
   res.end(data);
 }
