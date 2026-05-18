@@ -288,6 +288,17 @@ select {
   min-height: 86px;
 }
 
+.board-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.board-status {
+  flex: 0 0 auto;
+}
+
 .meeting-context {
   margin-top: 8px;
   display: flex;

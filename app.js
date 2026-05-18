@@ -406,7 +406,6 @@ function renderCueHighlight() {
 function renderDecisions() {
   if (!state.decisions.length) {
     els.decisionStrip.innerHTML = '<article class="decision-card empty-state">' +
-      '<span class="status-pill">listening</span>' +
       '<h3>No decision captured yet</h3>' +
       '<p>The board will fill as the transcript replays.</p>' +
       '</article>';
