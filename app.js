@@ -314,11 +314,7 @@ async function maybeInitializeZoomApp() {
         'getRunningContext',
         'getSupportedJsApis',
         'openUrl',
-        'shareApp',
-        'startRTMS',
-        'stopRTMS',
-        'getRTMSStatus',
-        'onRTMSStatusChange'
+        'shareApp'
       ]
     });
     showZoomDiagnostics([
@@ -348,6 +344,15 @@ async function maybeInitializeZoomApp() {
     const runningContextResult = await safeZoomCall('getRunningContext', {});
     const userContextResult = await safeZoomCall('getUserContext', {});
     const supportedApisResult = await safeZoomCall('getSupportedJsApis', {});
+    const supportedApis = Array.isArray(supportedApisResult.value && supportedApisResult.value.apis)
+      ? supportedApisResult.value.apis
+      : [];
+    const rtmsApis = ['startRTMS', 'stopRTMS', 'getRTMSStatus', 'onRTMSStatusChange'].filter(function(name) {
+      return typeof window.zoomSdk[name] === 'function' || supportedApis.includes(name);
+    });
+    showZoomDiagnostics([
+      rtmsApis.length ? 'RTMS APIs: ' + rtmsApis.join(', ') : 'RTMS APIs unavailable'
+    ]);
     if (typeof window.zoomSdk.onRTMSStatusChange === 'function') {
       try {
         await window.zoomSdk.onRTMSStatusChange(function(event) {
