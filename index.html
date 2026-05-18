@@ -17,14 +17,17 @@
           <p id="zoomDiagnostics" class="zoom-diagnostics" hidden></p>
         </div>
       </div>
-      <div class="topbar-actions">
-        <label class="file-control">
-          <input id="transcriptFile" type="file" accept=".vtt,.txt,text/vtt,text/plain">
-          <span>Load Transcript</span>
-        </label>
-        <button id="toggleTranscriptButton" type="button">Hide Transcript</button>
-        <button id="resetButton" type="button">Reset</button>
-        <button id="playButton" type="button" class="primary">Start</button>
+      <div class="topbar-menu">
+        <button id="menuButton" class="menu-button" type="button" aria-label="Open meeting controls" aria-expanded="false">...</button>
+        <div id="controlsMenu" class="controls-menu" hidden>
+          <label class="file-control">
+            <input id="transcriptFile" type="file" accept=".vtt,.txt,text/vtt,text/plain">
+            <span>Load Transcript</span>
+          </label>
+          <button id="toggleTranscriptButton" type="button">Hide Transcript</button>
+          <button id="resetButton" type="button">Reset</button>
+          <button id="playButton" type="button" class="primary">Start</button>
+        </div>
       </div>
     </header>
 
@@ -154,6 +157,6 @@
   </div>
 
   <script src="https://appssdk.zoom.us/sdk.js"></script>
-  <script src="./app.js?v=20260518-dashboard-actions"></script>
+  <script src="./app.js?v=20260518-kebab-controls"></script>
 </body>
 </html>

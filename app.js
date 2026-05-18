@@ -31,6 +31,8 @@ const state = {
 };
 
 const els = {
+  menuButton: document.querySelector('#menuButton'),
+  controlsMenu: document.querySelector('#controlsMenu'),
   playButton: document.querySelector('#playButton'),
   resetButton: document.querySelector('#resetButton'),
   toggleTranscriptButton: document.querySelector('#toggleTranscriptButton'),
@@ -858,12 +860,23 @@ function escapeHtml(value) {
   });
 }
 
+function setControlsMenu(open) {
+  els.controlsMenu.hidden = !open;
+  els.menuButton.setAttribute('aria-expanded', String(open));
+}
+
+els.menuButton.addEventListener('click', function(event) {
+  event.stopPropagation();
+  setControlsMenu(els.controlsMenu.hidden);
+});
+
 els.playButton.addEventListener('click', function() {
   const meeting = state.meetingContext || fakeZoomMeeting;
   state.playing = !state.playing;
   state.lastTick = 0;
   els.playButton.textContent = state.playing ? 'Pause' : 'Start';
   els.meetingStatus.textContent = state.playing ? meeting.topic + ' · live playback' : meeting.topic + ' · paused';
+  setControlsMenu(false);
   if (state.playing) requestAnimationFrame(tick);
 });
 
@@ -871,11 +884,13 @@ els.toggleTranscriptButton.addEventListener('click', function() {
   state.transcriptVisible = !state.transcriptVisible;
   els.workspace.classList.toggle('transcript-hidden', !state.transcriptVisible);
   els.toggleTranscriptButton.textContent = state.transcriptVisible ? 'Hide Transcript' : 'Show Transcript';
+  setControlsMenu(false);
 });
 
 els.resetButton.addEventListener('click', function() {
   resetState();
   renderAll();
+  setControlsMenu(false);
 });
 
 els.speedSelect.addEventListener('change', function(event) {
@@ -891,9 +906,14 @@ els.transcriptFile.addEventListener('change', async function(event) {
   if (!file) return;
   const text = await file.text();
   loadTranscript(text, file.name);
+  setControlsMenu(false);
 });
 
 document.addEventListener('click', function(event) {
+  if (!event.target.closest('.topbar-menu')) {
+    setControlsMenu(false);
+  }
+
   const removeButton = event.target.closest('[data-remove-type]');
   if (removeButton) {
     event.preventDefault();

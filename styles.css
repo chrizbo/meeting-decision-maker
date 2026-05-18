@@ -104,10 +104,41 @@ h1 {
   line-height: 1.35;
 }
 
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 9px;
+.topbar-menu {
+  position: relative;
+}
+
+.menu-button {
+  width: 42px;
+  min-width: 42px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.controls-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 15;
+  width: 220px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
+}
+
+.controls-menu[hidden] {
+  display: none;
+}
+
+.controls-menu button,
+.controls-menu .file-control span {
+  width: 100%;
+  justify-content: center;
 }
 
 .file-control input {
@@ -596,18 +627,14 @@ button:disabled {
     font-size: 20px;
   }
 
-  .topbar-actions {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+  .topbar-menu {
+    position: absolute;
+    top: 12px;
+    right: 12px;
   }
 
-  .topbar-actions button,
-  .topbar-actions .file-control span {
-    width: 100%;
-    justify-content: center;
-    padding: 0 8px;
-    font-size: 13px;
+  .controls-menu {
+    width: min(220px, calc(100vw - 24px));
   }
 
   .workspace,
