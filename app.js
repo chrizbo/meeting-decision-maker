@@ -38,6 +38,7 @@ const els = {
   transcriptFile: document.querySelector('#transcriptFile'),
   speedSelect: document.querySelector('#speedSelect'),
   meetingStatus: document.querySelector('#meetingStatus'),
+  zoomDiagnostics: document.querySelector('#zoomDiagnostics'),
   meetingName: document.querySelector('#meetingName'),
   meetingAttendees: document.querySelector('#meetingAttendees'),
   boardTitle: document.querySelector('#boardTitle'),
@@ -104,6 +105,13 @@ function zoomErrorMessage(error) {
   return error.reason || error.message || error.errorMessage || error.errorCode || String(error);
 }
 
+function showZoomDiagnostics(parts) {
+  const text = parts.filter(Boolean).join(' · ');
+  if (!text || !els.zoomDiagnostics) return;
+  els.zoomDiagnostics.textContent = text;
+  els.zoomDiagnostics.hidden = false;
+}
+
 async function safeZoomCall(name, fallback) {
   if (!window.zoomSdk || typeof window.zoomSdk[name] !== 'function') {
     return { ok: false, value: fallback, error: name + ' unavailable' };
@@ -138,20 +146,29 @@ async function maybeInitializeZoomApp() {
   }
 
   try {
-    await window.zoomSdk.config({
+    const configResponse = await window.zoomSdk.config({
       version: '0.16.0',
       capabilities: [
         'getMeetingContext',
         'getMeetingUUID',
         'getMeetingParticipants',
+        'getUserContext',
         'getRunningContext',
         'getSupportedJsApis',
         'openUrl',
         'shareApp'
       ]
     });
+    showZoomDiagnostics([
+      configResponse.runningContext ? 'config: ' + configResponse.runningContext : '',
+      configResponse.auth && configResponse.auth.status ? 'auth: ' + configResponse.auth.status : '',
+      Array.isArray(configResponse.unsupportedApis) && configResponse.unsupportedApis.length
+        ? 'unsupported: ' + configResponse.unsupportedApis.join(', ')
+        : ''
+    ]);
   } catch (error) {
     els.meetingStatus.textContent = fakeZoomMeeting.topic + ' · Zoom SDK unavailable';
+    showZoomDiagnostics(['config error: ' + zoomErrorMessage(error)]);
     return;
   }
 
@@ -164,6 +181,7 @@ async function maybeInitializeZoomApp() {
     const contextResult = await safeZoomCall('getMeetingContext', {});
     const uuidResult = contextResult.ok ? { ok: true, value: {} } : await safeZoomCall('getMeetingUUID', {});
     const runningContextResult = await safeZoomCall('getRunningContext', {});
+    const userContextResult = await safeZoomCall('getUserContext', {});
     const supportedApisResult = await safeZoomCall('getSupportedJsApis', {});
     const meeting = normalizeZoomMeetingContext(contextResult.value || {});
     if (!meeting.meetingId && uuidResult.value) {
@@ -193,11 +211,19 @@ async function maybeInitializeZoomApp() {
       const supportedCount = Array.isArray(supportedApisResult.value && supportedApisResult.value.apis)
         ? supportedApisResult.value.apis.length
         : 0;
+      const userRole = userContextResult.value && (userContextResult.value.role || userContextResult.value.userRole);
       const note = runningContext ? ' · ' + runningContext : '';
       els.meetingStatus.textContent = meeting.topic + note + ' · limited Zoom context';
+      showZoomDiagnostics([
+        'meeting context: ' + contextResult.error,
+        uuidResult.ok && meeting.meetingId ? 'uuid: yes' : 'uuid: ' + (uuidResult.error || 'none'),
+        userRole ? 'role: ' + userRole : '',
+        supportedCount ? 'supported APIs: ' + supportedCount : ''
+      ]);
       console.info('Meeting Decision Maker Zoom diagnostics', {
         getMeetingContext: contextResult.error,
         getMeetingUUID: uuidResult.ok ? uuidResult.value : uuidResult.error,
+        getUserContext: userContextResult.ok ? userContextResult.value : userContextResult.error,
         getRunningContext: runningContextResult.ok ? runningContextResult.value : runningContextResult.error,
         supportedApiCount: supportedCount,
         getSupportedJsApis: supportedApisResult.ok ? supportedApisResult.value : supportedApisResult.error
@@ -205,6 +231,7 @@ async function maybeInitializeZoomApp() {
     }
   } catch (error) {
     els.meetingStatus.textContent = fakeZoomMeeting.topic + ' · Zoom session unavailable';
+    showZoomDiagnostics(['session error: ' + zoomErrorMessage(error)]);
     console.info('Meeting Decision Maker Zoom session error', error);
   }
 }

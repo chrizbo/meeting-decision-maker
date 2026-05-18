@@ -97,6 +97,13 @@ h1 {
   font-size: 13px;
 }
 
+.zoom-diagnostics {
+  margin-top: 4px;
+  color: #8c6f20;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
