@@ -144,6 +144,8 @@ POST /api/zoom/rtms-webhook
 
 When Zoom sends `meeting.rtms_started`, the service creates an `@zoom/rtms` client, joins the stream, and listens for `onTranscriptData`. Transcript callbacks are normalized into the same cue shape used by mock playback, sent to Gemini with the last 90 seconds of transcript context, and accumulated in in-memory RTMS meeting state.
 
+Incoming Zoom webhook events are verified with `ZOOM_WEBHOOK_SECRET_TOKEN`, `x-zm-request-timestamp`, and `x-zm-signature`. URL validation events use the same secret token to return Zoom's encrypted validation token.
+
 Inside the Zoom client, the meeting controls menu shows a **Start RTMS** button when the Zoom Apps SDK exposes `startRTMS`. That button starts or stops RTMS and the backend receives the resulting webhook events.
 
 Inspect RTMS sessions:

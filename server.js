@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, extname, join, normalize } from 'node:path';
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
 import { Firestore } from '@google-cloud/firestore';
@@ -95,6 +95,17 @@ async function readBody(req) {
     }
   }
   return body ? JSON.parse(body) : {};
+}
+
+async function readRawBody(req) {
+  let body = '';
+  for await (const chunk of req) {
+    body += chunk;
+    if (body.length > 1_000_000) {
+      throw new Error('Request body too large');
+    }
+  }
+  return body;
 }
 
 async function loadSkillPrompts() {
@@ -556,6 +567,21 @@ function handleZoomUrlValidation(event) {
   };
 }
 
+function verifyZoomWebhookSignature(req, rawBody, event) {
+  if (event.event === 'endpoint.url_validation') return true;
+
+  const secret = process.env.ZOOM_WEBHOOK_SECRET_TOKEN;
+  const timestamp = req.headers['x-zm-request-timestamp'];
+  const signature = req.headers['x-zm-signature'];
+  if (!secret || !timestamp || !signature) return false;
+
+  const message = `v0:${timestamp}:${rawBody}`;
+  const expected = 'v0=' + createHmac('sha256', secret).update(message).digest('hex');
+  const expectedBuffer = Buffer.from(expected);
+  const signatureBuffer = Buffer.from(String(signature));
+  return expectedBuffer.length === signatureBuffer.length && timingSafeEqual(expectedBuffer, signatureBuffer);
+}
+
 async function handleRtmsWebhookEvent(event) {
   const payload = event.payload || {};
   if (event.event === 'endpoint.url_validation') {
@@ -758,7 +784,12 @@ async function handleApi(req, res, pathname) {
   }
 
   if (req.method === 'POST' && pathname === '/api/zoom/rtms-webhook') {
-    const event = await readBody(req);
+    const rawBody = await readRawBody(req);
+    const event = rawBody ? JSON.parse(rawBody) : {};
+    if (!verifyZoomWebhookSignature(req, rawBody, event)) {
+      sendJson(res, 401, { error: 'Invalid Zoom webhook signature' });
+      return;
+    }
     const result = await handleRtmsWebhookEvent(event);
     const status = event.event === 'endpoint.url_validation' ? 200 : 202;
     sendJson(res, status, result);
