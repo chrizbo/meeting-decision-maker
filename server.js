@@ -33,6 +33,11 @@ function sendText(res, status, body) {
   res.end(body);
 }
 
+function sendHtml(res, status, body) {
+  res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' });
+  res.end(body);
+}
+
 async function readBody(req) {
   let body = '';
   for await (const chunk of req) {
@@ -92,6 +97,11 @@ async function handleApi(req, res, pathname) {
   if (req.method === 'POST' && pathname === '/api/sessions') {
     const input = await readBody(req);
     sendJson(res, 201, createSession(input));
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/zoom/oauth/callback') {
+    sendHtml(res, 200, '<!doctype html><title>Meeting Decision Maker</title><h1>Zoom OAuth callback received</h1><p>The launcher OAuth flow is not connected yet.</p>');
     return;
   }
 

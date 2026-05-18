@@ -30,6 +30,7 @@ For the current prototype, the important routes are:
 - `https://YOUR-CLOUD-RUN-URL/`
 - `https://YOUR-CLOUD-RUN-URL/m/demo-session`
 - `https://YOUR-CLOUD-RUN-URL/api/sessions`
+- `https://YOUR-CLOUD-RUN-URL/api/zoom/oauth/callback`
 - `https://YOUR-CLOUD-RUN-URL/api/zoom/rtms-webhook`
 
 ## 2. Create the Zoom App
@@ -52,7 +53,7 @@ Redirect URL: https://YOUR-CLOUD-RUN-URL/api/zoom/oauth/callback
 Allow list: https://YOUR-CLOUD-RUN-URL
 ```
 
-The OAuth callback route is a placeholder until user/account auth is implemented. If Zoom requires a working callback before saving the app, add that backend route before enabling OAuth scopes.
+The OAuth callback route is a placeholder until user/account auth is implemented.
 
 ## 3. Configure Initial Capabilities
 
