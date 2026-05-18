@@ -37,6 +37,7 @@ const els = {
   controlsMenu: document.querySelector('#controlsMenu'),
   playButton: document.querySelector('#playButton'),
   resetButton: document.querySelector('#resetButton'),
+  rtmsButton: document.querySelector('#rtmsButton'),
   toggleTranscriptButton: document.querySelector('#toggleTranscriptButton'),
   workspace: document.querySelector('.workspace'),
   transcriptFile: document.querySelector('#transcriptFile'),
@@ -195,6 +196,58 @@ async function copyDashboardUrl() {
   }
 }
 
+function rtmsStatusText(response) {
+  if (!response) return '';
+  return response.status || response.state || response.rtmsStatus || response.message || response.result || '';
+}
+
+function setRtmsButton(status) {
+  if (!els.rtmsButton) return;
+  const normalized = String(status || '').toLowerCase();
+  if (normalized.includes('start') || normalized.includes('active') || normalized.includes('running')) {
+    els.rtmsButton.textContent = 'Stop RTMS';
+    els.rtmsButton.dataset.rtmsActive = 'true';
+    return;
+  }
+  els.rtmsButton.textContent = 'Start RTMS';
+  els.rtmsButton.dataset.rtmsActive = 'false';
+}
+
+async function refreshRtmsStatus() {
+  if (!window.zoomSdk || typeof window.zoomSdk.getRTMSStatus !== 'function') return;
+  try {
+    const response = await window.zoomSdk.getRTMSStatus();
+    const status = rtmsStatusText(response);
+    setRtmsButton(status);
+    if (status) showZoomDiagnostics(['RTMS: ' + status]);
+  } catch (error) {
+    showZoomDiagnostics(['RTMS status: ' + zoomErrorMessage(error)]);
+  }
+}
+
+async function toggleRtms() {
+  if (!window.zoomSdk) return;
+  const active = els.rtmsButton.dataset.rtmsActive === 'true';
+  const method = active ? 'stopRTMS' : 'startRTMS';
+  if (typeof window.zoomSdk[method] !== 'function') {
+    showZoomDiagnostics([method + ' unavailable']);
+    return;
+  }
+
+  els.rtmsButton.disabled = true;
+  try {
+    const response = await window.zoomSdk[method]();
+    const status = rtmsStatusText(response) || (active ? 'stopping' : 'starting');
+    setRtmsButton(active ? 'stopped' : 'started');
+    showZoomDiagnostics(['RTMS ' + status]);
+  } catch (error) {
+    showZoomDiagnostics(['RTMS ' + method + ': ' + zoomErrorMessage(error)]);
+  } finally {
+    els.rtmsButton.disabled = false;
+    await refreshRtmsStatus();
+  }
+}
+
 async function safeZoomCall(name, fallback) {
   if (!window.zoomSdk || typeof window.zoomSdk[name] !== 'function') {
     return { ok: false, value: fallback, error: name + ' unavailable' };
@@ -241,7 +294,11 @@ async function maybeInitializeZoomApp() {
         'getRunningContext',
         'getSupportedJsApis',
         'openUrl',
-        'shareApp'
+        'shareApp',
+        'startRTMS',
+        'stopRTMS',
+        'getRTMSStatus',
+        'onRTMSStatusChange'
       ]
     });
     showZoomDiagnostics([
@@ -261,6 +318,7 @@ async function maybeInitializeZoomApp() {
   state.transcriptVisible = false;
   els.workspace.classList.add('transcript-hidden');
   els.toggleTranscriptButton.textContent = 'Show Transcript';
+  if (els.rtmsButton) els.rtmsButton.hidden = typeof window.zoomSdk.startRTMS !== 'function';
 
   if (currentDashboardSessionId()) return;
 
@@ -270,6 +328,18 @@ async function maybeInitializeZoomApp() {
     const runningContextResult = await safeZoomCall('getRunningContext', {});
     const userContextResult = await safeZoomCall('getUserContext', {});
     const supportedApisResult = await safeZoomCall('getSupportedJsApis', {});
+    if (typeof window.zoomSdk.onRTMSStatusChange === 'function') {
+      try {
+        await window.zoomSdk.onRTMSStatusChange(function(event) {
+          const status = rtmsStatusText(event);
+          setRtmsButton(status);
+          showZoomDiagnostics(['RTMS: ' + (status || 'status changed')]);
+        });
+      } catch (error) {
+        showZoomDiagnostics(['RTMS listener: ' + zoomErrorMessage(error)]);
+      }
+    }
+    await refreshRtmsStatus();
     const meeting = normalizeZoomMeetingContext(contextResult.value || {});
     if (!meeting.meetingId && uuidResult.value) {
       meeting.meetingId = uuidResult.value.meetingUUID || uuidResult.value.meetingId || uuidResult.value.meetingID || '';
@@ -1106,6 +1176,7 @@ els.speedSelect.addEventListener('change', function(event) {
 els.openDashboardButton.addEventListener('click', openDashboard);
 els.copyDashboardButton.addEventListener('click', copyDashboardUrl);
 els.shareDashboardButton.addEventListener('click', shareDashboard);
+if (els.rtmsButton) els.rtmsButton.addEventListener('click', toggleRtms);
 
 els.transcriptFile.addEventListener('change', async function(event) {
   const file = event.target.files[0];

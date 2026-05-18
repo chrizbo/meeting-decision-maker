@@ -107,6 +107,7 @@ The launcher should:
 3. Send the topic, meeting id, host/user, and participants to `POST /api/sessions`.
 4. Display the returned `dashboardPath`.
 5. Let the host open the dashboard in a browser or share the app surface from Zoom.
+6. Let the host call `zoomSdk.startRTMS()` from the meeting controls menu when RTMS APIs are available.
 
 ## 5. Install and Test the Development App
 
