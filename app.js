@@ -43,6 +43,9 @@ const els = {
   meetingAttendees: document.querySelector('#meetingAttendees'),
   boardTitle: document.querySelector('#boardTitle'),
   dashboardUrl: document.querySelector('#dashboardUrl'),
+  openDashboardButton: document.querySelector('#openDashboardButton'),
+  copyDashboardButton: document.querySelector('#copyDashboardButton'),
+  shareDashboardButton: document.querySelector('#shareDashboardButton'),
   clock: document.querySelector('#clock'),
   progressBar: document.querySelector('#progressBar'),
   transcriptList: document.querySelector('#transcriptList'),
@@ -82,6 +85,11 @@ function applyMeetingContext(meeting) {
   els.meetingStatus.textContent = meeting.topic + ' · host ' + meeting.host;
 }
 
+function currentDashboardUrl() {
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  return absoluteDashboardPath(meeting.dashboardSlug || fakeZoomMeeting.dashboardSlug);
+}
+
 function absoluteDashboardPath(path) {
   if (!path) return fakeZoomMeeting.dashboardSlug;
   if (path.startsWith('http')) return path;
@@ -110,6 +118,44 @@ function showZoomDiagnostics(parts) {
   if (!text || !els.zoomDiagnostics) return;
   els.zoomDiagnostics.textContent = text;
   els.zoomDiagnostics.hidden = false;
+}
+
+async function openDashboard() {
+  const url = currentDashboardUrl();
+  if (window.zoomSdk && typeof window.zoomSdk.openUrl === 'function') {
+    try {
+      await window.zoomSdk.openUrl({ url: url });
+      return;
+    } catch (error) {
+      console.info('Meeting Decision Maker openUrl fallback', error);
+    }
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+async function shareDashboard() {
+  if (window.zoomSdk && typeof window.zoomSdk.shareApp === 'function') {
+    try {
+      await window.zoomSdk.shareApp({ action: 'start' });
+      return;
+    } catch (error) {
+      console.info('Meeting Decision Maker shareApp fallback', error);
+    }
+  }
+  await copyDashboardUrl();
+}
+
+async function copyDashboardUrl() {
+  const url = currentDashboardUrl();
+  try {
+    await navigator.clipboard.writeText(url);
+    els.copyDashboardButton.textContent = 'Copied';
+    setTimeout(function() {
+      els.copyDashboardButton.textContent = 'Copy';
+    }, 1400);
+  } catch (error) {
+    els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + ' · dashboard URL: ' + url;
+  }
 }
 
 async function safeZoomCall(name, fallback) {
@@ -835,6 +881,10 @@ els.resetButton.addEventListener('click', function() {
 els.speedSelect.addEventListener('change', function(event) {
   state.speed = Number(event.target.value);
 });
+
+els.openDashboardButton.addEventListener('click', openDashboard);
+els.copyDashboardButton.addEventListener('click', copyDashboardUrl);
+els.shareDashboardButton.addEventListener('click', shareDashboard);
 
 els.transcriptFile.addEventListener('change', async function(event) {
   const file = event.target.files[0];

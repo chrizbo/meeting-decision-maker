@@ -283,6 +283,25 @@ select {
   font-size: 14px;
 }
 
+.dashboard-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.dashboard-actions button {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.dashboard-actions button:last-child {
+  border-color: var(--green);
+  background: var(--green);
+  color: white;
+}
+
 .decision-strip {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -626,6 +645,10 @@ button:disabled {
     width: 100%;
     text-align: left;
     overflow-wrap: anywhere;
+  }
+
+  .dashboard-actions {
+    justify-content: flex-start;
   }
 
   .decision-strip,
