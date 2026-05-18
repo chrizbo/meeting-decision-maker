@@ -2,10 +2,11 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, extname, join, normalize } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
 import { Firestore } from '@google-cloud/firestore';
+import rtms from '@zoom/rtms';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8787);
@@ -17,6 +18,8 @@ const sessionsCollection = process.env.FIRESTORE_SESSIONS_COLLECTION || 'meeting
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
 let skillPromptCache = null;
+const rtmsClients = new Map();
+const rtmsSessionStates = new Map();
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -149,6 +152,110 @@ function cleanAnalysisItem(item) {
     clean.priority = allowedPriorities.has(item.priority) ? item.priority : 'medium';
   }
   return clean;
+}
+
+function emptyMeetingState() {
+  return {
+    decisions: [],
+    risks: [],
+    actions: [],
+    openAgentIssues: []
+  };
+}
+
+function serverMeetingStateForAnalysis(state) {
+  return {
+    decisions: state.decisions.slice(0, 8).map(function(item) {
+      return {
+        id: item.id,
+        title: item.title,
+        status: item.status,
+        summary: item.summary,
+        evidence: item.evidence
+      };
+    }),
+    risks: state.risks.slice(0, 8).map(function(item) {
+      return {
+        id: item.id,
+        title: item.title,
+        summary: item.summary,
+        evidence: item.evidence
+      };
+    }),
+    actions: state.actions.slice(0, 8).map(function(item) {
+      return {
+        id: item.id,
+        title: item.title,
+        summary: item.summary,
+        evidence: item.evidence
+      };
+    }),
+    openAgentIssues: state.openAgentIssues.slice(0, 8).map(function(item) {
+      return {
+        id: item.id,
+        agent: item.agent,
+        priority: item.priority,
+        summary: item.summary,
+        evidence: item.evidence
+      };
+    })
+  };
+}
+
+function applyServerAnalysisItems(state, items, cue) {
+  items.forEach(function(item) {
+    if (item.updateMode === 'update' && updateServerBoardItem(state, item, cue)) return;
+    const record = {
+      id: randomUUID(),
+      title: item.title,
+      summary: item.summary,
+      evidence: cue.evidence,
+      cueId: cue.id,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (item.type === 'decision') {
+      state.decisions.unshift(Object.assign(record, { status: item.status || 'pending' }));
+    }
+    if (item.type === 'risk') state.risks.unshift(record);
+    if (item.type === 'action') state.actions.unshift(record);
+    if (item.type === 'agent_issue') {
+      state.openAgentIssues.unshift(Object.assign(record, {
+        agent: item.agent,
+        priority: item.priority || 'medium',
+        status: 'open'
+      }));
+    }
+  });
+}
+
+function updateServerBoardItem(state, item, cue) {
+  const existing = findServerBoardItem(state, item);
+  if (!existing) return false;
+  existing.title = item.title || existing.title;
+  existing.summary = item.summary || existing.summary;
+  existing.evidence = cue.evidence;
+  existing.cueId = cue.id;
+  existing.updatedAt = new Date().toISOString();
+  if (item.status && item.type === 'decision') existing.status = item.status;
+  if (item.priority && item.type === 'agent_issue') existing.priority = item.priority;
+  return true;
+}
+
+function findServerBoardItem(state, item) {
+  const lists = {
+    decision: state.decisions,
+    risk: state.risks,
+    action: state.actions,
+    agent_issue: state.openAgentIssues
+  };
+  const list = lists[item.type] || [];
+  if (item.targetId) {
+    const direct = list.find(function(record) { return record.id === item.targetId; });
+    if (direct) return direct;
+  }
+  const title = String(item.title || '').toLowerCase();
+  return title ? list.find(function(record) { return record.title.toLowerCase() === title; }) : null;
 }
 
 function parseGeminiJson(text) {
@@ -284,6 +391,182 @@ async function createSession(input = {}) {
     updatedAt: createdAt
   };
   return saveSession(session);
+}
+
+function rtmsKey(payload = {}) {
+  return payload.meeting_uuid || payload.webinar_uuid || payload.session_id || payload.engagement_id || payload.rtms_stream_id || 'unknown';
+}
+
+function getRtmsState(payload = {}) {
+  const key = rtmsKey(payload);
+  if (!rtmsSessionStates.has(key)) {
+    rtmsSessionStates.set(key, Object.assign(emptyMeetingState(), {
+      id: key,
+      meetingUuid: payload.meeting_uuid || null,
+      webinarUuid: payload.webinar_uuid || null,
+      sessionId: payload.session_id || null,
+      engagementId: payload.engagement_id || null,
+      streamId: payload.rtms_stream_id || null,
+      transcript: [],
+      analyses: [],
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }));
+  }
+  const state = rtmsSessionStates.get(key);
+  if (payload.rtms_stream_id) state.streamId = payload.rtms_stream_id;
+  return state;
+}
+
+function normalizeTranscriptText(buffer, size) {
+  if (typeof buffer === 'object' && !Buffer.isBuffer(buffer) && buffer !== null) {
+    if (typeof buffer.text === 'string') return buffer.text.trim();
+    if (typeof buffer.transcript === 'string') return buffer.transcript.trim();
+    if (typeof buffer.caption === 'string') return buffer.caption.trim();
+  }
+  if (Buffer.isBuffer(buffer)) return buffer.subarray(0, size || buffer.length).toString('utf8').trim();
+  if (typeof buffer === 'string') return buffer.trim();
+  return '';
+}
+
+function timestampToSeconds(timestamp, state) {
+  const value = Number(timestamp || Date.now());
+  if (!state.firstTranscriptTimestamp) state.firstTranscriptTimestamp = value;
+  if (value > 10_000_000_000) return Math.max(0, (value - state.firstTranscriptTimestamp) / 1000);
+  if (value > 10_000_000) return Math.max(0, (value - state.firstTranscriptTimestamp) / 1000);
+  return value > 1000 ? value / 1000 : value;
+}
+
+function transcriptWindowForServerCue(state, cue) {
+  const windowStart = Math.max(0, cue.start - 90);
+  return state.transcript.filter(function(item) {
+    return item.start >= windowStart;
+  }).slice(-12);
+}
+
+async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata = {}) {
+  const state = getRtmsState(payload);
+  const text = normalizeTranscriptText(buffer, size);
+  if (!text) return { ignored: true, reason: 'empty transcript' };
+
+  const start = timestampToSeconds(timestamp || metadata.startTs || payload.event_ts, state);
+  const cue = {
+    id: randomUUID(),
+    start,
+    end: start + 3,
+    speaker: metadata.userName || metadata.displayName || metadata.user || 'Zoom participant',
+    text,
+    evidence: `${formatServerTime(start)} · ${metadata.userName || metadata.displayName || 'Zoom participant'}`
+  };
+
+  state.transcript.push(cue);
+  state.transcript = state.transcript.slice(-200);
+  state.updatedAt = new Date().toISOString();
+
+  let analysis = null;
+  if (analysisEnabled()) {
+    analysis = await analyzeCueWithGemini({
+      cue,
+      transcriptWindow: transcriptWindowForServerCue(state, cue),
+      meetingState: serverMeetingStateForAnalysis(state)
+    });
+    applyServerAnalysisItems(state, analysis.items || [], cue);
+    state.analyses.unshift(analysis);
+    state.analyses = state.analyses.slice(0, 50);
+  }
+
+  return {
+    ignored: false,
+    sessionId: state.id,
+    cue,
+    analysis
+  };
+}
+
+function formatServerTime(seconds) {
+  const total = Math.floor(seconds);
+  return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
+}
+
+function stopRtmsClient(payload = {}) {
+  const key = rtmsKey(payload);
+  const client = rtmsClients.get(key) || rtmsClients.get(payload.rtms_stream_id);
+  if (!client) return false;
+  try {
+    client.leave();
+  } catch (error) {
+    console.error('RTMS leave failed:', error.message);
+  }
+  rtmsClients.delete(key);
+  if (payload.rtms_stream_id) rtmsClients.delete(payload.rtms_stream_id);
+  return true;
+}
+
+function startRtmsClient(payload = {}) {
+  const key = rtmsKey(payload);
+  if (!payload.rtms_stream_id || !payload.server_urls) {
+    return { started: false, reason: 'missing rtms_stream_id or server_urls' };
+  }
+  if (rtmsClients.has(key)) return { started: false, reason: 'already connected' };
+
+  const client = new rtms.Client();
+  rtmsClients.set(key, client);
+  rtmsClients.set(payload.rtms_stream_id, client);
+  getRtmsState(payload);
+
+  client.onJoinConfirm(function(reason) {
+    console.log('RTMS join confirmed:', key, reason);
+  });
+  client.onTranscriptData(function(buffer, size, timestamp, metadata) {
+    ingestRtmsTranscript(payload, buffer, size, timestamp, metadata).catch(function(error) {
+      console.error('RTMS transcript analysis failed:', error.message);
+    });
+  });
+  client.onLeave(function(reason) {
+    console.log('RTMS leave:', key, reason);
+    rtmsClients.delete(key);
+    rtmsClients.delete(payload.rtms_stream_id);
+  });
+
+  const joined = client.join(Object.assign({}, payload, {
+    client: process.env.ZM_RTMS_CLIENT || process.env.ZOOM_CLIENT_ID,
+    secret: process.env.ZM_RTMS_SECRET || process.env.ZOOM_CLIENT_SECRET,
+    pollInterval: Number(process.env.RTMS_POLL_INTERVAL_MS || 10)
+  }));
+  return { started: joined, streamId: payload.rtms_stream_id, sessionId: key };
+}
+
+function handleZoomUrlValidation(event) {
+  const plainToken = event.payload && event.payload.plainToken;
+  const secret = process.env.ZOOM_WEBHOOK_SECRET_TOKEN;
+  if (!plainToken || !secret) return null;
+  return {
+    plainToken,
+    encryptedToken: createHmac('sha256', secret).update(plainToken).digest('hex')
+  };
+}
+
+async function handleRtmsWebhookEvent(event) {
+  const payload = event.payload || {};
+  if (event.event === 'endpoint.url_validation') {
+    return handleZoomUrlValidation(event) || { ok: false, reason: 'missing validation token or secret' };
+  }
+  if (event.event === 'meeting.rtms_started' || event.event === 'webinar.rtms_started' || event.event === 'session.rtms_started') {
+    return startRtmsClient(payload);
+  }
+  if (event.event === 'meeting.rtms_stopped' || event.event === 'meeting.rtms_interrupted' ||
+      event.event === 'webinar.rtms_stopped' || event.event === 'session.rtms_stopped') {
+    return { stopped: stopRtmsClient(payload), sessionId: rtmsKey(payload) };
+  }
+
+  const transcriptText = payload.text || payload.transcript || payload.caption || payload.message;
+  if (transcriptText) {
+    return ingestRtmsTranscript(payload, transcriptText, transcriptText.length, payload.timestamp || event.event_ts, {
+      userName: payload.speaker || payload.user_name || payload.participant_name
+    });
+  }
+
+  return { received: true, event: event.event || null };
 }
 
 async function exchangeZoomOAuthCode(code) {
@@ -434,9 +717,41 @@ async function handleApi(req, res, pathname) {
     return;
   }
 
+  const rtmsStateMatch = pathname.match(/^\/api\/rtms\/sessions\/([^/]+)$/);
+  if (req.method === 'GET' && rtmsStateMatch) {
+    const state = rtmsSessionStates.get(decodeURIComponent(rtmsStateMatch[1]));
+    if (!state) {
+      sendJson(res, 404, { error: 'RTMS session not found' });
+      return;
+    }
+    sendJson(res, 200, state);
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/rtms/sessions') {
+    sendJson(res, 200, {
+      sessions: Array.from(rtmsSessionStates.values()).map(function(state) {
+        return {
+          id: state.id,
+          meetingUuid: state.meetingUuid,
+          streamId: state.streamId,
+          transcriptCount: state.transcript.length,
+          decisionCount: state.decisions.length,
+          riskCount: state.risks.length,
+          actionCount: state.actions.length,
+          agentIssueCount: state.openAgentIssues.length,
+          updatedAt: state.updatedAt
+        };
+      })
+    });
+    return;
+  }
+
   if (req.method === 'POST' && pathname === '/api/zoom/rtms-webhook') {
     const event = await readBody(req);
-    sendJson(res, 202, { received: true, event: event.event || null });
+    const result = await handleRtmsWebhookEvent(event);
+    const status = event.event === 'endpoint.url_validation' ? 200 : 202;
+    sendJson(res, status, result);
     return;
   }
 

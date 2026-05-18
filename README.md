@@ -94,6 +94,12 @@ Zoom OAuth uses these environment variables in Cloud Run:
 - `ZOOM_CLIENT_ID`
 - `ZOOM_CLIENT_SECRET`
 - `ZOOM_REDIRECT_URI`
+- `ZOOM_WEBHOOK_SECRET_TOKEN`
+
+Zoom RTMS uses the same Zoom client credentials by default. If your RTMS app has separate credentials, set:
+
+- `ZM_RTMS_CLIENT`
+- `ZM_RTMS_SECRET`
 
 Cloud Run can persist meeting sessions in Firestore by setting:
 
@@ -127,3 +133,22 @@ Gemini setup:
    The response should include `"enabled":true`.
 
 When `GEMINI_API_KEY` is present, the browser sends each newly played transcript cue to `POST /api/analyze-cue` with a short rolling transcript window and compact board state. That state includes already captured decisions, risks, actions, and open agent issues with IDs so Gemini can update existing items when the latest transcript adds nuance. When the key is absent, the app keeps using the mock fixture and browser fallback rules.
+
+## RTMS Transcript Ingestion
+
+The Zoom RTMS webhook endpoint is:
+
+```text
+POST /api/zoom/rtms-webhook
+```
+
+When Zoom sends `meeting.rtms_started`, the service creates an `@zoom/rtms` client, joins the stream, and listens for `onTranscriptData`. Transcript callbacks are normalized into the same cue shape used by mock playback, sent to Gemini with the last 90 seconds of transcript context, and accumulated in in-memory RTMS meeting state.
+
+Inspect RTMS sessions:
+
+```bash
+curl "$SERVICE_URL/api/rtms/sessions"
+curl "$SERVICE_URL/api/rtms/sessions/MEETING_OR_STREAM_ID"
+```
+
+For local route testing, the webhook also accepts transcript-like payloads with `payload.text`, `payload.transcript`, `payload.caption`, or `payload.message`.

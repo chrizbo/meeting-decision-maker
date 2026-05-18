@@ -44,9 +44,22 @@ Likely architecture:
 
 1. Zoom App starts or requests RTMS for the meeting.
 2. Zoom sends RTMS webhook events to our backend.
-3. Backend connects to the RTMS stream and receives transcript/media events.
-4. Backend runs extraction and red-team skills through an LLM worker.
+3. Backend connects to the RTMS stream with `@zoom/rtms` and receives `onTranscriptData` callbacks.
+4. Backend normalizes transcript callbacks into cue objects and sends them through the Gemini cue analyzer with rolling transcript and board-state context.
 5. Shared dashboard receives structured meeting-state updates over WebSocket or Server-Sent Events.
+
+Current backend route:
+
+```text
+POST /api/zoom/rtms-webhook
+```
+
+Inspection routes:
+
+```text
+GET /api/rtms/sessions
+GET /api/rtms/sessions/:id
+```
 
 Open implementation checks:
 

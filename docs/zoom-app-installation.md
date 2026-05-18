@@ -61,7 +61,10 @@ For development OAuth, configure the Cloud Run service with:
 ZOOM_CLIENT_ID=<Zoom development client id>
 ZOOM_CLIENT_SECRET=<Zoom development client secret from Secret Manager>
 ZOOM_REDIRECT_URI=https://YOUR-CLOUD-RUN-URL/api/zoom/oauth/callback
+ZOOM_WEBHOOK_SECRET_TOKEN=<Zoom webhook secret token from Secret Manager>
 ```
+
+The RTMS SDK uses `ZM_RTMS_CLIENT` and `ZM_RTMS_SECRET`. If those are not set, the backend falls back to `ZOOM_CLIENT_ID` and `ZOOM_CLIENT_SECRET`.
 
 Meeting sessions are stored in Firestore when Cloud Run has:
 
@@ -127,9 +130,10 @@ When the launcher works, extend the Zoom app with RTMS:
 1. Enable RTMS in the Zoom app configuration if available for the account.
 2. Configure Zoom webhooks to call `POST /api/zoom/rtms-webhook`.
 3. Store Zoom app credentials in Google Secret Manager, not in this repo.
-4. Add backend verification for Zoom webhook signatures.
-5. Add the RTMS stream connector and transcript event processor.
-6. Push transcript-derived meeting-state updates to dashboard sessions.
+4. Confirm webhook URL validation succeeds with `ZOOM_WEBHOOK_SECRET_TOKEN`.
+5. Confirm `meeting.rtms_started` reaches `/api/zoom/rtms-webhook`.
+6. Confirm the backend joins the stream and receives transcript callbacks.
+7. Push transcript-derived meeting-state updates to dashboard sessions.
 
 RTMS should not be used with real meetings until the app has clear consent, retention, and access-control behavior.
 
