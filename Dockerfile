@@ -6,7 +6,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY server.js ./
-COPY *.html styles.css app.js ./
+COPY *.html *.png styles.css app.js ./
 COPY fixtures ./fixtures
 COPY sample-transcripts ./sample-transcripts
 COPY schemas ./schemas
