@@ -98,6 +98,41 @@ function absoluteDashboardPath(path) {
   return window.location.origin + path;
 }
 
+function currentDashboardSessionId() {
+  const match = window.location.pathname.match(/^\/m\/([^/]+)/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
+async function loadDashboardSession() {
+  const sessionId = currentDashboardSessionId();
+  if (!sessionId || sessionId === 'demo-session') return null;
+
+  try {
+    const response = await fetch('/api/sessions/' + encodeURIComponent(sessionId), { cache: 'no-store' });
+    if (response.status === 404) {
+      els.meetingStatus.textContent = 'Session not found · demo mode';
+      return null;
+    }
+    if (!response.ok) throw new Error('session fetch failed');
+    const session = await response.json();
+    const meeting = {
+      topic: session.topic || fakeZoomMeeting.topic,
+      meetingId: session.zoomMeetingId || '',
+      host: session.host || 'Meeting host',
+      attendees: Array.isArray(session.attendees) ? session.attendees : [],
+      dashboardSlug: absoluteDashboardPath(session.dashboardPath)
+    };
+    state.zoomSession = session;
+    applyMeetingContext(meeting);
+    els.meetingStatus.textContent = meeting.topic + ' · shared dashboard';
+    return session;
+  } catch (error) {
+    els.meetingStatus.textContent = fakeZoomMeeting.topic + ' · dashboard session unavailable';
+    console.info('Meeting Decision Maker session load error', error);
+    return null;
+  }
+}
+
 function normalizeZoomMeetingContext(context) {
   const meetingId = context.meetingID || context.meetingId || context.meetingNumber || context.meetingUUID || '';
   const topic = context.meetingTopic || context.topic || context.meetingName || fakeZoomMeeting.topic;
@@ -189,7 +224,9 @@ async function createMeetingSession(meeting) {
 
 async function maybeInitializeZoomApp() {
   if (!window.zoomSdk) {
-    els.meetingStatus.textContent = fakeZoomMeeting.topic + ' · browser demo mode';
+    if (!currentDashboardSessionId()) {
+      els.meetingStatus.textContent = fakeZoomMeeting.topic + ' · browser demo mode';
+    }
     return;
   }
 
@@ -224,6 +261,8 @@ async function maybeInitializeZoomApp() {
   state.transcriptVisible = false;
   els.workspace.classList.add('transcript-hidden');
   els.toggleTranscriptButton.textContent = 'Show Transcript';
+
+  if (currentDashboardSessionId()) return;
 
   try {
     const contextResult = await safeZoomCall('getMeetingContext', {});
@@ -972,8 +1011,13 @@ els.filters.forEach(function(button) {
   });
 });
 
-applyMeetingContext(fakeZoomMeeting);
-maybeInitializeZoomApp();
-loadLlmOutput().finally(function() {
+async function initializeApp() {
+  applyMeetingContext(fakeZoomMeeting);
+  await loadDashboardSession();
+  await maybeInitializeZoomApp();
+  await loadLlmOutput();
   loadTranscript(demoVtt, 'product-decision-demo.vtt');
-});
+  applyMeetingContext(state.meetingContext || fakeZoomMeeting);
+}
+
+initializeApp();

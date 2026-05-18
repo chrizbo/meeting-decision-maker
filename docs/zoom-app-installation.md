@@ -63,6 +63,13 @@ ZOOM_CLIENT_SECRET=<Zoom development client secret from Secret Manager>
 ZOOM_REDIRECT_URI=https://YOUR-CLOUD-RUN-URL/api/zoom/oauth/callback
 ```
 
+Meeting sessions are stored in Firestore when Cloud Run has:
+
+```text
+SESSION_STORE=firestore
+FIRESTORE_SESSIONS_COLLECTION=meetingSessions
+```
+
 ## 3. Configure Initial Capabilities
 
 For the launcher-only prototype, keep permissions minimal.

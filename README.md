@@ -95,6 +95,13 @@ Zoom OAuth uses these environment variables in Cloud Run:
 - `ZOOM_CLIENT_SECRET`
 - `ZOOM_REDIRECT_URI`
 
+Cloud Run can persist meeting sessions in Firestore by setting:
+
+- `SESSION_STORE=firestore`
+- `FIRESTORE_SESSIONS_COLLECTION=meetingSessions`
+
+Local development defaults to in-memory sessions. Use `SESSION_STORE=firestore npm start` only when you have Google application credentials configured locally.
+
 ## LLM Path
 
 The static prototype now loads `fixtures/mock-llm-output.json` as the first version of the LLM output contract, with simple JavaScript keyword rules as a direct-file fallback. The intended future implementation is to invoke real LLM workers using the portable skills in `skills/` as the instruction layer. See `docs/llm-integration-notes.md`.

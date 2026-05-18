@@ -46,7 +46,15 @@ Attach billing in the Google Cloud Console or with `gcloud beta billing projects
 Enable the APIs needed for the first deploy:
 
 ```bash
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com firestore.googleapis.com
+```
+
+Create the default Firestore database in Native mode for durable meeting sessions:
+
+```bash
+gcloud firestore databases create \
+  --database="(default)" \
+  --location="$REGION"
 ```
 
 ## Deploy
@@ -72,16 +80,24 @@ The board should be available at the service root and at meeting URLs like:
 https://YOUR-CLOUD-RUN-URL/m/demo-session
 ```
 
-For local service testing, `npm start` uses port `8787` unless `PORT` is set. Cloud Run injects `PORT`, and the Docker image defaults to `8080`.
+Enable Firestore-backed sessions in Cloud Run:
+
+```bash
+gcloud run services update meeting-decision-maker-web \
+  --region "$REGION" \
+  --update-env-vars=SESSION_STORE=firestore,FIRESTORE_SESSIONS_COLLECTION=meetingSessions
+```
+
+For local service testing, `npm start` uses port `8787` unless `PORT` is set. Cloud Run injects `PORT`, and the Docker image defaults to `8080`. Local development defaults to in-memory sessions; set `SESSION_STORE=firestore` only when you have Google application credentials available locally.
 
 ## Zoom App Path
 
 Use the Cloud Run URL as the Zoom App development URL once HTTPS is available.
 
-Near-term backend routes:
+Current backend routes:
 
 - `POST /api/sessions`: create a dashboard session for a meeting.
 - `GET /api/sessions/:id`: fetch session metadata.
 - `POST /api/zoom/rtms-webhook`: placeholder for RTMS webhook events.
 
-Next implementation step: add a small Zoom App launcher page that calls the Zoom Apps SDK, reads meeting context, posts to `/api/sessions`, and opens or shares the returned dashboard URL.
+The Zoom App launcher calls the Zoom Apps SDK, reads meeting context, posts to `/api/sessions`, and opens or shares the returned dashboard URL.

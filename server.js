@@ -5,11 +5,15 @@ import { extname, join, normalize } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
+import { Firestore } from '@google-cloud/firestore';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8787);
 const sessions = new Map();
 const oauthInstallations = new Map();
+const useFirestore = process.env.SESSION_STORE === 'firestore';
+const firestore = useFirestore ? new Firestore() : null;
+const sessionsCollection = process.env.FIRESTORE_SESSIONS_COLLECTION || 'meetingSessions';
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -87,7 +91,37 @@ async function readBody(req) {
   return body ? JSON.parse(body) : {};
 }
 
-function createSession(input = {}) {
+function cleanSession(input) {
+  return {
+    id: input.id,
+    dashboardPath: input.dashboardPath,
+    topic: input.topic,
+    host: input.host,
+    attendees: Array.isArray(input.attendees) ? input.attendees : [],
+    zoomMeetingId: input.zoomMeetingId || null,
+    platform: input.platform || 'web',
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt
+  };
+}
+
+async function saveSession(session) {
+  if (!firestore) {
+    sessions.set(session.id, session);
+    return session;
+  }
+  await firestore.collection(sessionsCollection).doc(session.id).set(session);
+  return session;
+}
+
+async function getSession(id) {
+  if (!firestore) return sessions.get(id) || null;
+  const snapshot = await firestore.collection(sessionsCollection).doc(id).get();
+  if (!snapshot.exists) return null;
+  return cleanSession(snapshot.data());
+}
+
+async function createSession(input = {}) {
   const slug = randomUUID().slice(0, 8);
   const createdAt = new Date().toISOString();
   const session = {
@@ -98,10 +132,10 @@ function createSession(input = {}) {
     attendees: Array.isArray(input.attendees) ? input.attendees : [],
     zoomMeetingId: input.zoomMeetingId || null,
     platform: input.platform || 'web',
-    createdAt
+    createdAt,
+    updatedAt: createdAt
   };
-  sessions.set(slug, session);
-  return session;
+  return saveSession(session);
 }
 
 async function exchangeZoomOAuthCode(code) {
@@ -178,7 +212,7 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === 'POST' && pathname === '/api/sessions') {
     const input = await readBody(req);
-    sendJson(res, 201, createSession(input));
+    sendJson(res, 201, await createSession(input));
     return;
   }
 
@@ -219,7 +253,7 @@ async function handleApi(req, res, pathname) {
 
   const sessionMatch = pathname.match(/^\/api\/sessions\/([^/]+)$/);
   if (req.method === 'GET' && sessionMatch) {
-    const session = sessions.get(sessionMatch[1]);
+    const session = await getSession(sessionMatch[1]);
     if (!session) {
       sendJson(res, 404, { error: 'Session not found' });
       return;
