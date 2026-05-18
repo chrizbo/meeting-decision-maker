@@ -19,22 +19,40 @@ const mimeTypes = {
   '.svg': 'image/svg+xml'
 };
 
+const securityHeaders = {
+  'strict-transport-security': 'max-age=31536000; includeSubDomains',
+  'x-content-type-options': 'nosniff',
+  'content-security-policy': [
+    "default-src 'self'",
+    "script-src 'self' https://appssdk.zoom.us",
+    "style-src 'self'",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'self' https://*.zoom.us https://*.zoom.com"
+  ].join('; '),
+  'referrer-policy': 'strict-origin-when-cross-origin'
+};
+
+function withSecurityHeaders(headers = {}) {
+  return { ...securityHeaders, ...headers };
+}
+
 function sendJson(res, status, body) {
   const payload = JSON.stringify(body);
-  res.writeHead(status, {
+  res.writeHead(status, withSecurityHeaders({
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(payload)
-  });
+  }));
   res.end(payload);
 }
 
 function sendText(res, status, body) {
-  res.writeHead(status, { 'content-type': 'text/plain; charset=utf-8' });
+  res.writeHead(status, withSecurityHeaders({ 'content-type': 'text/plain; charset=utf-8' }));
   res.end(body);
 }
 
 function sendHtml(res, status, body) {
-  res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' });
+  res.writeHead(status, withSecurityHeaders({ 'content-type': 'text/html; charset=utf-8' }));
   res.end(body);
 }
 
@@ -81,10 +99,10 @@ async function serveStatic(req, res, pathname) {
 
   const data = await readFile(filePath);
   const contentType = mimeTypes[extname(filePath)] || 'application/octet-stream';
-  res.writeHead(200, {
+  res.writeHead(200, withSecurityHeaders({
     'content-type': contentType,
     'cache-control': contentType.includes('text/html') ? 'no-store' : 'public, max-age=300'
-  });
+  }));
   res.end(data);
 }
 
