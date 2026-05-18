@@ -108,8 +108,22 @@ The static prototype now loads `fixtures/mock-llm-output.json` as the first vers
 
 The Node service can now invoke Gemini for live cue analysis. By default it uses `gemini-2.5-flash-lite`, which is the fast/cost-efficient Gemini API option. Override it with `GEMINI_MODEL` when needed.
 
-```bash
-GEMINI_API_KEY=your_key npm start
-```
+Gemini setup:
 
-When `GEMINI_API_KEY` is present, the browser sends each newly played transcript cue to `POST /api/analyze-cue` with a short rolling transcript window and compact board state. When it is absent, the app keeps using the mock fixture and browser fallback rules.
+1. Create a Gemini API key in Google AI Studio.
+2. Start the local service with the key:
+
+   ```bash
+   GEMINI_API_KEY=your_key npm start
+   ```
+
+3. Open `http://localhost:8787`.
+4. Confirm the analysis path is enabled:
+
+   ```bash
+   curl http://localhost:8787/api/analysis/config
+   ```
+
+   The response should include `"enabled":true`.
+
+When `GEMINI_API_KEY` is present, the browser sends each newly played transcript cue to `POST /api/analyze-cue` with a short rolling transcript window and compact board state. That state includes already captured decisions, risks, actions, and open agent issues with IDs so Gemini can update existing items when the latest transcript adds nuance. When the key is absent, the app keeps using the mock fixture and browser fallback rules.

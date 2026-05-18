@@ -142,6 +142,8 @@ function cleanAnalysisItem(item) {
   };
 
   if (['pending', 'accepted', 'rejected'].includes(item.status)) clean.status = item.status;
+  if (['create', 'update'].includes(item.updateMode)) clean.updateMode = item.updateMode;
+  if (item.targetId) clean.targetId = String(item.targetId).slice(0, 120);
   if (type === 'agent_issue') {
     clean.agent = allowedAgents.has(item.agent) ? item.agent : 'Assumptions Challenge';
     clean.priority = allowedPriorities.has(item.priority) ? item.priority : 'medium';
@@ -175,8 +177,9 @@ function buildGeminiRequest(input, skillSet) {
             text: [
               'You are the analysis worker for Meeting Decision Maker.',
               'Use the loaded meeting skills to analyze one live transcript cue.',
-              'Return only JSON with this shape: {"items":[{"type":"decision|risk|action|agent_issue","title":"short title","summary":"short board-ready summary","status":"pending|accepted|rejected","agent":"Assumptions Challenge|Pre-Mortem|Argument Dissection","priority":"low|medium|high"}]}.',
+              'Return only JSON with this shape: {"items":[{"type":"decision|risk|action|agent_issue","updateMode":"create|update","targetId":"existing item id when updating","title":"short title","summary":"short board-ready summary","status":"pending|accepted|rejected","agent":"Assumptions Challenge|Pre-Mortem|Argument Dissection","priority":"low|medium|high"}]}.',
               'Rules: emit no more than 3 items; prefer no item over weak speculation; preserve uncertainty; do not invent owners or agreement; for agent_issue items include agent and priority.',
+              'Use Current meeting state before creating new items. If the latest cue adds nuance, evidence, stronger wording, or changed status for an existing decision, risk, action, or agent issue, return updateMode "update" with that item targetId. Only use updateMode "create" when the cue introduces a genuinely new item.',
               '',
               '# Skill instructions',
               skillInstructions,

@@ -52,6 +52,16 @@
                     "rejected"
                   ]
                 },
+                "updateMode": {
+                  "enum": [
+                    "create",
+                    "update"
+                  ]
+                },
+                "targetId": {
+                  "type": "string",
+                  "description": "Existing board item id when updateMode is update."
+                },
                 "title": {
                   "type": "string"
                 },

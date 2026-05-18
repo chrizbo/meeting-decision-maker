@@ -38,9 +38,14 @@ Each request includes:
 
 - `cue`: the new transcript cue that just became active.
 - `transcriptWindow`: cues from the last 90 seconds, capped at 12 cues, including the current cue.
-- `meetingState`: compact lists of current decisions, risks, actions, and open agent issues.
+- `meetingState`: compact lists of current decisions, risks, actions, and open agent issues, including IDs, status, summaries, and evidence.
 
 The backend loads `skills/manifest.yaml`, reads each referenced `SKILL.md`, and sends those instructions with the cue block to Gemini. The default model is `gemini-2.5-flash-lite`; set `GEMINI_MODEL` to use another Gemini API model.
+
+Gemini can either create a new board item or update an existing one:
+
+- Use `updateMode: "create"` for genuinely new decisions, risks, actions, or agent issues.
+- Use `updateMode: "update"` plus `targetId` when the latest cue changes the status, wording, evidence, or nuance of an existing item.
 
 This same boundary should be reused for Zoom RTMS. A live Zoom transcript handler should normalize incoming transcript events into cue objects, append them to the meeting transcript buffer, build the rolling window, and call the analyzer. The shared board can then consume the same item shape whether the source was mock playback, uploaded VTT/TXT, or Zoom live transcript data.
 

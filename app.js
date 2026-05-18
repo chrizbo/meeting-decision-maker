@@ -596,16 +596,40 @@ function transcriptWindowForCue(cue) {
 function meetingStateForAnalysis() {
   return {
     decisions: state.decisions.slice(0, 8).map(function(item) {
-      return { title: item.title, status: item.status, summary: item.detail };
+      return {
+        id: item.id,
+        title: item.title,
+        status: item.status,
+        suggestedStatus: item.suggestedStatus,
+        summary: item.detail,
+        evidence: item.evidence
+      };
     }),
     risks: state.risks.slice(0, 8).map(function(item) {
-      return { title: item.title, summary: item.detail };
+      return {
+        id: item.id,
+        title: item.title,
+        summary: item.detail,
+        evidence: item.evidence
+      };
     }),
     actions: state.actions.slice(0, 8).map(function(item) {
-      return { title: item.title, summary: item.detail };
+      return {
+        id: item.id,
+        title: item.title,
+        summary: item.detail,
+        evidence: item.evidence
+      };
     }),
     openAgentIssues: state.agents.filter(function(item) { return item.status === 'open'; }).slice(0, 8).map(function(item) {
-      return { agent: item.agent, priority: item.priority, summary: item.intervention };
+      return {
+        id: item.id,
+        agent: item.agent,
+        priority: item.priority,
+        summary: item.intervention,
+        evidence: item.evidence,
+        discussionSuggested: item.discussionSuggested
+      };
     })
   };
 }
@@ -644,6 +668,7 @@ async function requestCueAnalysis(cue, evidence) {
 
 function applyAnalysisItems(items, cue, evidence) {
   items.forEach(function(item) {
+    if (item.updateMode === 'update' && updateBoardItem(item, cue, evidence)) return;
     if (item.type === 'decision') addDecision(item.status || 'pending', item.title, item.summary, evidence, { transcriptText: cue.text });
     if (item.type === 'risk') addRisk(item.title, item.summary, evidence, cue.text);
     if (item.type === 'action') addAction(item.title, item.summary, evidence);
@@ -655,6 +680,46 @@ function applyAnalysisItems(items, cue, evidence) {
       createdCueId: cue.id
     });
   });
+}
+
+function updateBoardItem(item, cue, evidence) {
+  const existing = findAnalysisTarget(item);
+  if (!existing) return false;
+  state.boardDirty = true;
+
+  if (item.title) existing.title = item.title;
+  if (item.summary) {
+    if (item.type === 'agent_issue') {
+      existing.intervention = item.summary;
+    } else {
+      existing.detail = item.summary;
+    }
+  }
+  if (item.status && item.type === 'decision') existing.suggestedStatus = item.status;
+  if (item.priority && item.type === 'agent_issue') existing.priority = item.priority;
+
+  existing.evidence = evidence;
+  existing.transcriptReference = buildTranscriptReference(evidence, cue.text);
+  return true;
+}
+
+function findAnalysisTarget(item) {
+  if (item.targetId) {
+    const direct = findBoardItem(item.type === 'agent_issue' ? 'agent' : item.type, item.targetId);
+    if (direct) return direct;
+  }
+
+  const title = (item.title || '').toLowerCase();
+  if (!title) return null;
+  if (item.type === 'decision') return state.decisions.find(function(record) { return record.title.toLowerCase() === title; });
+  if (item.type === 'risk') return state.risks.find(function(record) { return record.title.toLowerCase() === title; });
+  if (item.type === 'action') return state.actions.find(function(record) { return record.title.toLowerCase() === title; });
+  if (item.type === 'agent_issue') {
+    return state.agents.find(function(record) {
+      return record.agent === item.agent && record.intervention.toLowerCase() === (item.summary || '').toLowerCase();
+    });
+  }
+  return null;
 }
 
 function applyLlmFixtureForCue(cue, evidence) {
