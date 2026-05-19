@@ -134,6 +134,8 @@ A bot joins the meeting as a participant, captures audio/transcript, and feeds t
 
 Agents should be configured like skills. Each agent has a purpose, trigger rules, constraints, and output style.
 
+The agent system should be extensible. Teams should be able to add their own skills for domain-specific checks, review patterns, facilitation styles, risk categories, and decision criteria without changing the core meeting board. Custom skills should use the same portable folder shape as the built-in agents so they can be loaded by the meeting tool and tested independently.
+
 Example agent types:
 
 - Premortem agent: looks for ways a decision might fail
@@ -237,6 +239,7 @@ flowchart LR
 ### Phase 4: Production Readiness
 
 - Admin controls
+- Custom skill and agent library support
 - Consent and disclosure copy
 - Data retention settings
 - Audit log
