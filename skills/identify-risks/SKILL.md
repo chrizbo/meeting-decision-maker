@@ -27,6 +27,7 @@ Common signals:
 - The decision process itself may fail: missing discourse, unclear decision-maker, wrong people involved, or unclear escalation/opt-out path
 - The team may be using the wrong decision tempo: slow chronos analysis during a kairos moment, or rushed kairos improvisation for a planned decision
 - Strategic guidance may be too specific to allow useful adaptation or too ambiguous to constrain choices
+- A cognitive or social bias may create a decision risk, especially anchoring, sunk cost, escalation of commitment, status quo bias, authority bias, groupthink, consensus illusion, automation bias, or lock-in / option-value risk
 
 Do not capture simple preferences or complaints unless they could materially affect the decision or plan.
 
@@ -38,7 +39,7 @@ Do not capture simple preferences or complaints unless they could materially aff
 4. Capture evidence and speaker/timestamp.
 5. Capture mitigation, owner, warning sign, or open question if present.
 6. Assign severity and confidence.
-7. Identify whether the risk is about execution, evidence, stakeholders, timing, discourse, automation, or strategy boundary.
+7. Identify whether the risk is about execution, evidence, stakeholders, timing, discourse, automation, bias, or strategy boundary.
 8. Keep the visible risk card short and actionable.
 
 ## Output Shape
@@ -72,9 +73,13 @@ For process risks, prefer phrasing that helps the host improve the decision cont
 - If the team dismisses a risk, preserve the dismissal rationale when available.
 - Prefer tripwires, survival metrics, review points, or decision-log follow-ups over generic monitoring.
 - Do not treat agent output as settled authority. If automation bias, opt-out, escalation, or edge-case harm appears, capture it as a risk.
+- For option-value risks, name the future flexibility being lost: switching costs, price movement, stakeholder trust, reversibility, technical migration path, or political room to change course.
+- Do not over-label bias. If uncertain, describe the observable pattern and ask the host a question.
 
 ## Reference
 
 For examples and schemas, read [references/extraction-schema.md](references/extraction-schema.md).
 
 For Chris Butler decision-making principles, read [../references/chris-butler-decision-principles.md](../references/chris-butler-decision-principles.md).
+
+For cognitive and social bias checks, read [../references/decision-bias-checks.md](../references/decision-bias-checks.md).

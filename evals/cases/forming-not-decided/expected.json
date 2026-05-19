@@ -33,6 +33,7 @@
           "type": "risk",
           "title": "Pricing anchor risk",
           "summary": "Choosing too early could anchor the add-on price too low and make later increases harder.",
+          "bias_check": "anchoring / option-value risk",
           "why": "The cue names a plausible negative outcome of premature commitment."
         }
       ]

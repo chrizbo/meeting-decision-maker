@@ -44,6 +44,7 @@ Raise priority when:
 - The discussion hides a hard tradeoff instead of naming what is being chosen even over another good option.
 - Strategic language is too specific to allow adaptation or too ambiguous to guide choices.
 - The team is using agent output as authority rather than as a provocation, pattern, or candidate artifact.
+- A bias appears to be shaping the argument: anchoring, confirmation bias, authority bias, availability bias, sunk cost, status quo bias, groupthink, consensus illusion, automation bias, or false dichotomy.
 
 If the team starts discussing the same argument, add follow-up text that sharpens the evidence question, missing information, or rival explanation.
 
@@ -71,9 +72,13 @@ For CLI use, include a concise assessment of conclusion, evidence, assumptions, 
 - In live-meeting mode, make the intervention short and usable by the host.
 - Look for "bizarro" or reasonable-opposite strategies: if the opposite would not make sense, the strategy may be fluff.
 - When a strategy claim is broad, ask what is explicitly in bounds, out of bounds, proven today, and aspirational.
+- Challenge consensus claims carefully. Silence, lack of objection, or one person's confident statement is not the same as agreement.
+- If a bias may be present, ask for the missing comparison or disconfirming evidence instead of naming the bias as an accusation.
 
 ## Reference
 
 For the underlying RTT method, read [references/rtt-source.md](references/rtt-source.md).
 
 For Chris Butler decision-making principles, read [../references/chris-butler-decision-principles.md](../references/chris-butler-decision-principles.md).
+
+For cognitive and social bias checks, read [../references/decision-bias-checks.md](../references/decision-bias-checks.md).

@@ -9,8 +9,9 @@
           "type": "decision",
           "status": "forming",
           "title": "Dashboard performance approach",
-          "summary": "Decide whether the dashboard performance problem needs a rewrite or a targeted rendering fix.",
-          "why": "The decision question appears only after the group reframes the strong preference into a real tradeoff."
+          "summary": "Decide whether the dashboard performance problem needs a rewrite or a targeted rendering fix; there is no consensus yet.",
+          "consensus": "none",
+          "why": "The decision question appears only after the group reframes the strong preference into a real tradeoff, and the transcript explicitly says approval is not being requested today."
         }
       ]
     },
@@ -29,6 +30,7 @@
   ],
   "should_not_emit": [
     "Do not emit an accepted decision to rewrite the dashboard.",
+    "If a forming decision is captured, it must indicate there is no consensus yet.",
     "Do not capture Alex's dislike of component patterns as a decision or risk.",
     "Do not emit an action for collecting measurements because no owner or timing is assigned."
   ]
