@@ -11,11 +11,13 @@ Start with a human-shared web page using mock transcript playback, then use the 
 - `docs/zoom-meeting-decision-making-plan.md`: product and architecture plan
 - `docs/zoom-integration-options.md`: Zoom App, dashboard link, and RTMS integration options
 - `docs/zoom-app-installation.md`: Zoom App creation, development install, and RTMS setup path
+- `docs/meeting-briefs-continuity-plan.md`: post-meeting briefs, carry-forward context, and meeting-series continuity plan
 - `docs/cross-platform-integrations.md`: Google Meet, Microsoft Teams, and platform-neutral adapter notes
 - `docs/google-cloud-run-hosting.md`: Google Cloud project and Cloud Run deployment instructions
 - `docs/auth-authorization-plan.md`: Zoom-first authentication and app-owned authorization plan
 - `docs/security-launch-plan.md`: security and privacy launch plan for external users
 - `docs/zoom-marketplace-test-plan.md`: Zoom Marketplace review test plan
+- `docs/future-specs/meeting-library.md`: future Meeting Library concept for accessible meetings, briefs, and series
 - `skills/`: portable red-team agent skills and meeting-tool configs
 - `sample-transcripts/`: synthetic transcript fixtures for prototyping
 - `fixtures/`: mock structured LLM outputs loaded by the static app
