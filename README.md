@@ -15,6 +15,7 @@ Start with a human-shared web page using mock transcript playback, then use the 
 - `docs/google-cloud-run-hosting.md`: Google Cloud project and Cloud Run deployment instructions
 - `docs/auth-authorization-plan.md`: Zoom-first authentication and app-owned authorization plan
 - `docs/security-launch-plan.md`: security and privacy launch plan for external users
+- `docs/zoom-marketplace-test-plan.md`: Zoom Marketplace review test plan
 - `skills/`: portable red-team agent skills and meeting-tool configs
 - `sample-transcripts/`: synthetic transcript fixtures for prototyping
 - `fixtures/`: mock structured LLM outputs loaded by the static app
