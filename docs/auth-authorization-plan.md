@@ -2,6 +2,8 @@
 
 Room Clarity should use Zoom as the first authentication path because the primary product surface is a Zoom App. Zoom can tell us who launched the app, whether they authorized it, and what role they have in the current meeting. Room Clarity still needs its own authorization layer for workspaces, meeting sessions, dashboard links, retention admins, and non-Zoom browser access.
 
+This plan should be read with `docs/product-principles.md`, especially the principles that meeting access belongs to meeting participants, outside sharing must be explicit, and access must be revocable.
+
 ## Decision
 
 Use Zoom-first authentication with app-owned authorization.

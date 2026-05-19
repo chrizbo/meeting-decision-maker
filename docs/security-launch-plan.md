@@ -2,6 +2,8 @@
 
 This plan tracks the security and privacy work needed before Room Clarity is opened to external users with real meeting data. Treat meeting transcripts as confidential collaboration data: they may include strategy, customer information, HR/legal topics, financials, participant names, and credentials spoken aloud.
 
+Security and privacy decisions should follow `docs/product-principles.md`, especially the meeting access, sharing, confidentiality, revocation, and AI validation principles.
+
 ## Launch Gate
 
 External use with real meetings should wait until the app has:
