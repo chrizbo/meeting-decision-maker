@@ -341,7 +341,13 @@ async function maybeInitializeZoomApp() {
         'getRunningContext',
         'getSupportedJsApis',
         'openUrl',
-        'shareApp'
+        'shareApp',
+        'startRTMS',
+        'stopRTMS',
+        'pauseRTMS',
+        'resumeRTMS',
+        'getRTMSStatus',
+        'onRTMSStatusChange'
       ]
     });
     showZoomDiagnostics([

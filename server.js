@@ -659,6 +659,8 @@ function getRtmsState(payload = {}) {
       streamId: payload.rtms_stream_id || null,
       transcript: [],
       analyses: [],
+      status: 'created',
+      statusReason: null,
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }));
@@ -747,9 +749,14 @@ function stopRtmsClient(payload = {}) {
   } catch (error) {
     console.error('RTMS leave failed:', error.message);
   }
-  rtmsClients.delete(key);
-  if (payload.rtms_stream_id) rtmsClients.delete(payload.rtms_stream_id);
+  deleteRtmsClientReferences(client);
   return true;
+}
+
+function deleteRtmsClientReferences(client) {
+  for (const [id, storedClient] of rtmsClients.entries()) {
+    if (storedClient === client) rtmsClients.delete(id);
+  }
 }
 
 async function loadRtmsSdk() {
@@ -763,19 +770,33 @@ async function loadRtmsSdk() {
 
 async function startRtmsClient(payload = {}) {
   const key = rtmsKey(payload);
+  const existingClient = rtmsClients.get(key);
+  if (existingClient && payload.rtms_stream_id && !rtmsClients.has(payload.rtms_stream_id)) {
+    stopRtmsClient(payload);
+  }
+
+  const state = getRtmsState(payload);
   if (!payload.rtms_stream_id || !payload.server_urls) {
+    state.status = 'start_failed';
+    state.statusReason = 'missing rtms_stream_id or server_urls';
+    state.updatedAt = new Date().toISOString();
     return { started: false, reason: 'missing rtms_stream_id or server_urls' };
   }
-  if (rtmsClients.has(key)) return { started: false, reason: 'already connected' };
+  if (rtmsClients.has(payload.rtms_stream_id)) return { started: false, reason: 'already connected' };
 
   const rtms = await loadRtmsSdk();
   const client = new rtms.Client();
   rtmsClients.set(key, client);
   rtmsClients.set(payload.rtms_stream_id, client);
-  getRtmsState(payload);
+  state.status = 'starting';
+  state.statusReason = null;
+  state.updatedAt = new Date().toISOString();
 
   client.onJoinConfirm(function(reason) {
     console.log('RTMS join confirmed:', key, reason);
+    state.status = 'active';
+    state.statusReason = reason || null;
+    state.updatedAt = new Date().toISOString();
   });
   client.onTranscriptData(function(buffer, size, timestamp, metadata) {
     ingestRtmsTranscript(payload, buffer, size, timestamp, metadata).catch(function(error) {
@@ -784,8 +805,12 @@ async function startRtmsClient(payload = {}) {
   });
   client.onLeave(function(reason) {
     console.log('RTMS leave:', key, reason);
-    rtmsClients.delete(key);
-    rtmsClients.delete(payload.rtms_stream_id);
+    if (!['stopped', 'interrupted'].includes(state.status)) {
+      state.status = 'ended';
+      state.statusReason = reason || null;
+    }
+    state.updatedAt = new Date().toISOString();
+    deleteRtmsClientReferences(client);
   });
 
   const joined = client.join(Object.assign({}, payload, {
@@ -793,6 +818,13 @@ async function startRtmsClient(payload = {}) {
     secret: process.env.ZM_RTMS_SECRET || process.env.ZOOM_CLIENT_SECRET,
     pollInterval: Number(process.env.RTMS_POLL_INTERVAL_MS || 10)
   }));
+  if (!joined) {
+    state.status = 'start_failed';
+    state.statusReason = 'client.join returned false';
+    state.updatedAt = new Date().toISOString();
+    rtmsClients.delete(key);
+    rtmsClients.delete(payload.rtms_stream_id);
+  }
   return { started: joined, streamId: payload.rtms_stream_id, sessionId: key };
 }
 
@@ -834,7 +866,21 @@ async function handleRtmsWebhookEvent(event) {
   }
   if (event.event === 'meeting.rtms_stopped' || event.event === 'meeting.rtms_interrupted' ||
       event.event === 'webinar.rtms_stopped' || event.event === 'session.rtms_stopped') {
+    const state = getRtmsState(payload);
+    state.status = event.event.endsWith('rtms_interrupted') ? 'interrupted' : 'stopped';
+    state.statusReason = payload.reason || payload.error_message || null;
+    state.updatedAt = new Date().toISOString();
     return { stopped: stopRtmsClient(payload), sessionId: rtmsKey(payload) };
+  }
+
+  if (event.event === 'rtms.start_failed' ||
+      event.event === 'rtms.concurrency_limited' ||
+      event.event === 'rtms.concurrency_near_limit') {
+    const state = getRtmsState(payload);
+    state.status = event.event.replace(/^rtms\./, '');
+    state.statusReason = payload.reason || payload.error_message || payload.message || null;
+    state.updatedAt = new Date().toISOString();
+    return { received: true, event: event.event, sessionId: state.id };
   }
 
   const transcriptText = payload.text || payload.transcript || payload.caption || payload.message;
@@ -1043,6 +1089,8 @@ async function handleApi(req, res, pathname) {
           id: state.id,
           meetingUuid: state.meetingUuid,
           streamId: state.streamId,
+          status: state.status,
+          statusReason: state.statusReason,
           transcriptCount: state.transcript.length,
           decisionCount: state.decisions.length,
           riskCount: state.risks.length,

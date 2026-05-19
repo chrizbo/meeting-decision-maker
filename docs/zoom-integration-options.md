@@ -85,8 +85,28 @@ This is the easiest path technically, but it does not test whether live facilita
 7. Resolve Zoom marketplace verification for `startRTMS`.
 8. Add account access controls and durable meeting-state storage before sensitive production use.
 
+## RTMS Sample App Learnings
+
+Zoom's RTMS sample app catalog is most useful as a set of patterns rather than a single reference app. For Room Clarity, the highest-signal examples are:
+
+- `rtms-quickstart-js`: the direct `@zoom/rtms` SDK path. It creates one client per RTMS stream, listens for `meeting.rtms_started`, joins with the webhook payload, handles `meeting.rtms_stopped`, and uses `onTranscriptData` for live transcript text.
+- `transcript/save_transcript_sdk`: a persistence pattern. It writes transcript callbacks to VTT, SRT, and TXT with meeting-scoped folders. We do not need local transcript files in production yet, but the VTT/SRT/TXT normalization is useful for export and debugging.
+- `transcript/send_transcript_to_openai_js`: a larger app pattern. It wraps webhooks and active RTMS connections in manager classes, configures transcript media explicitly, logs redacted RTMS config, and forwards transcript events into an LLM handler.
+- Zoom Apps notetaker/customer-support examples: a product-shape pattern. They keep RTMS ingestion in the backend and let the Zoom App/frontend consume derived meeting intelligence, which matches Room Clarity's decision-board approach.
+
+What we should carry forward:
+
+- Keep the current direct SDK integration for the MVP because it is smaller than the sample `RTMSManager` stack and already fits the existing Node server.
+- Treat `rtms_stream_id` as the operational connection key and meeting/session UUID as the dashboard lookup key.
+- Request RTMS methods explicitly in `zoomSdk.config()` so `startRTMS`, `stopRTMS`, status, pause/resume, and status-change events show up once Zoom grants the app access.
+- Track RTMS lifecycle events such as `rtms.start_failed`, `rtms.concurrency_limited`, and interruptions in backend session state, not only in logs.
+- Consider adding VTT/SRT/TXT transcript export later from the normalized cue model rather than adopting sample file writes directly.
+
 ## Sources
 
+- Zoom RTMS sample app catalog: https://developers.zoom.us/docs/rtms/sample-apps/
+- Zoom RTMS quickstart sample: https://github.com/zoom/rtms-quickstart-js
+- Zoom RTMS transcript samples: https://github.com/zoom/rtms-samples/tree/main/transcript
 - Zoom Apps SDK TypeDoc: https://appssdk.zoom.us/classes/ZoomSdk.ZoomSdk.html
 - Zoom Apps SDK package: https://github.com/zoom/appssdk
 - Zoom RTMS overview: https://www.zoom.com/en/realtime-media-streams/
