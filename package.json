@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "eval": "node evals/run-evals.js",
+    "eval:live": "node evals/run-evals.js --live ${EVAL_LIVE_URL:-https://roomclarity.com}",
     "start": "node server.js",
     "dev": "node server.js"
   },

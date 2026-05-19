@@ -1,0 +1,25 @@
+WEBVTT
+
+NOTE
+Synthetic eval transcript. Strong opinion from one person, no agreement, and mostly low-signal chatter.
+
+00:00:02.000 --> 00:00:10.000
+Alex: I think we should rewrite the dashboard in a new framework. It would feel cleaner and probably make us faster.
+
+00:00:11.000 --> 00:00:19.000
+Mina: Maybe, but that sounds like a preference right now. We have not compared migration cost, reliability, or customer impact.
+
+00:00:20.000 --> 00:00:29.000
+Alex: Sure. I just really dislike the current component patterns. They are annoying every time I touch the page.
+
+00:00:30.000 --> 00:00:39.000
+Noah: The real decision might be whether the dashboard performance problem needs a rewrite or a targeted rendering fix.
+
+00:00:40.000 --> 00:00:48.000
+Mina: The assumption behind a rewrite is that the framework is the bottleneck, not our data loading or chart rendering.
+
+00:00:49.000 --> 00:00:57.000
+Alex: We should collect measurements before deciding. I am not asking for approval today.
+
+00:00:58.000 --> 00:01:06.000
+Noah: Right, let's park the rewrite idea until we have performance traces and a migration estimate.

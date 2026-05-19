@@ -1,0 +1,22 @@
+WEBVTT
+
+NOTE
+Synthetic eval transcript. Clear decision, explicit risk, and explicit action.
+
+00:00:02.000 --> 00:00:09.000
+Maya: We need to decide today whether the onboarding experiment should launch to all new teams or stay in beta.
+
+00:00:10.000 --> 00:00:18.000
+Luis: My recommendation is to launch to all new teams next Monday because activation is up and support tickets are flat.
+
+00:00:19.000 --> 00:00:28.000
+Priya: The main risk is that enterprise teams still need SSO setup. If we launch broadly, those accounts may get stuck.
+
+00:00:29.000 --> 00:00:37.000
+Maya: Good catch. The mitigation is to exclude enterprise workspaces until SSO setup is automated.
+
+00:00:38.000 --> 00:00:47.000
+Luis: Agreed. Decision: launch onboarding to non-enterprise teams next Monday, and keep enterprise teams in beta.
+
+00:00:48.000 --> 00:00:56.000
+Priya: Action: Luis will update the launch config and Maya will write the customer support note by Friday.

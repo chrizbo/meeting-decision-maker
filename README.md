@@ -13,6 +13,8 @@ Start with a human-shared web page using mock transcript playback, then use the 
 - `docs/zoom-app-installation.md`: Zoom App creation, development install, and RTMS setup path
 - `docs/cross-platform-integrations.md`: Google Meet, Microsoft Teams, and platform-neutral adapter notes
 - `docs/google-cloud-run-hosting.md`: Google Cloud project and Cloud Run deployment instructions
+- `docs/auth-authorization-plan.md`: Zoom-first authentication and app-owned authorization plan
+- `docs/security-launch-plan.md`: security and privacy launch plan for external users
 - `skills/`: portable red-team agent skills and meeting-tool configs
 - `sample-transcripts/`: synthetic transcript fixtures for prototyping
 - `fixtures/`: mock structured LLM outputs loaded by the static app
@@ -63,14 +65,14 @@ The repo also includes a tiny Node service so the prototype can be deployed as a
 npm start
 ```
 
-Then visit `http://localhost:8787` or `http://localhost:8787/m/demo-session`.
+Then visit `http://localhost:8787` or create a session with `POST /api/sessions` and open the returned dashboard path.
 
 The service currently provides:
 
 - `GET /api/healthz`
 - `GET /api/zoom/oauth/callback`
-- `POST /api/sessions`
-- `GET /api/sessions/:id`
+- `POST /api/sessions`, returning a public dashboard path with a scoped access token
+- `GET /api/sessions/:id`, requiring a valid dashboard token for token-protected sessions
 - `POST /api/zoom/rtms-webhook`
 - `GET /api/rtms/sessions`
 - `GET /api/rtms/sessions/:id`
@@ -101,6 +103,7 @@ Cloud Run should be deployed with all active secrets attached. The current requi
 - `ZOOM_WEBHOOK_SECRET_TOKEN`
 - `GEMINI_API_KEY`
 - `PUBLIC_BASE_URL=https://roomclarity.com`
+- `ROOM_CLARITY_ADMIN_TOKEN` for service-admin inspection routes such as `GET /api/rtms/sessions`
 
 Zoom RTMS uses the same Zoom client credentials by default. If your RTMS app has separate credentials, set:
 
@@ -162,7 +165,9 @@ POST /api/zoom/rtms-webhook
 
 When Zoom sends `meeting.rtms_started`, the service creates an `@zoom/rtms` client, joins the stream, and listens for `onTranscriptData`. Transcript callbacks are normalized into the same cue shape used by mock playback, sent to Gemini with the last 90 seconds of transcript context, and accumulated in in-memory RTMS meeting state.
 
-Incoming Zoom webhook events are verified with `ZOOM_WEBHOOK_SECRET_TOKEN`, `x-zm-request-timestamp`, and `x-zm-signature`. URL validation events use the same secret token to return Zoom's encrypted validation token.
+Incoming Zoom webhook events are verified with `ZOOM_WEBHOOK_SECRET_TOKEN`, `x-zm-request-timestamp`, and `x-zm-signature`. Non-validation webhook events must also be inside the configured freshness window, which defaults to five minutes. URL validation events use the same secret token to return Zoom's encrypted validation token.
+
+Session metadata and RTMS session reads have a small in-memory per-client rate limit to slow URL and token guessing. This is a starter guard for the single-service prototype; production multi-instance deployments should move abuse controls to a shared limiter or edge protection layer.
 
 Inside the Zoom client, the meeting controls menu shows a **Start RTMS** button and an RTMS status line. The app attempts to call `zoomSdk.startRTMS()` after Zoom SDK initialization. If Zoom blocks the API with `40316` / marketplace verification errors, the backend remains ready but live RTMS cannot start until Zoom grants the app access.
 
@@ -171,8 +176,8 @@ Opening the dashboard in a normal browser is supported for viewing and mock tran
 Inspect RTMS sessions:
 
 ```bash
-curl "$SERVICE_URL/api/rtms/sessions"
-curl "$SERVICE_URL/api/rtms/sessions/MEETING_OR_STREAM_ID"
+curl -H "x-admin-token: $ROOM_CLARITY_ADMIN_TOKEN" "$SERVICE_URL/api/rtms/sessions"
+curl "$SERVICE_URL/api/rtms/sessions/MEETING_OR_STREAM_ID?t=DASHBOARD_TOKEN"
 ```
 
 For local route testing, the webhook also accepts transcript-like payloads with `payload.text`, `payload.transcript`, `payload.caption`, or `payload.message`.

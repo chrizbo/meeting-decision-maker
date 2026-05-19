@@ -238,6 +238,7 @@ flowchart LR
 
 ### Phase 4: Production Readiness
 
+- Security launch plan in `docs/security-launch-plan.md`
 - Admin controls
 - Custom skill and agent library support
 - Consent and disclosure copy

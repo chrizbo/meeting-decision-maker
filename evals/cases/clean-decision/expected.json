@@ -1,0 +1,56 @@
+{
+  "name": "clean-decision",
+  "transcript": "./transcript.vtt",
+  "events": [
+    {
+      "at": 2,
+      "items": [
+        {
+          "type": "decision",
+          "status": "forming",
+          "title": "Onboarding launch scope",
+          "summary": "Decide whether the onboarding experiment should launch to all new teams or stay in beta.",
+          "why": "The team explicitly frames the decision question."
+        }
+      ]
+    },
+    {
+      "at": 19,
+      "items": [
+        {
+          "type": "risk",
+          "title": "Enterprise SSO setup risk",
+          "summary": "Enterprise teams may get stuck if onboarding launches before SSO setup is automated.",
+          "why": "The transcript names a concrete downside and affected segment."
+        }
+      ]
+    },
+    {
+      "at": 38,
+      "items": [
+        {
+          "type": "decision",
+          "status": "accepted",
+          "title": "Launch onboarding to non-enterprise teams",
+          "summary": "Launch onboarding to non-enterprise teams next Monday while keeping enterprise teams in beta.",
+          "why": "The transcript uses explicit decision and agreement language."
+        }
+      ]
+    },
+    {
+      "at": 48,
+      "items": [
+        {
+          "type": "action",
+          "title": "Update launch config and support note",
+          "summary": "Luis will update the launch config and Maya will write the support note by Friday.",
+          "why": "The cue is explicitly labeled Action and names owners plus timing."
+        }
+      ]
+    }
+  ],
+  "should_not_emit": [
+    "Do not create a separate accepted decision for the mitigation at 00:29; it is part of the launch-scope decision.",
+    "Do not create an agent issue unless it adds a host-usable intervention beyond the explicit risk and mitigation."
+  ]
+}

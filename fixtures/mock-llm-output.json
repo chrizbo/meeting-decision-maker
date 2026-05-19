@@ -3,6 +3,17 @@
   "transcript": "sample-transcripts/product-decision-demo.vtt",
   "events": [
     {
+      "at": 2,
+      "items": [
+        {
+          "type": "decision",
+          "status": "forming",
+          "title": "Prototype focus",
+          "summary": "Decide whether the first prototype should focus on a live meeting board or a post-meeting summary."
+        }
+      ]
+    },
+    {
       "at": 31.5,
       "items": [
         {
@@ -83,8 +94,8 @@
         {
           "type": "decision",
           "status": "pending",
-          "title": "Build the live board first",
-          "summary": "Use a human-shared page with timed mock transcript playback before Zoom-native integration."
+          "title": "MVP focus: build the live board first",
+          "summary": "The forming MVP decision converged on a human-shared page with timed mock transcript playback before Zoom-native integration."
         }
       ]
     },

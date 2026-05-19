@@ -1,0 +1,46 @@
+{
+  "name": "forming-not-decided",
+  "transcript": "./transcript.vtt",
+  "events": [
+    {
+      "at": 2,
+      "items": [
+        {
+          "type": "decision",
+          "status": "forming",
+          "title": "Analytics add-on pricing",
+          "summary": "Decide how to price the analytics add-on, while recognizing the team is not ready to choose today.",
+          "why": "The cue frames a decision question and explicitly says it is not ready for commitment."
+        }
+      ]
+    },
+    {
+      "at": 23,
+      "items": [
+        {
+          "type": "agent_issue",
+          "agent": "Assumptions Challenge",
+          "priority": "high",
+          "summary": "Ask what evidence would show customers see the analytics add-on as premium beyond three friendly accounts.",
+          "why": "The transcript names a central assumption and thin evidence."
+        }
+      ]
+    },
+    {
+      "at": 43,
+      "items": [
+        {
+          "type": "risk",
+          "title": "Pricing anchor risk",
+          "summary": "Choosing too early could anchor the add-on price too low and make later increases harder.",
+          "why": "The cue names a plausible negative outcome of premature commitment."
+        }
+      ]
+    }
+  ],
+  "should_not_emit": [
+    "Do not emit an accepted decision; the team explicitly says not to decide today.",
+    "Do not emit an action unless the follow-up is concrete enough to assign or schedule.",
+    "Do not create separate decisions for low price and high price; they are options within one forming pricing decision."
+  ]
+}

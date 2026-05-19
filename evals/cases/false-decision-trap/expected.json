@@ -1,0 +1,35 @@
+{
+  "name": "false-decision-trap",
+  "transcript": "./transcript.vtt",
+  "events": [
+    {
+      "at": 30,
+      "items": [
+        {
+          "type": "decision",
+          "status": "forming",
+          "title": "Dashboard performance approach",
+          "summary": "Decide whether the dashboard performance problem needs a rewrite or a targeted rendering fix.",
+          "why": "The decision question appears only after the group reframes the strong preference into a real tradeoff."
+        }
+      ]
+    },
+    {
+      "at": 40,
+      "items": [
+        {
+          "type": "agent_issue",
+          "agent": "Assumptions Challenge",
+          "priority": "high",
+          "summary": "Ask what evidence shows the framework is the bottleneck rather than data loading or chart rendering.",
+          "why": "The cue names the central assumption that would determine whether rewrite is justified."
+        }
+      ]
+    }
+  ],
+  "should_not_emit": [
+    "Do not emit an accepted decision to rewrite the dashboard.",
+    "Do not capture Alex's dislike of component patterns as a decision or risk.",
+    "Do not emit an action for collecting measurements because no owner or timing is assigned."
+  ]
+}

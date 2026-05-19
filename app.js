@@ -107,14 +107,24 @@ function currentDashboardSessionId() {
   return match ? decodeURIComponent(match[1]) : '';
 }
 
+function currentDashboardToken() {
+  return new URLSearchParams(window.location.search).get('t') || '';
+}
+
 async function loadDashboardSession() {
   const sessionId = currentDashboardSessionId();
   if (!sessionId || sessionId === 'demo-session') return null;
 
   try {
-    const response = await fetch('/api/sessions/' + encodeURIComponent(sessionId), { cache: 'no-store' });
+    const token = currentDashboardToken();
+    const tokenParam = token ? '?t=' + encodeURIComponent(token) : '';
+    const response = await fetch('/api/sessions/' + encodeURIComponent(sessionId) + tokenParam, { cache: 'no-store' });
     if (response.status === 404) {
       els.meetingStatus.textContent = 'Session not found · demo mode';
+      return null;
+    }
+    if (response.status === 403) {
+      els.meetingStatus.textContent = 'Dashboard link needs a valid access token';
       return null;
     }
     if (!response.ok) throw new Error('session fetch failed');
@@ -578,7 +588,9 @@ function applyRtmsSessionState(session) {
 async function loadRtmsSessionState(id) {
   if (!id) return false;
   try {
-    const response = await fetch('/api/rtms/sessions/' + encodeURIComponent(id), { cache: 'no-store' });
+    const token = currentDashboardToken();
+    const tokenParam = token ? '?t=' + encodeURIComponent(token) : '';
+    const response = await fetch('/api/rtms/sessions/' + encodeURIComponent(id) + tokenParam, { cache: 'no-store' });
     if (!response.ok) return false;
     applyRtmsSessionState(await response.json());
     return true;

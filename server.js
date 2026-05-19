@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, extname, join, normalize } from 'node:path';
-import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
 import { Firestore } from '@google-cloud/firestore';
@@ -17,9 +17,11 @@ const sessionsCollection = process.env.FIRESTORE_SESSIONS_COLLECTION || 'meeting
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
 const publicBaseUrl = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+const zoomWebhookMaxAgeMs = Number(process.env.ZOOM_WEBHOOK_MAX_AGE_MS || 5 * 60 * 1000);
 let skillPromptCache = null;
 const rtmsClients = new Map();
 const rtmsSessionStates = new Map();
+const rateLimitBuckets = new Map();
 let rtmsModulePromise = null;
 
 const mimeTypes = {
@@ -87,6 +89,36 @@ function appUrl(req, path) {
   const proto = req.headers['x-forwarded-proto'] || 'http';
   const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
   return `${proto}://${host}${path}`;
+}
+
+function clientIp(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return forwarded || req.socket.remoteAddress || 'unknown';
+}
+
+function checkRateLimit(req, key, options = {}) {
+  const limit = Number(options.limit || 60);
+  const windowMs = Number(options.windowMs || 60_000);
+  const now = Date.now();
+  const bucketKey = [key, clientIp(req)].join(':');
+  const bucket = rateLimitBuckets.get(bucketKey);
+  if (!bucket || bucket.resetAt <= now) {
+    rateLimitBuckets.set(bucketKey, { count: 1, resetAt: now + windowMs });
+    return { allowed: true };
+  }
+  bucket.count += 1;
+  if (bucket.count <= limit) return { allowed: true };
+  return {
+    allowed: false,
+    retryAfter: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))
+  };
+}
+
+function sendRateLimited(res, check) {
+  sendJson(res, 429, {
+    error: 'Too many requests',
+    retryAfter: check.retryAfter
+  });
 }
 
 async function readBody(req) {
@@ -220,6 +252,10 @@ function serverMeetingStateForAnalysis(state) {
 function applyServerAnalysisItems(state, items, cue) {
   items.forEach(function(item) {
     if (item.updateMode === 'update' && updateServerBoardItem(state, item, cue)) return;
+    if (item.type === 'decision') {
+      const relatedDecision = findRelatedDecision(state.decisions, item);
+      if (relatedDecision && mergeServerDecision(relatedDecision, item, cue)) return;
+    }
     const record = {
       id: randomUUID(),
       title: item.title,
@@ -242,6 +278,16 @@ function applyServerAnalysisItems(state, items, cue) {
       }));
     }
   });
+}
+
+function mergeServerDecision(existing, item, cue) {
+  existing.title = item.title || existing.title;
+  existing.summary = item.summary || existing.summary;
+  existing.evidence = cue.evidence;
+  existing.cueId = cue.id;
+  existing.updatedAt = new Date().toISOString();
+  if (item.status) existing.status = item.status;
+  return true;
 }
 
 function updateServerBoardItem(state, item, cue) {
@@ -270,7 +316,41 @@ function findServerBoardItem(state, item) {
     if (direct) return direct;
   }
   const title = String(item.title || '').toLowerCase();
-  return title ? list.find(function(record) { return record.title.toLowerCase() === title; }) : null;
+  if (!title) return null;
+  const exact = list.find(function(record) { return record.title.toLowerCase() === title; });
+  if (exact) return exact;
+  if (item.type === 'decision') return findRelatedDecision(list, item);
+  return null;
+}
+
+function findRelatedDecision(decisions, item) {
+  const candidate = [item.title, item.summary].filter(Boolean).join(' ');
+  if (!candidate) return null;
+  return decisions.find(function(decision) {
+    const existing = [decision.title, decision.summary].filter(Boolean).join(' ');
+    return topicSimilarity(candidate, existing) >= 0.42;
+  }) || null;
+}
+
+function topicSimilarity(left, right) {
+  const leftWords = new Set(topicWords(left));
+  const rightWords = new Set(topicWords(right));
+  if (!leftWords.size || !rightWords.size) return 0;
+  const intersection = [...leftWords].filter(function(word) { return rightWords.has(word); }).length;
+  return intersection / Math.min(leftWords.size, rightWords.size);
+}
+
+function topicWords(text) {
+  const stopWords = new Set([
+    'about', 'after', 'against', 'because', 'between', 'could', 'decision', 'decide',
+    'first', 'focus', 'from', 'have', 'into', 'meeting', 'should', 'that', 'their',
+    'there', 'this', 'whether', 'while', 'with', 'would'
+  ]);
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(function(word) { return word.length > 2 && !stopWords.has(word); });
 }
 
 function parseGeminiJson(text) {
@@ -304,6 +384,9 @@ function buildGeminiRequest(input, skillSet) {
               'Decision status rules: use "forming" when a real decision topic, tradeoff, option set, or decision question is being discussed but the group has not committed. Use "pending" when there is a concrete proposed decision ready for host confirmation. Use "accepted" only when the transcript contains explicit agreement or decision language. Do not mark a decision accepted because one person favors it.',
               'Use Current meeting state before creating new items. If the latest cue continues, clarifies, strengthens, or changes an existing decision, risk, action, or agent issue, return updateMode "update" with that item targetId. Only use updateMode "create" when the cue introduces a genuinely new item.',
               'Do not create separate decision items for each side of the same tradeoff. Keep one forming decision topic and update it as the conversation evolves. Do not emit a risk just because the cue names uncertainty; emit a risk only when there is a plausible negative outcome, dependency, blocker, mitigation, or warning sign. Do not emit an item on every cue.',
+              'Agent issue rules: agent_issue is for high-value host interventions only. Do not emit an agent_issue simply because a skill could comment. Emit one only when the host could use it immediately to improve the decision discourse, expose a central assumption, name a major failure path, or challenge weak evidence. Prefer updating an existing open agent issue over creating a new one.',
+              'Agent trigger rules: when the cue says "what has to be true", "my assumption is", or names an important untested assumption, consider an Assumptions Challenge issue. When the cue says "if we imagine this failing", "fails because", "warning sign", or names a serious failure path, consider a Pre-Mortem issue. When the cue asks "what evidence do we have", distinguishes intuition from evidence, or challenges rationale quality, consider an Argument Dissection issue. Emit at most one agent_issue for a cue.',
+              'Action rules: emit an action when the transcript explicitly says "Action:", "next action", "I will", "can you", or names concrete follow-up work after the meeting. The labels "Action:" and "next action" override the general caution about future product ideas. Do not emit actions for general future product ideas, mitigations, or things the current prototype might eventually need unless the cue frames them as a next action or explicit follow-up.',
               '',
               '# Skill instructions',
               skillInstructions,
@@ -354,20 +437,85 @@ async function analyzeCueWithGemini(input) {
     body.candidates[0].content.parts.map(function(part) { return part.text || ''; }).join('');
   const parsed = parseGeminiJson(text);
   const items = Array.isArray(parsed.items) ? parsed.items.map(cleanAnalysisItem).filter(Boolean) : [];
+  const reconciledItems = reconcileAnalysisItems(items, input.meetingState || {});
   return {
     source: 'gemini',
     model,
     skillSource: skillSet.source,
     at: Number(input.cue && input.cue.start) || 0,
-    items
+    items: addExplicitCueItems(input, reconciledItems)
   };
 }
 
-function cleanSession(input) {
+function reconcileAnalysisItems(items, meetingState) {
+  const decisions = Array.isArray(meetingState.decisions) ? meetingState.decisions : [];
+  return items.map(function(item) {
+    if (item.type !== 'decision' || item.updateMode === 'update') return item;
+    const relatedDecision = findRelatedDecision(decisions, item);
+    if (!relatedDecision) return item;
+    return Object.assign({}, item, {
+      updateMode: 'update',
+      targetId: relatedDecision.id
+    });
+  });
+}
+
+function addExplicitCueItems(input, items) {
+  const cue = input.cue || {};
+  const text = String(cue.text || '');
+  const additions = [];
+
+  if (!items.some(function(item) { return item.type === 'action'; })) {
+    const actionText = explicitActionText(text);
+    if (actionText) {
+      additions.push({
+        type: 'action',
+        updateMode: 'create',
+        title: actionTitle(actionText),
+        summary: actionSummary(actionText)
+      });
+    }
+  }
+
+  return items.concat(additions).slice(0, 3);
+}
+
+function explicitActionText(text) {
+  const match = text.match(/\b(?:Action:|next action is to|next action)\s*(.+)$/i);
+  return match ? match[1].trim() : '';
+}
+
+function actionTitle(text) {
+  const cleaned = text
+    .replace(/^(is to|to|we should|we will|let's)\s+/i, '')
+    .replace(/[.?!]\s*.*$/, '')
+    .trim();
+  const words = cleaned.split(/\s+/).slice(0, 7).join(' ');
+  return titleCase(words || 'Capture follow-up action');
+}
+
+function actionSummary(text) {
+  const cleaned = text.trim();
+  return cleaned.length > 220 ? cleaned.slice(0, 217).trim() + '...' : cleaned;
+}
+
+function titleCase(text) {
+  return String(text || '').replace(/\w\S*/g, function(word) {
+    const lower = word.toLowerCase();
+    if (['and', 'or', 'the', 'to', 'with', 'by', 'for'].includes(lower)) return lower;
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  });
+}
+
+function sessionForResponse(input, dashboardToken = '') {
+  const dashboardPath = input.dashboardPath || `/m/${input.publicSessionId || input.id}`;
+  const tokenParam = dashboardToken ? '?t=' + encodeURIComponent(dashboardToken) : '';
   return {
     id: input.id,
-    dashboardPath: input.dashboardPath,
-    dashboardUrl: input.dashboardUrl || null,
+    publicSessionId: input.publicSessionId || input.id,
+    dashboardPath: `${dashboardPath}${tokenParam}`,
+    dashboardUrl: publicBaseUrl ? `${publicBaseUrl}${dashboardPath}${tokenParam}` : (input.dashboardUrl || null),
+    accessMode: input.accessMode || 'linkViewable',
     topic: input.topic,
     host: input.host,
     attendees: Array.isArray(input.attendees) ? input.attendees : [],
@@ -376,6 +524,39 @@ function cleanSession(input) {
     createdAt: input.createdAt,
     updatedAt: input.updatedAt
   };
+}
+
+function createPublicSessionId() {
+  return randomBytes(9).toString('base64url');
+}
+
+function createDashboardToken() {
+  return randomBytes(32).toString('base64url');
+}
+
+function hashDashboardToken(token) {
+  return createHash('sha256').update(String(token || '')).digest('base64url');
+}
+
+function dashboardUrlForPath(path, token) {
+  const tokenParam = token ? '?t=' + encodeURIComponent(token) : '';
+  return publicBaseUrl ? `${publicBaseUrl}${path}${tokenParam}` : null;
+}
+
+function getDashboardTokenFromRequest(req) {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+  const queryToken = url.searchParams.get('t');
+  const headerToken = req.headers['x-dashboard-token'];
+  return queryToken || (Array.isArray(headerToken) ? headerToken[0] : headerToken) || '';
+}
+
+function hasValidDashboardToken(req, session) {
+  if (!session.dashboardTokenHash) return true;
+  const token = getDashboardTokenFromRequest(req);
+  if (!token) return false;
+  const expected = Buffer.from(String(session.dashboardTokenHash));
+  const actual = Buffer.from(hashDashboardToken(token));
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
 async function saveSession(session) {
@@ -391,17 +572,65 @@ async function getSession(id) {
   if (!firestore) return sessions.get(id) || null;
   const snapshot = await firestore.collection(sessionsCollection).doc(id).get();
   if (!snapshot.exists) return null;
-  return cleanSession(snapshot.data());
+  return snapshot.data();
+}
+
+async function getSessionByAccessId(id) {
+  if (!id) return null;
+  const direct = await getSession(id);
+  if (direct) return direct;
+
+  if (!firestore) {
+    return Array.from(sessions.values()).find(function(session) {
+      return session.publicSessionId === id || session.zoomMeetingId === id;
+    }) || null;
+  }
+
+  const snapshot = await firestore.collection(sessionsCollection)
+    .where('zoomMeetingId', '==', id)
+    .limit(1)
+    .get();
+  return snapshot.empty ? null : snapshot.docs[0].data();
+}
+
+async function hasRtmsDashboardAccess(req, state, requestedId) {
+  const candidates = [
+    requestedId,
+    state && state.id,
+    state && state.meetingUuid,
+    state && state.sessionId,
+    state && state.streamId
+  ].filter(Boolean);
+
+  for (const id of candidates) {
+    const session = await getSessionByAccessId(id);
+    if (session && hasValidDashboardToken(req, session)) return true;
+  }
+  return false;
+}
+
+function hasServiceAdminAccess(req) {
+  const token = process.env.ROOM_CLARITY_ADMIN_TOKEN || '';
+  const headerToken = req.headers['x-admin-token'];
+  const value = Array.isArray(headerToken) ? headerToken[0] : headerToken;
+  if (!token || !value) return false;
+  const expected = Buffer.from(token);
+  const actual = Buffer.from(String(value));
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
 async function createSession(input = {}) {
-  const slug = randomUUID().slice(0, 8);
+  const publicSessionId = createPublicSessionId();
+  const dashboardToken = createDashboardToken();
   const createdAt = new Date().toISOString();
-  const dashboardPath = `/m/${slug}`;
+  const dashboardPath = `/m/${publicSessionId}`;
   const session = {
-    id: slug,
+    id: publicSessionId,
+    publicSessionId,
     dashboardPath,
-    dashboardUrl: publicBaseUrl ? `${publicBaseUrl}${dashboardPath}` : null,
+    dashboardUrl: dashboardUrlForPath(dashboardPath),
+    dashboardTokenHash: hashDashboardToken(dashboardToken),
+    accessMode: input.accessMode || 'linkViewable',
     topic: input.topic || 'Untitled meeting',
     host: input.host || 'Meeting host',
     attendees: Array.isArray(input.attendees) ? input.attendees : [],
@@ -410,7 +639,8 @@ async function createSession(input = {}) {
     createdAt,
     updatedAt: createdAt
   };
-  return saveSession(session);
+  await saveSession(session);
+  return Object.assign(sessionForResponse(session, dashboardToken), { dashboardToken });
 }
 
 function rtmsKey(payload = {}) {
@@ -583,6 +813,9 @@ function verifyZoomWebhookSignature(req, rawBody, event) {
   const timestamp = req.headers['x-zm-request-timestamp'];
   const signature = req.headers['x-zm-signature'];
   if (!secret || !timestamp || !signature) return false;
+  const timestampMs = Number(timestamp) * 1000;
+  if (!Number.isFinite(timestampMs)) return false;
+  if (Math.abs(Date.now() - timestampMs) > zoomWebhookMaxAgeMs) return false;
 
   const message = `v0:${timestamp}:${rawBody}`;
   const expected = 'v0=' + createHmac('sha256', secret).update(message).digest('hex');
@@ -755,20 +988,39 @@ async function handleApi(req, res, pathname) {
 
   const sessionMatch = pathname.match(/^\/api\/sessions\/([^/]+)$/);
   if (req.method === 'GET' && sessionMatch) {
+    const limit = checkRateLimit(req, 'session-read', { limit: 30, windowMs: 60_000 });
+    if (!limit.allowed) {
+      sendRateLimited(res, limit);
+      return;
+    }
     const session = await getSession(sessionMatch[1]);
     if (!session) {
       sendJson(res, 404, { error: 'Session not found' });
       return;
     }
-    sendJson(res, 200, session);
+    if (!hasValidDashboardToken(req, session)) {
+      sendJson(res, 403, { error: 'Invalid or missing dashboard token' });
+      return;
+    }
+    sendJson(res, 200, sessionForResponse(session, getDashboardTokenFromRequest(req)));
     return;
   }
 
   const rtmsStateMatch = pathname.match(/^\/api\/rtms\/sessions\/([^/]+)$/);
   if (req.method === 'GET' && rtmsStateMatch) {
-    const state = rtmsSessionStates.get(decodeURIComponent(rtmsStateMatch[1]));
+    const limit = checkRateLimit(req, 'rtms-session-read', { limit: 30, windowMs: 60_000 });
+    if (!limit.allowed) {
+      sendRateLimited(res, limit);
+      return;
+    }
+    const requestedId = decodeURIComponent(rtmsStateMatch[1]);
+    const state = rtmsSessionStates.get(requestedId);
     if (!state) {
       sendJson(res, 404, { error: 'RTMS session not found' });
+      return;
+    }
+    if (!await hasRtmsDashboardAccess(req, state, requestedId)) {
+      sendJson(res, 403, { error: 'Invalid or missing dashboard token' });
       return;
     }
     sendJson(res, 200, state);
@@ -776,6 +1028,15 @@ async function handleApi(req, res, pathname) {
   }
 
   if (req.method === 'GET' && pathname === '/api/rtms/sessions') {
+    const limit = checkRateLimit(req, 'rtms-session-list', { limit: 20, windowMs: 60_000 });
+    if (!limit.allowed) {
+      sendRateLimited(res, limit);
+      return;
+    }
+    if (!hasServiceAdminAccess(req)) {
+      sendJson(res, 403, { error: 'Service admin access required' });
+      return;
+    }
     sendJson(res, 200, {
       sessions: Array.from(rtmsSessionStates.values()).map(function(state) {
         return {

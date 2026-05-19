@@ -64,6 +64,8 @@ The public homepage lives at `https://roomclarity.com/`. The Zoom App should loa
 
 The OAuth callback route exchanges development install codes when Zoom credentials are configured in the Cloud Run environment. Tokens are held only in memory for the current development prototype.
 
+For production access control, use the Zoom-first authentication and app-owned authorization model in `docs/auth-authorization-plan.md`. Zoom identifies and authorizes the user, but Room Clarity still owns workspace membership, meeting-session permissions, dashboard tokens, and retention/admin roles.
+
 For development OAuth, configure the Cloud Run service with:
 
 ```text
@@ -92,7 +94,7 @@ gcloud run deploy meeting-decision-maker-web \
   --region us-central1 \
   --allow-unauthenticated \
   --set-env-vars=PUBLIC_BASE_URL=https://roomclarity.com \
-  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest,ROOM_CLARITY_ADMIN_TOKEN=room-clarity-admin-token:latest
 ```
 
 Using `--set-secrets` with only one secret can replace the existing set of secret-backed variables. Prefer the full command above or inspect the service after deployment.
@@ -159,7 +161,7 @@ Before the app is public, install it only for development/testing:
 7. Confirm the app loads from Cloud Run.
 8. Create a session and verify the board URL opens.
 9. Open the app controls menu and check the RTMS status line.
-10. If Zoom allows the API, start RTMS and confirm `/api/rtms/sessions` shows transcript activity.
+10. If Zoom allows the API, start RTMS and confirm `/api/rtms/sessions` shows transcript activity using the service admin token.
 
 If Zoom shows `Request pre-approve` instead of `Add` or `Install`, the Zoom account owner/admin must approve the app first.
 
@@ -168,7 +170,7 @@ If Zoom shows `Request pre-approve` instead of `Add` or `Install`, the Zoom acco
 Current backend behavior:
 
 1. Zoom validates `/api/zoom/rtms-webhook` using `ZOOM_WEBHOOK_SECRET_TOKEN`.
-2. Signed Zoom webhook events are verified with `x-zm-request-timestamp` and `x-zm-signature`.
+2. Signed Zoom webhook events are verified with `x-zm-request-timestamp` and `x-zm-signature`, and non-validation events must be inside the configured freshness window.
 3. `meeting.rtms_started` causes the backend to create an `@zoom/rtms` client and join the stream.
 4. `onTranscriptData` callbacks are normalized into transcript cues.
 5. Cues are analyzed with Gemini and accumulated in in-memory RTMS session state.
