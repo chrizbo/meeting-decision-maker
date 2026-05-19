@@ -4,6 +4,11 @@
 
 Add a human-edited meeting brief workflow that works after any meeting and can also carry selected context into future meetings in a series.
 
+This is the umbrella plan. More focused future specs live in:
+
+- [Recap Drafting](future-specs/recap-drafting.md)
+- [Meeting Series Linking](future-specs/meeting-series-linking.md)
+
 The core product stance is:
 
 - The live meeting board is for sensemaking and facilitation.
