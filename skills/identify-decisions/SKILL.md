@@ -29,6 +29,8 @@ Do not capture every opinion as a decision. If the conversation is only explorat
 
 Capture a `forming` decision when the team is doing decision discourse: naming a decision question, comparing good options, surfacing disagreement, deciding how to decide, or clarifying who should be involved before commitment. A forming decision should not imply agreement.
 
+When a forming decision has disagreement, challenged evidence, missing stakeholders, or explicit "not ready to decide" language, make the lack of consensus visible in the summary. Useful phrasing includes "no consensus yet", "still in discourse", or "parked pending evidence".
+
 ## Workflow
 
 1. Identify the decision statement or candidate.
@@ -69,11 +71,17 @@ For live meeting mode, prefer fewer, clearer decision topics. Use `forming` when
 
 If a decision is forming, prefer updating the existing forming record as discourse develops. Escalate from `forming` to `pending` only when the group has a concrete proposal to confirm. Escalate to `accepted` only when the transcript shows explicit commitment.
 
+Update an existing decision only when the new cue continues the same decision question. Create a distinct decision when the cue introduces a separate object of choice, such as a specific feature, policy, access model, retention rule, interaction pattern, implementation path, or follow-up governance choice under the same broad product area.
+
+Keep the decision card useful as a meeting bridge: short enough to scan live, but clear enough after the meeting to show what changed, why it mattered, and what remains unresolved.
+
 ## Guardrails
 
 - Separate decisions from actions and risks.
 - Do not invent agreement when only one person suggested something.
+- Do not turn one person's strong preference, dislike, or implementation taste into a decision before the group frames a decision question, option set, or tradeoff.
 - Do not create separate decision records for each side of one tradeoff; update the existing forming decision topic.
+- Do not collapse distinct child decisions into a broad parent decision. A strategy decision and later implementation decisions may both belong in the record.
 - Preserve the discourse/decision boundary: do not treat useful disagreement, option generation, or critique as final commitment.
 - If the team has not decided how to decide, surface that as an unresolved question instead of forcing a decision.
 - Preserve dissent or unresolved concerns in open questions.
@@ -85,3 +93,5 @@ If a decision is forming, prefer updating the existing forming record as discour
 For examples and schemas, read [references/extraction-schema.md](references/extraction-schema.md).
 
 For Chris Butler decision-making principles, read [../references/chris-butler-decision-principles.md](../references/chris-butler-decision-principles.md).
+
+For live meeting response budgets and meeting bridge quality, read [../references/live-meeting-agent-strategy.md](../references/live-meeting-agent-strategy.md).

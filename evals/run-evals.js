@@ -8,10 +8,26 @@ const liveIndex = args.indexOf('--live');
 const liveBaseUrl = liveIndex >= 0 ? args[liveIndex + 1] : '';
 const caseIndex = args.indexOf('--case');
 const caseFilter = caseIndex >= 0 ? args[caseIndex + 1] : '';
+const modelIndex = args.indexOf('--model');
+const modelsIndex = args.indexOf('--models');
+const evalModels = parseEvalModels();
+const judgeEnabled = args.includes('--judge') || process.env.EVAL_JUDGE === '1';
+const judgeModel = process.env.EVAL_JUDGE_MODEL || 'gemini-2.5-pro';
+const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const timingToleranceSeconds = 8;
 const titleSimilarityThreshold = 0.35;
 const liveRetryCount = 2;
 const liveRetryDelayMs = 1200;
+
+function parseEvalModels() {
+  const raw = modelsIndex >= 0
+    ? args[modelsIndex + 1]
+    : (modelIndex >= 0 ? args[modelIndex + 1] : process.env.EVAL_MODELS || process.env.EVAL_MODEL || '');
+  return String(raw || '')
+    .split(',')
+    .map(function(model) { return model.trim(); })
+    .filter(Boolean);
+}
 
 function parseTimestamp(value) {
   const parts = value.trim().split(':');
@@ -135,8 +151,9 @@ function fixtureEventsForCue(fixture, cue) {
   return event ? event.items : [];
 }
 
-async function liveEventsForCue(baseUrl, cues, cue, meetingState) {
+async function liveEventsForCue(baseUrl, cues, cue, meetingState, model) {
   let lastError = null;
+  const startedAt = performance.now();
   for (let attempt = 0; attempt <= liveRetryCount; attempt += 1) {
     try {
       const response = await fetch(baseUrl.replace(/\/$/, '') + '/api/analyze-cue', {
@@ -152,7 +169,8 @@ async function liveEventsForCue(baseUrl, cues, cue, meetingState) {
             evidence: cue.evidence
           },
           transcriptWindow: transcriptWindowForCue(cues, cue),
-          meetingState: compactMeetingState(meetingState)
+          meetingState: compactMeetingState(meetingState),
+          model: model || undefined
         })
       });
 
@@ -162,7 +180,10 @@ async function liveEventsForCue(baseUrl, cues, cue, meetingState) {
       }
 
       const result = await response.json();
-      return Array.isArray(result.items) ? result.items : [];
+      return {
+        items: Array.isArray(result.items) ? result.items : [],
+        durationMs: performance.now() - startedAt
+      };
     } catch (error) {
       lastError = error;
       if (attempt < liveRetryCount) await delay(liveRetryDelayMs * (attempt + 1));
@@ -316,7 +337,8 @@ function findDuplicateDecisionTopics(actualItems, matchedItems) {
   return duplicates;
 }
 
-async function runEval(casePath) {
+async function runEval(casePath, options = {}) {
+  const model = options.model || '';
   const evalCase = JSON.parse(await readFile(casePath, 'utf8'));
   const transcriptPath = resolve(dirname(casePath), evalCase.transcript);
   const transcript = parseVtt(await readFile(transcriptPath, 'utf8'));
@@ -326,13 +348,18 @@ async function runEval(casePath) {
   const meetingState = Object.assign(emptyMeetingState(), { nextId: 1 });
   const actualEvents = [];
   const errors = [];
+  const timings = [];
 
   for (const cue of transcript) {
     let items = [];
     try {
-      items = liveBaseUrl
-        ? await liveEventsForCue(liveBaseUrl, transcript, cue, meetingState)
-        : fixtureEventsForCue(expectedFixture, cue);
+      if (liveBaseUrl) {
+        const liveResult = await liveEventsForCue(liveBaseUrl, transcript, cue, meetingState, model);
+        items = liveResult.items;
+        timings.push(liveResult.durationMs);
+      } else {
+        items = fixtureEventsForCue(expectedFixture, cue);
+      }
     } catch (error) {
       errors.push({ at: cue.start, message: error.message });
     }
@@ -345,8 +372,11 @@ async function runEval(casePath) {
   return {
     name: evalCase.name,
     mode: liveBaseUrl ? 'live' : 'fixture',
+    model,
     score: scoreEvents(expectedFixture.events, actualEvents),
-    errors
+    judge: await maybeJudgeCase(evalCase, transcript, expectedFixture, actualEvents),
+    errors,
+    timing: summarizeTimings(timings)
   };
 }
 
@@ -372,14 +402,41 @@ function percent(value) {
   return `${Math.round(value * 1000) / 10}%`;
 }
 
+function summarizeTimings(values) {
+  if (!values.length) {
+    return {
+      count: 0,
+      totalMs: 0,
+      avgMs: 0,
+      maxMs: 0
+    };
+  }
+  const totalMs = values.reduce(function(sum, value) { return sum + value; }, 0);
+  return {
+    count: values.length,
+    totalMs,
+    avgMs: totalMs / values.length,
+    maxMs: Math.max(...values)
+  };
+}
+
+function formatDuration(ms) {
+  if (!ms) return 'n/a';
+  return `${Math.round(ms / 100) / 10}s`;
+}
+
 function printResult(result) {
   const score = result.score;
-  console.log(`\n${result.name} (${result.mode})`);
+  const modelSuffix = result.model ? ` · ${result.model}` : '';
+  console.log(`\n${result.name} (${result.mode}${modelSuffix})`);
   console.log(`  expected: ${score.expectedCount}`);
   console.log(`  actual:   ${score.actualCount}`);
   if (score.toleratedUpdates.length) console.log(`  updates:  ${score.toleratedUpdates.length} tolerated`);
   console.log(`  matched:  ${score.matchedCount}`);
   console.log(`  precision ${percent(score.precision)} · recall ${percent(score.recall)} · f1 ${percent(score.f1)}`);
+  if (result.timing.count) {
+    console.log(`  avg response ${formatDuration(result.timing.avgMs)} · max ${formatDuration(result.timing.maxMs)} · cues ${result.timing.count}`);
+  }
 
   if (result.errors.length) {
     console.log(`\n  Live errors: ${result.errors.length}`);
@@ -422,6 +479,10 @@ function printResult(result) {
       console.log(`  - ${formatTime(item.at)} ${item.type}: ${item.title}`);
     });
   }
+
+  if (result.judge) {
+    printJudgeResult(result.judge);
+  }
 }
 
 function byTime(items) {
@@ -430,24 +491,170 @@ function byTime(items) {
   });
 }
 
-const results = [];
-for (const casePath of await discoverEvalCases()) {
-  const result = await runEval(casePath);
-  results.push(result);
-  printResult(result);
+const casePaths = await discoverEvalCases();
+const modelRuns = liveBaseUrl && evalModels.length ? evalModels : [''];
+const aggregateResults = [];
+
+for (const model of modelRuns) {
+  if (model) console.log(`\n## Model: ${model}`);
+  const results = [];
+  for (const casePath of casePaths) {
+    const result = await runEval(casePath, { model });
+    results.push(result);
+    printResult(result);
+  }
+
+  const aggregate = aggregateScores(results);
+  aggregateResults.push({ model, aggregate });
+  if (results.length > 1) {
+    const modelSuffix = model ? ` · ${model}` : '';
+    console.log(`\nall cases${modelSuffix}`);
+    console.log(`  expected: ${aggregate.expectedCount}`);
+    console.log(`  actual:   ${aggregate.actualCount}`);
+    console.log(`  matched:  ${aggregate.matchedCount}`);
+    console.log(`  precision ${percent(aggregate.precision)} · recall ${percent(aggregate.recall)} · f1 ${percent(aggregate.f1)}`);
+    if (aggregate.timing.count) {
+      console.log(`  avg response ${formatDuration(aggregate.timing.avgMs)} · max ${formatDuration(aggregate.timing.maxMs)} · cues ${aggregate.timing.count}`);
+    }
+  }
 }
 
-const aggregate = aggregateScores(results);
-if (results.length > 1) {
-  console.log('\nall cases');
-  console.log(`  expected: ${aggregate.expectedCount}`);
-  console.log(`  actual:   ${aggregate.actualCount}`);
-  console.log(`  matched:  ${aggregate.matchedCount}`);
-  console.log(`  precision ${percent(aggregate.precision)} · recall ${percent(aggregate.recall)} · f1 ${percent(aggregate.f1)}`);
+if (aggregateResults.length > 1) {
+  console.log('\nmodel comparison');
+  aggregateResults
+    .slice()
+    .sort(function(left, right) { return right.aggregate.f1 - left.aggregate.f1; })
+    .forEach(function(result) {
+      const timing = result.aggregate.timing.count
+        ? ` · avg ${formatDuration(result.aggregate.timing.avgMs)} · max ${formatDuration(result.aggregate.timing.maxMs)}`
+        : '';
+      console.log(`  ${result.model || '(service default)'}: precision ${percent(result.aggregate.precision)} · recall ${percent(result.aggregate.recall)} · f1 ${percent(result.aggregate.f1)} · actual ${result.aggregate.actualCount}${timing}`);
+    });
 }
 
-if (aggregate.f1 < 0.8) {
+const bestF1 = Math.max(...aggregateResults.map(function(result) { return result.aggregate.f1; }));
+if (bestF1 < 0.8) {
   process.exitCode = 1;
+}
+
+async function maybeJudgeCase(evalCase, transcript, expectedFixture, actualEvents) {
+  if (!judgeEnabled) return null;
+  if (!liveBaseUrl) return {
+    skipped: true,
+    reason: 'Judge mode only runs for live evals.'
+  };
+  if (!geminiApiKey) return {
+    skipped: true,
+    reason: 'Set GEMINI_API_KEY or GOOGLE_API_KEY to run judge mode.'
+  };
+
+  try {
+    return await judgeCase(evalCase, transcript, expectedFixture, actualEvents);
+  } catch (error) {
+    return {
+      skipped: true,
+      reason: error.message
+    };
+  }
+}
+
+async function judgeCase(evalCase, transcript, expectedFixture, actualEvents) {
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(judgeModel) + ':generateContent?key=' + encodeURIComponent(geminiApiKey), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(buildJudgeRequest(evalCase, transcript, expectedFixture, actualEvents))
+  });
+  const body = await response.json().catch(function() { return {}; });
+  if (!response.ok) {
+    const message = body.error && body.error.message ? body.error.message : 'judge request failed';
+    throw new Error(message);
+  }
+
+  const text = body.candidates &&
+    body.candidates[0] &&
+    body.candidates[0].content &&
+    body.candidates[0].content.parts &&
+    body.candidates[0].content.parts.map(function(part) { return part.text || ''; }).join('');
+  return parseJudgeJson(text);
+}
+
+function buildJudgeRequest(evalCase, transcript, expectedFixture, actualEvents) {
+  const compactTranscript = transcript.map(function(cue) {
+    return {
+      at: cue.start,
+      speaker: cue.speaker,
+      text: cue.text
+    };
+  });
+
+  return {
+    generationConfig: {
+      temperature: 0.1,
+      responseMimeType: 'application/json'
+    },
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: [
+              'You are a qualitative judge for Meeting Decision Maker evals.',
+              'Judge whether the actual output supports high-quality human decision making. Do not re-score exact string matches; focus on product qualities.',
+              'Return only JSON with this shape: {"overall":1-5,"useful_friction":1-5,"decision_discourse":1-5,"consensus_handling":1-5,"risk_relevance":1-5,"agent_helpfulness":1-5,"human_judgment_support":1-5,"findings":["short finding"],"missed_opportunities":["short missed opportunity"],"overreach":["short overreach"]}.',
+              'Use 5 for excellent, 3 for mixed/acceptable, and 1 for harmful or badly misleading.',
+              'Important qualities: timely useful friction, no false consensus, forming vs committed distinction, decision-relevant risk, host-sayable agent notes, and supporting human judgment rather than replacing it.',
+              '',
+              '# Case metadata',
+              JSON.stringify({
+                name: evalCase.name,
+                principles_under_test: evalCase.principles_under_test || [],
+                decision_context: evalCase.decision_context || {},
+                should_not_emit: evalCase.should_not_emit || []
+              }, null, 2),
+              '',
+              '# Transcript',
+              JSON.stringify(compactTranscript, null, 2),
+              '',
+              '# Expected labels',
+              JSON.stringify(expectedFixture.events || [], null, 2),
+              '',
+              '# Actual output',
+              JSON.stringify(actualEvents, null, 2)
+            ].join('\n')
+          }
+        ]
+      }
+    ]
+  };
+}
+
+function parseJudgeJson(text) {
+  const trimmed = String(text || '').trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+  return JSON.parse(trimmed || '{}');
+}
+
+function printJudgeResult(judge) {
+  if (judge.skipped) {
+    console.log(`\n  Judge skipped: ${judge.reason}`);
+    return;
+  }
+
+  console.log('\n  Judge');
+  console.log(`  overall ${judge.overall}/5 · useful friction ${judge.useful_friction}/5 · discourse ${judge.decision_discourse}/5 · consensus ${judge.consensus_handling}/5`);
+  console.log(`  risk relevance ${judge.risk_relevance}/5 · agent helpfulness ${judge.agent_helpfulness}/5 · human judgment ${judge.human_judgment_support}/5`);
+
+  if (Array.isArray(judge.findings) && judge.findings.length) {
+    console.log('  findings:');
+    judge.findings.slice(0, 3).forEach(function(item) { console.log(`  - ${item}`); });
+  }
+  if (Array.isArray(judge.missed_opportunities) && judge.missed_opportunities.length) {
+    console.log('  missed opportunities:');
+    judge.missed_opportunities.slice(0, 3).forEach(function(item) { console.log(`  - ${item}`); });
+  }
+  if (Array.isArray(judge.overreach) && judge.overreach.length) {
+    console.log('  overreach:');
+    judge.overreach.slice(0, 3).forEach(function(item) { console.log(`  - ${item}`); });
+  }
 }
 
 function aggregateScores(resultsToAggregate) {
@@ -456,17 +663,26 @@ function aggregateScores(resultsToAggregate) {
     acc.actualCount += result.score.actualCount;
     acc.scoredActualCount += result.score.scoredActualCount;
     acc.matchedCount += result.score.matchedCount;
+    acc.timing.totalMs += result.timing.totalMs;
+    acc.timing.count += result.timing.count;
+    acc.timing.maxMs = Math.max(acc.timing.maxMs, result.timing.maxMs);
     return acc;
   }, {
     expectedCount: 0,
     actualCount: 0,
     scoredActualCount: 0,
-    matchedCount: 0
+    matchedCount: 0,
+    timing: {
+      totalMs: 0,
+      count: 0,
+      maxMs: 0
+    }
   });
 
   const precision = totals.scoredActualCount ? totals.matchedCount / totals.scoredActualCount : 1;
   const recall = totals.expectedCount ? totals.matchedCount / totals.expectedCount : 1;
   const f1 = precision + recall ? (2 * precision * recall) / (precision + recall) : 0;
+  totals.timing.avgMs = totals.timing.count ? totals.timing.totalMs / totals.timing.count : 0;
 
   return Object.assign(totals, { precision, recall, f1 });
 }

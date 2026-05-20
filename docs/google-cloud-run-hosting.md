@@ -15,7 +15,7 @@ Cloud Run is a good fit for the current prototype because it gives us:
 
 Start with one Cloud Run service:
 
-- `meeting-decision-maker-web`: serves the board, creates meeting sessions, runs Gemini cue analysis, receives signed Zoom RTMS webhooks, and maintains in-memory RTMS session state.
+- `meeting-decision-maker-web`: serves the board, creates meeting sessions, runs LLM cue analysis, receives signed Zoom RTMS webhooks, and maintains in-memory RTMS session state.
 
 Add these later when the product behavior is stable:
 
@@ -40,6 +40,7 @@ Create and configure the project:
 gcloud projects create "$PROJECT_ID" --name="Meeting Decision Maker"
 gcloud config set project "$PROJECT_ID"
 gcloud config set run/region "$REGION"
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 ```
 
 Attach billing in the Google Cloud Console or with `gcloud beta billing projects link` if you know the billing account id.
@@ -69,7 +70,7 @@ gcloud run deploy meeting-decision-maker-web \
   --allow-unauthenticated
 ```
 
-For the current Zoom/Gemini path, deploy with all secret-backed variables attached and set the canonical public URL:
+For the current Zoom/LLM path, deploy with all secret-backed variables attached and set the canonical public URL:
 
 ```bash
 gcloud run deploy meeting-decision-maker-web \
@@ -77,7 +78,7 @@ gcloud run deploy meeting-decision-maker-web \
   --region "$REGION" \
   --allow-unauthenticated \
   --set-env-vars=PUBLIC_BASE_URL=https://roomclarity.com \
-  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest,ROOM_CLARITY_ADMIN_TOKEN=room-clarity-admin-token:latest
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest,ROOM_CLARITY_ADMIN_TOKEN=room-clarity-admin-token:latest
 ```
 
 Use `--update-secrets` with the full set above when redeploying from local source so a later deploy does not accidentally remove previously attached secret-backed environment variables.
@@ -146,7 +147,29 @@ curl -i -H "x-admin-token: $TOKEN" https://roomclarity.com/api/rtms/sessions
 
 ## Cloud Prompt Evals
 
-The same container image includes `evals/`, so Cloud Run Jobs can run the prompt eval harness without storing a Gemini key locally. The live eval posts transcript cues to the deployed `/api/analyze-cue` endpoint.
+The same container image includes `evals/`, so Cloud Run Jobs can run the prompt eval harness without storing model keys locally. The live eval posts transcript cues to the deployed `/api/analyze-cue` endpoint.
+
+To test OpenAI models, create the API key secret once:
+
+```bash
+gcloud secrets create openai-api-key \
+  --replication-policy=automatic
+```
+
+Add a secret version without printing the key in shell history:
+
+```bash
+printf %s "$OPENAI_API_KEY" | gcloud secrets versions add openai-api-key \
+  --data-file=-
+```
+
+If the secret already exists, run only the `versions add` command. Make sure the Cloud Run runtime service account can access the secret:
+
+```bash
+gcloud secrets add-iam-policy-binding openai-api-key \
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role=roles/secretmanager.secretAccessor
+```
 
 Create or update the eval job from `meeting-decision-maker-repo`:
 
@@ -155,13 +178,13 @@ gcloud run jobs deploy meeting-decision-maker-evals \
   --source . \
   --region "$REGION" \
   --set-env-vars=EVAL_LIVE_URL=https://roomclarity.com \
-  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest \
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest \
   --max-retries=0 \
   --command=npm \
   --args=run,eval:live
 ```
 
-The `GEMINI_API_KEY` secret is attached for parity with the web service. The current live eval path uses the deployed service's `/api/analyze-cue`, so the service itself must also have `GEMINI_API_KEY` attached and be running the prompt/skill version you want to evaluate.
+The LLM secrets are attached for parity with the web service. The current live eval path uses the deployed service's `/api/analyze-cue`, so the service itself must also have the provider secrets attached and be running the prompt/skill version you want to evaluate.
 
 Run the job:
 
@@ -185,6 +208,37 @@ For quick local parity, run:
 ```bash
 EVAL_LIVE_URL=https://roomclarity.com npm run eval:live
 ```
+
+To include the optional LLM-as-judge qualitative review, run the job with `npm run eval:judge` and set a stronger judge model:
+
+```bash
+gcloud run jobs deploy meeting-decision-maker-evals \
+  --source . \
+  --region "$REGION" \
+  --set-env-vars=EVAL_LIVE_URL=https://roomclarity.com,EVAL_JUDGE_MODEL=gemini-2.5-pro \
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest \
+  --max-retries=0 \
+  --command=npm \
+  --args=run,eval:judge
+```
+
+The deterministic score remains the pass/fail gate. The judge output is a qualitative review aid for useful friction, discourse handling, consensus handling, risk relevance, agent helpfulness, and support for human judgment.
+
+To compare live analysis models against the same eval suite, run the job with `npm run eval:models`. The app default remains `gemini-2.5-flash-lite`; use `gemini-2.5-pro` as the judge model rather than the live cue extractor unless a model sweep shows otherwise.
+
+```bash
+gcloud run jobs deploy meeting-decision-maker-evals \
+  --source . \
+  --region "$REGION" \
+  --set-env-vars='^@^EVAL_LIVE_URL=https://roomclarity.com@EVAL_JUDGE_MODEL=gemini-2.5-pro@EVAL_MODELS=gemini:gemini-2.5-flash-lite,openai:gpt-5.4,openai:gpt-5.5' \
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest \
+  --max-retries=0 \
+  --task-timeout=1800 \
+  --command=npm \
+  --args=run,eval:models
+```
+
+Use provider-qualified model strings in mixed sweeps: `gemini:<model>` or `openai:<model>`. Gemini 3 preview models can be added to `EVAL_MODELS` when available to the project, for example `gemini:gemini-3-flash-preview`. Because preview models may have different rate limits and latency, evaluate them before using them for live cue analysis.
 
 ## Custom Domain: roomclarity.com
 

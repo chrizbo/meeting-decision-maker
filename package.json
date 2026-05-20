@@ -7,6 +7,8 @@
   "scripts": {
     "eval": "node evals/run-evals.js",
     "eval:live": "node evals/run-evals.js --live ${EVAL_LIVE_URL:-https://roomclarity.com}",
+    "eval:judge": "node evals/run-evals.js --judge --live ${EVAL_LIVE_URL:-https://roomclarity.com}",
+    "eval:models": "node evals/run-evals.js --judge --live ${EVAL_LIVE_URL:-https://roomclarity.com} --models ${EVAL_MODELS:-gemini:gemini-2.5-flash-lite,openai:gpt-5.4,openai:gpt-5.5}",
     "start": "node server.js",
     "dev": "node server.js"
   },

@@ -35,6 +35,8 @@ Preserve timestamp and speaker evidence when available. If the argument is incom
 
 Queue a suggestion when the team appears to accept a claim, rationale, or recommendation with weak evidence, missing context, ambiguous language, or unexamined alternatives.
 
+Use the live meeting agent strategy: speak only when the argument quality issue could change a decision, risk, assumption, or next action. Prefer durable artifact detail over a live response for minor ambiguity or low-impact critique.
+
 Raise priority when:
 
 - The argument is driving a decision.
@@ -47,6 +49,8 @@ Raise priority when:
 - A bias appears to be shaping the argument: anchoring, confirmation bias, authority bias, availability bias, sunk cost, status quo bias, groupthink, consensus illusion, automation bias, or false dichotomy.
 
 If the team starts discussing the same argument, add follow-up text that sharpens the evidence question, missing information, or rival explanation.
+
+If several argument issues appear in the same topic, choose the one that creates the most useful next move for the host. Do not create separate live responses for every weak claim.
 
 ## Output Shape
 
@@ -82,3 +86,5 @@ For the underlying RTT method, read [references/rtt-source.md](references/rtt-so
 For Chris Butler decision-making principles, read [../references/chris-butler-decision-principles.md](../references/chris-butler-decision-principles.md).
 
 For cognitive and social bias checks, read [../references/decision-bias-checks.md](../references/decision-bias-checks.md).
+
+For live meeting response budgets and meeting bridge quality, read [../references/live-meeting-agent-strategy.md](../references/live-meeting-agent-strategy.md).

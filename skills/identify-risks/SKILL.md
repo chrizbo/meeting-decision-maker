@@ -64,6 +64,8 @@ In live meeting mode, surface risks that are actionable or decision-relevant. If
 
 For process risks, prefer phrasing that helps the host improve the decision container: "Who needs to be in this discourse?", "Who decides?", "Are we in planned chronos time or urgent kairos time?", or "What tripwire would tell us to revisit this?"
 
+Use the live meeting agent strategy to decide whether the risk needs a live agent response. Most risks should become durable risk cards. Add an agent response only when the host should intervene now to improve discourse, clarify ownership, name a missing stakeholder, or convert the risk into a test, mitigation, or tripwire.
+
 ## Guardrails
 
 - Separate risks from action items.
@@ -83,3 +85,5 @@ For examples and schemas, read [references/extraction-schema.md](references/extr
 For Chris Butler decision-making principles, read [../references/chris-butler-decision-principles.md](../references/chris-butler-decision-principles.md).
 
 For cognitive and social bias checks, read [../references/decision-bias-checks.md](../references/decision-bias-checks.md).
+
+For live meeting response budgets and meeting bridge quality, read [../references/live-meeting-agent-strategy.md](../references/live-meeting-agent-strategy.md).

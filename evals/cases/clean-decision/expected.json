@@ -1,6 +1,17 @@
 {
   "name": "clean-decision",
   "transcript": "./transcript.vtt",
+  "principles_under_test": [
+    "discourse before decision",
+    "explicit commitment",
+    "risk with mitigation",
+    "explicit action capture"
+  ],
+  "decision_context": {
+    "decision_type": "product",
+    "decision_tempo": "chronos",
+    "decision_maker": "Maya"
+  },
   "events": [
     {
       "at": 2,
@@ -10,6 +21,12 @@
           "status": "forming",
           "title": "Onboarding launch scope",
           "summary": "Decide whether the onboarding experiment should launch to all new teams or stay in beta.",
+          "decision_stage": "question",
+          "consensus": "unclear",
+          "decision_type": "product",
+          "decision_tempo": "chronos",
+          "discourse_state": "needs_discourse",
+          "reversibility": "two_way",
           "why": "The team explicitly frames the decision question."
         }
       ]
@@ -21,6 +38,8 @@
           "type": "risk",
           "title": "Enterprise SSO setup risk",
           "summary": "Enterprise teams may get stuck if onboarding launches before SSO setup is automated.",
+          "reversibility": "two_way",
+          "option_value": "Exclude enterprise teams to preserve launch flexibility while SSO setup remains manual.",
           "why": "The transcript names a concrete downside and affected segment."
         }
       ]
@@ -33,6 +52,13 @@
           "status": "accepted",
           "title": "Launch onboarding to non-enterprise teams",
           "summary": "Launch onboarding to non-enterprise teams next Monday while keeping enterprise teams in beta.",
+          "decision_stage": "commitment",
+          "consensus": "strong",
+          "decision_type": "product",
+          "decision_tempo": "chronos",
+          "discourse_state": "closed",
+          "tradeoff": "Launch to non-enterprise teams even over one broad launch.",
+          "reversibility": "two_way",
           "why": "The transcript uses explicit decision and agreement language."
         }
       ]
@@ -44,6 +70,7 @@
           "type": "action",
           "title": "Update launch config and support note",
           "summary": "Luis will update the launch config and Maya will write the support note by Friday.",
+          "human_judgment_role": "Confirms owners and timing rather than inferring them.",
           "why": "The cue is explicitly labeled Action and names owners plus timing."
         }
       ]

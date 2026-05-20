@@ -16,6 +16,10 @@ const firestore = useFirestore ? new Firestore() : null;
 const sessionsCollection = process.env.FIRESTORE_SESSIONS_COLLECTION || 'meetingSessions';
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+const openaiApiKey = process.env.OPENAI_API_KEY || '';
+const openaiModel = process.env.OPENAI_MODEL || 'gpt-5.4';
+const openaiReasoningEffort = process.env.OPENAI_REASONING_EFFORT || 'low';
+const llmProvider = normalizeProvider(process.env.LLM_PROVIDER || 'gemini');
 const publicBaseUrl = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
 const zoomWebhookMaxAgeMs = Number(process.env.ZOOM_WEBHOOK_MAX_AGE_MS || 5 * 60 * 1000);
 let skillPromptCache = null;
@@ -166,15 +170,56 @@ async function loadSkillPrompts() {
     };
   }));
 
+  const referenceFiles = [
+    'references/chris-butler-decision-principles.md',
+    'references/decision-bias-checks.md'
+  ];
+  const references = await Promise.all(referenceFiles.map(async function(relativePath) {
+    const referencePath = join(dirname(manifestPath), relativePath);
+    const referenceText = await readFile(referencePath, 'utf8');
+    return {
+      id: relativePath.replace(/\.md$/, ''),
+      path: relativePath,
+      instructions: referenceText
+    };
+  }));
+
   skillPromptCache = {
     source: 'skills/manifest.yaml',
-    prompts
+    prompts,
+    references
   };
   return skillPromptCache;
 }
 
-function analysisEnabled() {
-  return Boolean(geminiApiKey);
+function normalizeProvider(provider) {
+  return provider === 'openai' ? 'openai' : 'gemini';
+}
+
+function defaultModelForProvider(provider) {
+  return provider === 'openai' ? openaiModel : geminiModel;
+}
+
+function parseAnalysisModelSpec(modelSpec) {
+  const raw = String(modelSpec || '').trim();
+  if (raw.includes(':')) {
+    const separator = raw.indexOf(':');
+    const provider = normalizeProvider(raw.slice(0, separator));
+    const model = raw.slice(separator + 1).trim() || defaultModelForProvider(provider);
+    return { provider, model };
+  }
+  if (raw && /^gpt-|^o[0-9]/i.test(raw)) {
+    return { provider: 'openai', model: raw };
+  }
+  const provider = llmProvider;
+  return {
+    provider,
+    model: raw || defaultModelForProvider(provider)
+  };
+}
+
+function analysisEnabled(provider = llmProvider) {
+  return normalizeProvider(provider) === 'openai' ? Boolean(openaiApiKey) : Boolean(geminiApiKey);
 }
 
 function cleanAnalysisItem(item) {
@@ -251,10 +296,15 @@ function serverMeetingStateForAnalysis(state) {
 
 function applyServerAnalysisItems(state, items, cue) {
   items.forEach(function(item) {
+    if (item.type === 'decision' && isWeakPreferenceDecision(item, cue, state)) return;
     if (item.updateMode === 'update' && updateServerBoardItem(state, item, cue)) return;
     if (item.type === 'decision') {
       const relatedDecision = findRelatedDecision(state.decisions, item);
       if (relatedDecision && mergeServerDecision(relatedDecision, item, cue)) return;
+    }
+    if (item.type === 'agent_issue') {
+      const relatedAgentIssue = findRelatedAgentIssue(state.openAgentIssues, item);
+      if (relatedAgentIssue && mergeServerAgentIssue(relatedAgentIssue, item, cue)) return;
     }
     const record = {
       id: randomUUID(),
@@ -282,11 +332,11 @@ function applyServerAnalysisItems(state, items, cue) {
 
 function mergeServerDecision(existing, item, cue) {
   existing.title = item.title || existing.title;
-  existing.summary = item.summary || existing.summary;
+  existing.summary = conciseBoardSummary(item.summary || existing.summary);
   existing.evidence = cue.evidence;
   existing.cueId = cue.id;
   existing.updatedAt = new Date().toISOString();
-  if (item.status) existing.status = item.status;
+  applyDecisionStatus(existing, item.status);
   return true;
 }
 
@@ -294,13 +344,44 @@ function updateServerBoardItem(state, item, cue) {
   const existing = findServerBoardItem(state, item);
   if (!existing) return false;
   existing.title = item.title || existing.title;
-  existing.summary = item.summary || existing.summary;
+  existing.summary = conciseBoardSummary(item.summary || existing.summary);
   existing.evidence = cue.evidence;
   existing.cueId = cue.id;
   existing.updatedAt = new Date().toISOString();
-  if (item.status && item.type === 'decision') existing.status = item.status;
+  if (item.status && item.type === 'decision') applyDecisionStatus(existing, item.status);
   if (item.priority && item.type === 'agent_issue') existing.priority = item.priority;
   return true;
+}
+
+function mergeServerAgentIssue(existing, item, cue) {
+  existing.title = item.title || existing.title;
+  existing.summary = conciseBoardSummary(item.summary || existing.summary);
+  existing.evidence = cue.evidence;
+  existing.cueId = cue.id;
+  existing.updatedAt = new Date().toISOString();
+  if (item.agent) existing.agent = item.agent;
+  if (item.priority) existing.priority = item.priority;
+  return true;
+}
+
+function applyDecisionStatus(existing, nextStatus) {
+  if (!nextStatus) return;
+  const rank = { forming: 0, pending: 1, accepted: 2, rejected: 2 };
+  const current = existing.status || 'forming';
+  if (!(nextStatus in rank)) return;
+  if (nextStatus === 'rejected') {
+    existing.status = 'rejected';
+    return;
+  }
+  if (current === 'rejected') return;
+  if (rank[nextStatus] >= rank[current]) existing.status = nextStatus;
+}
+
+function conciseBoardSummary(summary) {
+  const text = String(summary || '').replace(/\s+/g, ' ').trim();
+  const words = text.split(/\s+/);
+  if (words.length <= 42) return text;
+  return words.slice(0, 42).join(' ').replace(/[,:;]$/, '') + '...';
 }
 
 function findServerBoardItem(state, item) {
@@ -320,6 +401,7 @@ function findServerBoardItem(state, item) {
   const exact = list.find(function(record) { return record.title.toLowerCase() === title; });
   if (exact) return exact;
   if (item.type === 'decision') return findRelatedDecision(list, item);
+  if (item.type === 'agent_issue') return findRelatedAgentIssue(list, item);
   return null;
 }
 
@@ -328,8 +410,58 @@ function findRelatedDecision(decisions, item) {
   if (!candidate) return null;
   return decisions.find(function(decision) {
     const existing = [decision.title, decision.summary].filter(Boolean).join(' ');
-    return topicSimilarity(candidate, existing) >= 0.42;
+    if (hasDistinctDecisionObject(candidate, existing)) return false;
+    return topicSimilarity(candidate, existing) >= 0.62;
   }) || null;
+}
+
+function findRelatedAgentIssue(agentIssues, item) {
+  const candidate = [item.agent, item.title, item.summary].filter(Boolean).join(' ');
+  if (!candidate) return null;
+  return agentIssues.find(function(issue) {
+    const existing = [issue.agent, issue.title, issue.summary].filter(Boolean).join(' ');
+    return topicSimilarity(candidate, existing) >= 0.58;
+  }) || null;
+}
+
+function hasDistinctDecisionObject(candidate, existing) {
+  const candidateNouns = decisionObjectWords(candidate);
+  const existingNouns = decisionObjectWords(existing);
+  if (!candidateNouns.size || !existingNouns.size) return false;
+  const overlap = [...candidateNouns].some(function(word) { return existingNouns.has(word); });
+  if (overlap) return false;
+  const candidateText = String(candidate || '').toLowerCase();
+  const existingText = String(existing || '').toLowerCase();
+  return /\b(decision|decide|choose|choosing|accepted|forming|pending)\b/.test(candidateText + ' ' + existingText);
+}
+
+function decisionObjectWords(text) {
+  const generic = new Set([
+    'accepted', 'agreement', 'candidate', 'choose', 'choosing', 'commitment', 'decide',
+    'decision', 'direction', 'discourse', 'forming', 'option', 'pending', 'proposal',
+    'question', 'scope', 'tradeoff'
+  ]);
+  return new Set(topicWords(text).filter(function(word) { return !generic.has(word); }));
+}
+
+function isWeakPreferenceDecision(item, cue, state) {
+  const decisions = Array.isArray(state.decisions) ? state.decisions : [];
+  if (item.updateMode === 'update') {
+    const hasTarget = item.targetId && decisions.some(function(decision) { return decision.id === item.targetId; });
+    if (hasTarget) return false;
+  }
+  const text = String(cue && cue.text || '').toLowerCase();
+  const candidate = [item.title, item.summary].filter(Boolean).join(' ').toLowerCase();
+  const hasExistingDecision = decisions.some(function(decision) {
+    return topicSimilarity(candidate, [decision.title, decision.summary].filter(Boolean).join(' ').toLowerCase()) >= 0.62;
+  });
+  if (hasExistingDecision) return false;
+  const preferenceSignal = /\b(i think|i want|i would|my preference|i prefer|i just|i really|feels cleaner|feel cleaner)\b/.test(text);
+  const evidenceChallenge = /\b(preference right now|not compared|what evidence|collect measurements|before deciding|not asking for approval|park|pending evidence)\b/.test(text);
+  const decisionFrame = /\b(decision is|decision might be|need to decide|decide whether|whether we|whether the|tradeoff|options?|agreed|decision:|we decided|let's decide|not ready to choose)\b/.test(text);
+  const groupCommitment = /\b(agreed|we decided|decision:|let's do|we will|we won't|approved|committed)\b/.test(text);
+  const preferenceCandidate = /\b(preference|dislike|rewrite|new framework|cleaner|component patterns)\b/.test(candidate);
+  return ((preferenceSignal && !decisionFrame) || (evidenceChallenge && preferenceCandidate)) && !groupCommitment && item.status !== 'accepted';
 }
 
 function topicSimilarity(left, right) {
@@ -353,19 +485,55 @@ function topicWords(text) {
     .filter(function(word) { return word.length > 2 && !stopWords.has(word); });
 }
 
-function parseGeminiJson(text) {
+function parseModelJson(text) {
   const trimmed = String(text || '').trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
   return JSON.parse(trimmed || '{}');
 }
 
-function buildGeminiRequest(input, skillSet) {
+function buildAnalysisPrompt(input, skillSet) {
   const cue = input.cue || {};
   const transcriptWindow = Array.isArray(input.transcriptWindow) ? input.transcriptWindow.slice(-12) : [];
   const meetingState = input.meetingState || {};
   const skillInstructions = skillSet.prompts.map(function(skill) {
     return '## ' + skill.id + '\n' + skill.instructions.slice(0, 5000);
   }).join('\n\n');
+  const sharedReferences = (skillSet.references || []).map(function(reference) {
+    return '## ' + reference.id + '\n' + reference.instructions.slice(0, 3500);
+  }).join('\n\n');
 
+  return [
+    'You are the analysis worker for Meeting Decision Maker.',
+    'Use the loaded meeting skills to analyze one live transcript cue.',
+    'Return only JSON with this shape: {"items":[{"type":"decision|risk|action|agent_issue","updateMode":"create|update","targetId":"existing item id when updating","title":"short title","summary":"short board-ready summary","status":"forming|pending|accepted|rejected","agent":"Assumptions Challenge|Pre-Mortem|Argument Dissection","priority":"low|medium|high"}]}.',
+    'Rules: emit no more than 2 items; prefer no item over weak speculation; preserve uncertainty; do not invent owners or agreement; for agent_issue items include agent and priority.',
+    'Operational priority: extract durable meeting artifacts first. Do not let agent_issue selectivity suppress real decisions, risks, or actions.',
+    'Decision status rules: use "forming" when a real decision topic, tradeoff, option set, or decision question is being discussed but the group has not committed. A forming decision with disagreement or missing evidence must say there is no consensus yet in the summary. Use "pending" when there is a concrete proposed decision ready for host confirmation. Use "accepted" only when the transcript contains explicit agreement or decision language. Never move an accepted decision back to forming or pending unless the transcript explicitly corrects the record.',
+    'Preference-as-decision guardrail: one person saying "I think", "I want", "my preference", or naming a disliked implementation is not enough to create a decision. If others challenge the evidence, ask for measurements, or say they are not asking for approval, treat it as discourse, risk, or an agent_issue until the transcript frames a decision question or option tradeoff.',
+    'Use Current meeting state before creating new items. If the latest cue continues the same decision question, return updateMode "update" with that item targetId. Update summaries should be the current best concise state, not a running log of the conversation. Create a new decision when the cue introduces a distinct decision object, surface, feature, policy, access choice, retention choice, or interaction pattern, even if it belongs under the same product area.',
+    'Do not create separate decision items for each side of the same tradeoff. Keep one forming decision topic and update it as the conversation evolves. Do not let a broad parent decision absorb later distinct implementation decisions. Do not emit a risk just because the cue names uncertainty; emit a risk only when there is a plausible negative outcome, dependency, blocker, mitigation, warning sign, cognitive/social bias, or option-value loss. Do not emit an item on every cue.',
+    'Risk rules: if a cue names a concrete downside, failure path, blocker, stakeholder concern, mitigation, warning sign, or option-value loss, emit or update a risk even if an agent_issue would also be useful. Risk cards are durable artifacts; agent_issue cards are live facilitation nudges.',
+    'Agent issue rules: throttle only agent_issue items. Do not emit an agent_issue simply because a skill could comment. Emit one only when the host could use it immediately to improve the decision discourse, expose a central assumption, name a major failure path, or challenge weak evidence. If the same concern repeats, update the existing open agent_issue instead of creating another.',
+    'Agent trigger rules: when the cue says "what has to be true", "my assumption is", or names an important untested assumption, consider an Assumptions Challenge issue. When the cue says "if we imagine this failing", "fails because", "warning sign", or names a serious failure path, consider a Pre-Mortem issue. When the cue asks "what evidence do we have", distinguishes intuition from evidence, or challenges rationale quality, consider an Argument Dissection issue. Emit at most one agent_issue for a cue.',
+    'Action rules: emit an action when the transcript explicitly says "Action:", "next action", "I will", "can you", or names concrete follow-up work after the meeting. The labels "Action:" and "next action" override the general caution about future product ideas. Do not emit actions for general future product ideas, mitigations, or things the current prototype might eventually need unless the cue frames them as a next action or explicit follow-up.',
+    '',
+    '# Skill instructions',
+    skillInstructions,
+    '',
+    '# Shared decision references',
+    sharedReferences,
+    '',
+    '# Current cue',
+    JSON.stringify(cue, null, 2),
+    '',
+    '# Recent transcript window',
+    JSON.stringify(transcriptWindow, null, 2),
+    '',
+    '# Current meeting state',
+    JSON.stringify(meetingState, null, 2)
+  ].join('\n');
+}
+
+function buildGeminiRequest(input, skillSet) {
   return {
     generationConfig: {
       temperature: 0.2,
@@ -376,30 +544,7 @@ function buildGeminiRequest(input, skillSet) {
         role: 'user',
         parts: [
           {
-            text: [
-              'You are the analysis worker for Meeting Decision Maker.',
-              'Use the loaded meeting skills to analyze one live transcript cue.',
-              'Return only JSON with this shape: {"items":[{"type":"decision|risk|action|agent_issue","updateMode":"create|update","targetId":"existing item id when updating","title":"short title","summary":"short board-ready summary","status":"forming|pending|accepted|rejected","agent":"Assumptions Challenge|Pre-Mortem|Argument Dissection","priority":"low|medium|high"}]}.',
-              'Rules: emit no more than 2 items; prefer no item over weak speculation; preserve uncertainty; do not invent owners or agreement; for agent_issue items include agent and priority.',
-              'Decision status rules: use "forming" when a real decision topic, tradeoff, option set, or decision question is being discussed but the group has not committed. Use "pending" when there is a concrete proposed decision ready for host confirmation. Use "accepted" only when the transcript contains explicit agreement or decision language. Do not mark a decision accepted because one person favors it.',
-              'Use Current meeting state before creating new items. If the latest cue continues, clarifies, strengthens, or changes an existing decision, risk, action, or agent issue, return updateMode "update" with that item targetId. Only use updateMode "create" when the cue introduces a genuinely new item.',
-              'Do not create separate decision items for each side of the same tradeoff. Keep one forming decision topic and update it as the conversation evolves. Do not emit a risk just because the cue names uncertainty; emit a risk only when there is a plausible negative outcome, dependency, blocker, mitigation, or warning sign. Do not emit an item on every cue.',
-              'Agent issue rules: agent_issue is for high-value host interventions only. Do not emit an agent_issue simply because a skill could comment. Emit one only when the host could use it immediately to improve the decision discourse, expose a central assumption, name a major failure path, or challenge weak evidence. Prefer updating an existing open agent issue over creating a new one.',
-              'Agent trigger rules: when the cue says "what has to be true", "my assumption is", or names an important untested assumption, consider an Assumptions Challenge issue. When the cue says "if we imagine this failing", "fails because", "warning sign", or names a serious failure path, consider a Pre-Mortem issue. When the cue asks "what evidence do we have", distinguishes intuition from evidence, or challenges rationale quality, consider an Argument Dissection issue. Emit at most one agent_issue for a cue.',
-              'Action rules: emit an action when the transcript explicitly says "Action:", "next action", "I will", "can you", or names concrete follow-up work after the meeting. The labels "Action:" and "next action" override the general caution about future product ideas. Do not emit actions for general future product ideas, mitigations, or things the current prototype might eventually need unless the cue frames them as a next action or explicit follow-up.',
-              '',
-              '# Skill instructions',
-              skillInstructions,
-              '',
-              '# Current cue',
-              JSON.stringify(cue, null, 2),
-              '',
-              '# Recent transcript window',
-              JSON.stringify(transcriptWindow, null, 2),
-              '',
-              '# Current meeting state',
-              JSON.stringify(meetingState, null, 2)
-            ].join('\n')
+            text: buildAnalysisPrompt(input, skillSet)
           }
         ]
       }
@@ -407,39 +552,108 @@ function buildGeminiRequest(input, skillSet) {
   };
 }
 
-async function analyzeCueWithGemini(input) {
-  if (!analysisEnabled()) {
-    const error = new Error('Gemini analysis is not configured. Set GEMINI_API_KEY.');
+function buildOpenAIRequest(input, skillSet, model) {
+  return {
+    model,
+    input: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: buildAnalysisPrompt(input, skillSet)
+          }
+        ]
+      }
+    ],
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'meeting_analysis',
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            items: {
+              type: 'array',
+              maxItems: 2,
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  type: { type: 'string', enum: ['decision', 'risk', 'action', 'agent_issue'] },
+                  updateMode: { type: 'string', enum: ['create', 'update'] },
+                  targetId: { type: 'string' },
+                  title: { type: 'string' },
+                  summary: { type: 'string' },
+                  status: { type: 'string', enum: ['forming', 'pending', 'accepted', 'rejected'] },
+                  agent: { type: 'string', enum: ['', 'Assumptions Challenge', 'Pre-Mortem', 'Argument Dissection'] },
+                  priority: { type: 'string', enum: ['', 'low', 'medium', 'high'] }
+                },
+                required: ['type', 'updateMode', 'targetId', 'title', 'summary', 'status', 'agent', 'priority']
+              }
+            }
+          },
+          required: ['items']
+        }
+      }
+    },
+    reasoning: {
+      effort: openaiReasoningEffort
+    },
+    store: false
+  };
+}
+
+async function analyzeCueWithProvider(input) {
+  input = input || {};
+  const modelSpec = parseAnalysisModelSpec(input.model);
+  if (!analysisEnabled(modelSpec.provider)) {
+    const providerLabel = modelSpec.provider === 'openai' ? 'OpenAI' : 'Gemini';
+    const envName = modelSpec.provider === 'openai' ? 'OPENAI_API_KEY' : 'GEMINI_API_KEY';
+    const error = new Error(`${providerLabel} analysis is not configured. Set ${envName}.`);
     error.status = 503;
+    error.provider = modelSpec.provider;
+    error.model = modelSpec.model;
     throw error;
   }
 
   const skillSet = await loadSkillPrompts();
-  const model = input.model || geminiModel;
-  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(geminiApiKey), {
+  const provider = modelSpec.provider;
+  const model = modelSpec.model;
+  const response = provider === 'openai'
+    ? await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'authorization': 'Bearer ' + openaiApiKey,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify(buildOpenAIRequest(input, skillSet, model))
+    })
+    : await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(geminiApiKey), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(buildGeminiRequest(input, skillSet))
   });
   const body = await response.json().catch(function() { return {}; });
   if (!response.ok) {
-    const message = body.error && body.error.message ? body.error.message : 'Gemini analysis request failed';
+    const message = body.error && body.error.message ? body.error.message : `${provider} analysis request failed`;
     const error = new Error(message);
     error.status = 502;
     error.details = body;
+    error.provider = provider;
+    error.model = model;
     throw error;
   }
 
-  const text = body.candidates &&
-    body.candidates[0] &&
-    body.candidates[0].content &&
-    body.candidates[0].content.parts &&
-    body.candidates[0].content.parts.map(function(part) { return part.text || ''; }).join('');
-  const parsed = parseGeminiJson(text);
+  const text = provider === 'openai' ? openaiResponseText(body) : geminiResponseText(body);
+  const parsed = parseModelJson(text);
   const items = Array.isArray(parsed.items) ? parsed.items.map(cleanAnalysisItem).filter(Boolean) : [];
-  const reconciledItems = reconcileAnalysisItems(items, input.meetingState || {});
+  const reconciledItems = reconcileAnalysisItems(items, input.meetingState || {})
+    .filter(Boolean)
+    .filter(function(item) { return !isWeakPreferenceDecision(item, input.cue || {}, input.meetingState || emptyMeetingState()); });
   return {
-    source: 'gemini',
+    source: provider,
     model,
     skillSource: skillSet.source,
     at: Number(input.cue && input.cue.start) || 0,
@@ -447,23 +661,96 @@ async function analyzeCueWithGemini(input) {
   };
 }
 
+async function analyzeCueWithGemini(input) {
+  return analyzeCueWithProvider(Object.assign({}, input, {
+    model: input && input.model ? input.model : `gemini:${geminiModel}`
+  }));
+}
+
+function geminiResponseText(body) {
+  return body.candidates &&
+    body.candidates[0] &&
+    body.candidates[0].content &&
+    body.candidates[0].content.parts &&
+    body.candidates[0].content.parts.map(function(part) { return part.text || ''; }).join('');
+}
+
+function openaiResponseText(body) {
+  if (typeof body.output_text === 'string') return body.output_text;
+  const output = Array.isArray(body.output) ? body.output : [];
+  return output.map(function(item) {
+    return (Array.isArray(item.content) ? item.content : []).map(function(content) {
+      return content.text || content.output_text || '';
+    }).join('');
+  }).join('');
+}
+
 function reconcileAnalysisItems(items, meetingState) {
   const decisions = Array.isArray(meetingState.decisions) ? meetingState.decisions : [];
+  const agentIssues = Array.isArray(meetingState.openAgentIssues) ? meetingState.openAgentIssues : [];
   return items.map(function(item) {
-    if (item.type !== 'decision' || item.updateMode === 'update') return item;
-    const relatedDecision = findRelatedDecision(decisions, item);
-    if (!relatedDecision) return item;
-    return Object.assign({}, item, {
-      updateMode: 'update',
-      targetId: relatedDecision.id
+    const normalized = Object.assign({}, item, {
+      summary: conciseBoardSummary(item.summary)
     });
-  });
+
+    if (normalized.type === 'decision' && normalized.updateMode === 'update') {
+      const existing = findReturnedTarget(decisions, normalized.targetId);
+      if (existing) {
+        normalized.status = reconciledDecisionStatus(existing.status, normalized.status);
+      }
+      return normalized;
+    }
+
+    if (normalized.type === 'agent_issue' && normalized.updateMode === 'update') {
+      return normalized;
+    }
+
+    if (normalized.type === 'agent_issue' && normalized.updateMode !== 'update') {
+      const relatedAgentIssue = findRelatedAgentIssue(agentIssues, normalized);
+      if (relatedAgentIssue) {
+        return Object.assign({}, normalized, {
+          updateMode: 'update',
+          targetId: relatedAgentIssue.id
+        });
+      }
+      return normalized;
+    }
+
+    if (normalized.type !== 'decision') return normalized;
+    const relatedDecision = findRelatedDecision(decisions, item);
+    if (!relatedDecision) return normalized;
+    return Object.assign({}, normalized, {
+      updateMode: 'update',
+      targetId: relatedDecision.id,
+      status: reconciledDecisionStatus(relatedDecision.status, normalized.status)
+    });
+  }).filter(Boolean);
+}
+
+function findReturnedTarget(items, targetId) {
+  if (!targetId) return null;
+  return items.find(function(item) { return item.id === targetId; }) || null;
+}
+
+function reconciledDecisionStatus(currentStatus, nextStatus) {
+  const current = currentStatus || 'forming';
+  const next = nextStatus || current;
+  const rank = { forming: 0, pending: 1, accepted: 2, rejected: 2 };
+  if (!(next in rank)) return current;
+  if (next === 'rejected') return 'rejected';
+  if (current === 'rejected') return 'rejected';
+  return rank[next] >= rank[current] ? next : current;
 }
 
 function addExplicitCueItems(input, items) {
   const cue = input.cue || {};
   const text = String(cue.text || '');
   const additions = [];
+
+  if (!items.some(function(item) { return item.type === 'risk'; })) {
+    const risk = explicitRiskFromText(text);
+    if (risk) additions.push(risk);
+  }
 
   if (!items.some(function(item) { return item.type === 'action'; })) {
     const actionText = explicitActionText(text);
@@ -480,6 +767,27 @@ function addExplicitCueItems(input, items) {
   return items.concat(additions).slice(0, 3);
 }
 
+function explicitRiskFromText(text) {
+  const lower = String(text || '').toLowerCase();
+  if (/\b(anchor|anchored|anchoring)\b/.test(lower) && /\b(too low|too high|early|hard to move|lock|later)\b/.test(lower)) {
+    return {
+      type: 'risk',
+      updateMode: 'create',
+      title: 'Pricing anchor risk',
+      summary: 'Deciding too early could anchor pricing before the team has enough evidence, making later changes harder.'
+    };
+  }
+  if (/\b(lock[- ]?in|switching cost|hard to reverse|hard to change|future flexibility)\b/.test(lower)) {
+    return {
+      type: 'risk',
+      updateMode: 'create',
+      title: 'Option-value risk',
+      summary: 'The current path may close off future flexibility or make later changes harder to reverse.'
+    };
+  }
+  return null;
+}
+
 function explicitActionText(text) {
   const match = text.match(/\b(?:Action:|next action is to|next action)\s*(.+)$/i);
   return match ? match[1].trim() : '';
@@ -491,7 +799,8 @@ function actionTitle(text) {
     .replace(/[.?!]\s*.*$/, '')
     .trim();
   const words = cleaned.split(/\s+/).slice(0, 7).join(' ');
-  return titleCase(words || 'Capture follow-up action');
+  const trimmed = words.replace(/\s+(and|or|to|with|for)$/i, '');
+  return titleCase(trimmed || 'Capture follow-up action');
 }
 
 function actionSummary(text) {
@@ -717,7 +1026,7 @@ async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata =
 
   let analysis = null;
   if (analysisEnabled()) {
-    analysis = await analyzeCueWithGemini({
+    analysis = await analyzeCueWithProvider({
       cue,
       transcriptWindow: transcriptWindowForServerCue(state, cue),
       meetingState: serverMeetingStateForAnalysis(state)
@@ -974,24 +1283,38 @@ async function handleApi(req, res, pathname) {
   }
 
   if (req.method === 'GET' && pathname === '/api/analysis/config') {
+    const defaultSpec = parseAnalysisModelSpec('');
     sendJson(res, 200, {
-      enabled: analysisEnabled(),
-      provider: 'gemini',
-      model: geminiModel,
+      enabled: analysisEnabled(defaultSpec.provider),
+      provider: defaultSpec.provider,
+      model: defaultSpec.model,
+      providers: {
+        gemini: {
+          enabled: analysisEnabled('gemini'),
+          model: geminiModel
+        },
+        openai: {
+          enabled: analysisEnabled('openai'),
+          model: openaiModel,
+          reasoningEffort: openaiReasoningEffort
+        }
+      },
       skillSource: 'skills/manifest.yaml'
     });
     return;
   }
 
   if (req.method === 'POST' && pathname === '/api/analyze-cue') {
+    let input = {};
     try {
-      const input = await readBody(req);
-      sendJson(res, 200, await analyzeCueWithGemini(input));
+      input = await readBody(req);
+      sendJson(res, 200, await analyzeCueWithProvider(input));
     } catch (error) {
+      const modelSpec = parseAnalysisModelSpec(input.model);
       sendJson(res, error.status || 500, {
         error: error.message || 'Analysis failed',
-        provider: 'gemini',
-        model: geminiModel
+        provider: error.provider || modelSpec.provider,
+        model: error.model || modelSpec.model
       });
     }
     return;

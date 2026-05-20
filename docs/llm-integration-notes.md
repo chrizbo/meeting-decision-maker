@@ -30,9 +30,9 @@ A likely processing loop is:
 
 The LLM should preserve evidence, including timestamp and speaker when available, and should avoid inventing owners, decisions, or agreement that are not supported by the transcript.
 
-## Gemini Cue Analysis
+## Cue Analysis Providers
 
-The service exposes `POST /api/analyze-cue` as the first live worker boundary. The browser calls it once per newly played mock/uploaded cue when `GEMINI_API_KEY` is configured. The RTMS backend path calls the same Gemini request builder after receiving Zoom transcript callbacks.
+The service exposes `POST /api/analyze-cue` as the first live worker boundary. The browser calls it once per newly played mock/uploaded cue when an LLM provider key is configured. The RTMS backend path calls the same provider-neutral analyzer after receiving Zoom transcript callbacks.
 
 Each request includes:
 
@@ -40,14 +40,16 @@ Each request includes:
 - `transcriptWindow`: cues from the last 90 seconds, capped at 12 cues, including the current cue.
 - `meetingState`: compact lists of current decisions, risks, actions, and open agent issues, including IDs, status, summaries, and evidence.
 
-The backend loads `skills/manifest.yaml`, reads each referenced `SKILL.md`, and sends those instructions with the cue block to Gemini. The default model is `gemini-2.5-flash-lite`; set `GEMINI_MODEL` to use another Gemini API model.
+The backend loads `skills/manifest.yaml`, reads each referenced `SKILL.md`, and sends those instructions with the cue block to the selected provider. The default provider is Gemini with `gemini-2.5-flash-lite`; set `GEMINI_MODEL` to use another Gemini API model. Set `LLM_PROVIDER=openai` and `OPENAI_MODEL=gpt-5.4` to make OpenAI the default provider. OpenAI reasoning defaults to `low`; set `OPENAI_REASONING_EFFORT` for quality/latency experiments. Eval sweeps can override the provider per cue with model strings like `gemini:gemini-2.5-flash-lite`, `openai:gpt-5.4`, or `openai:gpt-5.5`.
 
-Gemini can either create a new board item or update an existing one:
+Keep `gemini-2.5-flash-lite` as the regular live cue extraction model unless a future eval shows a large quality gain from a more expensive model. GPT-5.4 and GPT-5.5 are supported for comparison, judge passes, slow-lane experiments, and post-meeting synthesis, but they are much more expensive when called on every transcript cue.
+
+The model can either create a new board item or update an existing one:
 
 - Use `updateMode: "create"` for genuinely new decisions, risks, actions, or agent issues.
 - Use `updateMode: "update"` plus `targetId` when the latest cue changes the status, wording, evidence, or nuance of an existing item.
 
-Zoom RTMS uses the same analysis contract. The backend normalizes `onTranscriptData` callbacks into cue objects, appends them to an in-memory RTMS session buffer, builds the rolling window, calls Gemini, and applies create/update records to the server-side RTMS board state. Browser dashboards can poll matching RTMS session records and consume the same item shape whether the source was mock playback, uploaded VTT/TXT, or Zoom live transcript data.
+Zoom RTMS uses the same analysis contract. The backend normalizes `onTranscriptData` callbacks into cue objects, appends them to an in-memory RTMS session buffer, builds the rolling window, calls the selected provider, and applies create/update records to the server-side RTMS board state. Browser dashboards can poll matching RTMS session records and consume the same item shape whether the source was mock playback, uploaded VTT/TXT, or Zoom live transcript data.
 
 
 ## Structured Contracts

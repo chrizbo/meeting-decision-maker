@@ -39,6 +39,8 @@ Preserve timestamp and speaker evidence when available. If evidence is thin, say
 
 Queue a suggestion when the team appears to be making or accepting a decision that rests on a meaningful assumption. Do not interrupt automatically.
 
+Use the live meeting agent strategy: speak only when the assumption is important enough for immediate host intervention. If the assumption can be preserved inside a decision or risk without changing the live discussion, prefer the durable artifact over an agent response.
+
 Raise priority when:
 
 - The assumption is central to the decision succeeding.
@@ -50,6 +52,8 @@ Raise priority when:
 - A strategy discussion is too specific to allow local adaptation or too ambiguous to encode a hard choice.
 
 If the team begins discussing the same assumption, add follow-up text that responds to the discussion rather than repeating the first concern.
+
+If several assumptions appear in the same topic, choose the one that would most change the decision if false. Do not create separate live responses for every assumption.
 
 ## Output Shape
 
@@ -80,3 +84,5 @@ For CLI use, include a short table of assumptions when useful, then the top reco
 For the underlying RTT method, read [references/rtt-source.md](references/rtt-source.md).
 
 For Chris Butler decision-making principles, read [../references/chris-butler-decision-principles.md](../references/chris-butler-decision-principles.md).
+
+For live meeting response budgets and meeting bridge quality, read [../references/live-meeting-agent-strategy.md](../references/live-meeting-agent-strategy.md).

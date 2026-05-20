@@ -1,6 +1,18 @@
 {
   "name": "forming-not-decided",
   "transcript": "./transcript.vtt",
+  "principles_under_test": [
+    "forming decision without commitment",
+    "decision discourse",
+    "anchoring",
+    "option-value risk",
+    "assumption challenge"
+  ],
+  "decision_context": {
+    "decision_type": "pricing",
+    "decision_tempo": "chronos",
+    "decision_maker": "unknown"
+  },
   "events": [
     {
       "at": 2,
@@ -10,6 +22,18 @@
           "status": "forming",
           "title": "Analytics add-on pricing",
           "summary": "Decide how to price the analytics add-on, while recognizing the team is not ready to choose today.",
+          "decision_stage": "discourse",
+          "consensus": "none",
+          "decision_type": "pricing",
+          "decision_tempo": "chronos",
+          "discourse_state": "active_discourse",
+          "decision_maker": "unknown",
+          "stakeholders_missing": [
+            "customer research",
+            "finance"
+          ],
+          "tradeoff": "Adoption even over near-term revenue, or revenue even over lower-friction adoption.",
+          "reversibility": "unclear",
           "why": "The cue frames a decision question and explicitly says it is not ready for commitment."
         }
       ]
@@ -22,6 +46,9 @@
           "agent": "Assumptions Challenge",
           "priority": "high",
           "summary": "Ask what evidence would show customers see the analytics add-on as premium beyond three friendly accounts.",
+          "bias_check": "anecdotal evidence / friendly-account bias",
+          "useful_friction": "Slows pricing commitment until the team tests whether three friendly accounts represent broader customer willingness to pay.",
+          "human_judgment_role": "Prompts better evidence gathering while leaving pricing judgment with the team.",
           "why": "The transcript names a central assumption and thin evidence."
         }
       ]
@@ -34,6 +61,8 @@
           "title": "Pricing anchor risk",
           "summary": "Choosing too early could anchor the add-on price too low and make later increases harder.",
           "bias_check": "anchoring / option-value risk",
+          "option_value": "Early pricing can close off future price movement and make later increases harder.",
+          "reversibility": "unclear",
           "why": "The cue names a plausible negative outcome of premature commitment."
         }
       ]

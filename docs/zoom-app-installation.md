@@ -74,6 +74,7 @@ ZOOM_CLIENT_SECRET=<Zoom development client secret from Secret Manager>
 ZOOM_REDIRECT_URI=https://roomclarity.com/api/zoom/oauth/callback
 ZOOM_WEBHOOK_SECRET_TOKEN=<Zoom webhook secret token from Secret Manager>
 GEMINI_API_KEY=<Gemini API key from Secret Manager>
+OPENAI_API_KEY=<OpenAI API key from Secret Manager, optional for model evals>
 PUBLIC_BASE_URL=https://roomclarity.com
 ```
 
@@ -94,7 +95,7 @@ gcloud run deploy meeting-decision-maker-web \
   --region us-central1 \
   --allow-unauthenticated \
   --set-env-vars=PUBLIC_BASE_URL=https://roomclarity.com \
-  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest,ROOM_CLARITY_ADMIN_TOKEN=room-clarity-admin-token:latest
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest,ROOM_CLARITY_ADMIN_TOKEN=room-clarity-admin-token:latest
 ```
 
 Using `--set-secrets` with only one secret can replace the existing set of secret-backed variables. Prefer the full command above or inspect the service after deployment.

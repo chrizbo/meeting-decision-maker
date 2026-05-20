@@ -35,6 +35,8 @@ Preserve timestamp and speaker evidence when available. If the plan is not yet c
 
 Queue a suggestion when the transcript shows the team moving toward approval, launch, commitment, or resourcing without discussing meaningful failure paths.
 
+Use the live meeting agent strategy: speak when the failure path is material and the host can act on it now. If the risk is already captured as a durable risk and the team is discussing mitigation, avoid a separate agent response.
+
 Raise priority when:
 
 - The decision appears hard to reverse.
@@ -46,6 +48,8 @@ Raise priority when:
 - A strategy does not name what is out of bounds, making drift likely.
 
 If the team begins discussing the same risk, add follow-up text that names mitigation options or warning signs.
+
+If several risks appear in the same topic, choose the one with the strongest combination of impact, reversibility, and actionability. Do not create separate live responses for every plausible failure path.
 
 ## Output Shape
 
@@ -77,3 +81,5 @@ For CLI use, include a concise list of top failure paths, mitigations, and warni
 For the underlying RTT method, read [references/rtt-source.md](references/rtt-source.md).
 
 For Chris Butler decision-making principles, read [../references/chris-butler-decision-principles.md](../references/chris-butler-decision-principles.md).
+
+For live meeting response budgets and meeting bridge quality, read [../references/live-meeting-agent-strategy.md](../references/live-meeting-agent-strategy.md).

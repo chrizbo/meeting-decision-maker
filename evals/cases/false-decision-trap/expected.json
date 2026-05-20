@@ -1,6 +1,17 @@
 {
   "name": "false-decision-trap",
   "transcript": "./transcript.vtt",
+  "principles_under_test": [
+    "consensus illusion",
+    "discourse before decision",
+    "false decision trap",
+    "assumption challenge"
+  ],
+  "decision_context": {
+    "decision_type": "technical",
+    "decision_tempo": "chronos",
+    "decision_maker": "unknown"
+  },
   "events": [
     {
       "at": 30,
@@ -10,7 +21,15 @@
           "status": "forming",
           "title": "Dashboard performance approach",
           "summary": "Decide whether the dashboard performance problem needs a rewrite or a targeted rendering fix; there is no consensus yet.",
+          "decision_stage": "discourse",
           "consensus": "none",
+          "decision_type": "technical",
+          "decision_tempo": "chronos",
+          "discourse_state": "active_discourse",
+          "decision_maker": "unknown",
+          "tradeoff": "Targeted performance fix even over a full framework rewrite until evidence shows the framework is the bottleneck.",
+          "reversibility": "unclear",
+          "bias_check": "consensus illusion / preference-as-decision",
           "why": "The decision question appears only after the group reframes the strong preference into a real tradeoff, and the transcript explicitly says approval is not being requested today."
         }
       ]
@@ -23,6 +42,9 @@
           "agent": "Assumptions Challenge",
           "priority": "high",
           "summary": "Ask what evidence shows the framework is the bottleneck rather than data loading or chart rendering.",
+          "bias_check": "confirmation bias / false dichotomy",
+          "useful_friction": "Prevents a strong preference from becoming a rewrite decision before evidence is collected.",
+          "human_judgment_role": "Helps the team ask for disconfirming evidence without letting the agent decide the technical path.",
           "why": "The cue names the central assumption that would determine whether rewrite is justified."
         }
       ]

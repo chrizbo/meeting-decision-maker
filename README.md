@@ -99,15 +99,16 @@ Install path:
 6. Install the development app into your Zoom account.
 7. Launch it from the Zoom desktop app during a test meeting.
 
-The current codebase includes the Zoom Apps SDK launcher path, OAuth callback, RTMS webhook receiver, Gemini cue analysis, browser dashboard polling for RTMS session state, and marketplace support pages. Full setup notes are in `docs/zoom-app-installation.md`.
+The current codebase includes the Zoom Apps SDK launcher path, OAuth callback, RTMS webhook receiver, LLM cue analysis, browser dashboard polling for RTMS session state, and marketplace support pages. Full setup notes are in `docs/zoom-app-installation.md`.
 
-Cloud Run should be deployed with all active secrets attached. The current required Zoom/Gemini environment variables are:
+Cloud Run should be deployed with all active secrets attached. The current required Zoom/LLM environment variables are:
 
 - `ZOOM_CLIENT_ID`
 - `ZOOM_CLIENT_SECRET`
 - `ZOOM_REDIRECT_URI`
 - `ZOOM_WEBHOOK_SECRET_TOKEN`
 - `GEMINI_API_KEY`
+- `OPENAI_API_KEY` when testing OpenAI models
 - `PUBLIC_BASE_URL=https://roomclarity.com`
 - `ROOM_CLARITY_ADMIN_TOKEN` for service-admin inspection routes such as `GET /api/rtms/sessions`
 
@@ -125,9 +126,11 @@ Local development defaults to in-memory sessions. Use `SESSION_STORE=firestore n
 
 ## LLM Path
 
-The static prototype still loads `fixtures/mock-llm-output.json` when Gemini is not configured. The live service can invoke Gemini using the portable skills in `skills/` as the instruction layer. See `docs/llm-integration-notes.md`.
+The static prototype still loads `fixtures/mock-llm-output.json` when no live LLM provider is configured. The live service can invoke Gemini or OpenAI using the portable skills in `skills/` as the instruction layer. See `docs/llm-integration-notes.md`.
 
-The Node service can now invoke Gemini for live cue analysis. By default it uses `gemini-2.5-flash-lite`, which is the fast/cost-efficient Gemini API option. Override it with `GEMINI_MODEL` when needed.
+The Node service can now invoke Gemini or OpenAI for live cue analysis. By default it uses Gemini with `gemini-2.5-flash-lite`, which is the fast/cost-efficient Gemini API option. Override it with `GEMINI_MODEL` when needed. Set `LLM_PROVIDER=openai` and `OPENAI_MODEL=gpt-5.4` to make OpenAI the service default, or use provider-qualified eval model strings such as `openai:gpt-5.4` without changing the service default. OpenAI reasoning defaults to `low`; override with `OPENAI_REASONING_EFFORT` for slower quality-oriented tests.
+
+For regular live meeting use, keep the default Gemini Flash-Lite path. OpenAI GPT-5.4 and GPT-5.5 are wired for model comparisons, qualitative judge passes, selective slow-lane analysis, and post-meeting synthesis experiments.
 
 Gemini setup:
 
@@ -147,7 +150,22 @@ Gemini setup:
 
    The response should include `"enabled":true`.
 
-When `GEMINI_API_KEY` is present, the browser sends each newly played transcript cue to `POST /api/analyze-cue` with a short rolling transcript window and compact board state. That state includes already captured decisions, risks, actions, and open agent issues with IDs so Gemini can update existing items when the latest transcript adds nuance. When the key is absent, the app keeps using the mock fixture and browser fallback rules.
+OpenAI setup:
+
+1. Create an OpenAI API key.
+2. Start the local service with the key:
+
+   ```bash
+   OPENAI_API_KEY=your_key LLM_PROVIDER=openai OPENAI_MODEL=gpt-5.4 npm start
+   ```
+
+3. For model sweeps against a service that has both provider keys, use:
+
+   ```bash
+   EVAL_MODELS=gemini:gemini-2.5-flash-lite,openai:gpt-5.4,openai:gpt-5.5 npm run eval:models
+   ```
+
+When an LLM provider key is present, the browser sends each newly played transcript cue to `POST /api/analyze-cue` with a short rolling transcript window and compact board state. That state includes already captured decisions, risks, actions, and open agent issues with IDs so the model can update existing items when the latest transcript adds nuance. When no key is present, the app keeps using the mock fixture and browser fallback rules.
 
 Evaluate the current prompt path:
 
@@ -155,7 +173,7 @@ Evaluate the current prompt path:
 npm run eval
 ```
 
-The default eval replays the synthetic product decision transcript against the curated mock LLM fixture. To score a live local Gemini-backed service, start the app with `GEMINI_API_KEY`, then run:
+The default eval replays the synthetic product decision transcript against the curated mock LLM fixture. To score a live local LLM-backed service, start the app with a provider key, then run:
 
 ```bash
 node evals/run-evals.js --live http://localhost:8787
