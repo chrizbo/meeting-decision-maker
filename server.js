@@ -891,7 +891,7 @@ async function getSessionByAccessId(id) {
 
   if (!firestore) {
     return Array.from(sessions.values()).find(function(session) {
-      return session.publicSessionId === id || session.zoomMeetingId === id;
+      return session.publicSessionId === id || session.zoomMeetingId === id || session.zoomMeetingUuid === id;
     }) || null;
   }
 
@@ -944,6 +944,7 @@ async function createSession(input = {}) {
     host: input.host || 'Meeting host',
     attendees: Array.isArray(input.attendees) ? input.attendees : [],
     zoomMeetingId: input.zoomMeetingId || null,
+    zoomMeetingUuid: input.meetingUuid || null,
     platform: input.platform || 'web',
     createdAt,
     updatedAt: createdAt
@@ -1384,7 +1385,10 @@ async function handleApi(req, res, pathname) {
       return;
     }
     const requestedId = decodeURIComponent(rtmsStateMatch[1]);
-    const state = rtmsSessionStates.get(requestedId);
+    const state = rtmsSessionStates.get(requestedId) ||
+      Array.from(rtmsSessionStates.values()).find(function(s) {
+        return s.meetingUuid === requestedId || s.streamId === requestedId || s.sessionId === requestedId;
+      });
     if (!state) {
       sendJson(res, 404, { error: 'RTMS session not found' });
       return;

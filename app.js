@@ -455,7 +455,17 @@ async function copyDashboardUrl() {
 
 function rtmsStatusText(response) {
   if (!response) return '';
-  return response.status || response.state || response.rtmsStatus || response.message || response.result || '';
+  const raw = response.status || response.state || response.rtmsStatus || response.message || response.result;
+  if (raw === null || raw === undefined || raw === '') return '';
+  if (typeof raw !== 'string') {
+    // Zoom SDK may return { status: { rtmsStatus: "inactive", ... } }
+    if (typeof raw === 'object') {
+      const inner = raw.rtmsStatus || raw.status || raw.state || raw.message;
+      return inner ? String(inner) : JSON.stringify(raw).slice(0, 80);
+    }
+    return String(raw);
+  }
+  return raw;
 }
 
 function setRtmsButton(status) {
@@ -554,7 +564,8 @@ async function createMeetingSession(meeting) {
       topic: meeting.topic,
       host: meeting.host,
       attendees: meeting.attendees,
-      zoomMeetingId: meeting.meetingId
+      zoomMeetingId: meeting.meetingId,
+      meetingUuid: meeting.meetingUuid || ''
     })
   });
   if (!response.ok) throw new Error('session request failed');
@@ -618,7 +629,7 @@ async function maybeInitializeZoomApp() {
 
   try {
     const contextResult = await safeZoomCall('getMeetingContext', {});
-    const uuidResult = contextResult.ok ? { ok: true, value: {} } : await safeZoomCall('getMeetingUUID', {});
+    const uuidResult = await safeZoomCall('getMeetingUUID', {});
     const runningContextResult = await safeZoomCall('getRunningContext', {});
     const userContextResult = await safeZoomCall('getUserContext', {});
     const supportedApisResult = await safeZoomCall('getSupportedJsApis', {});
@@ -645,8 +656,10 @@ async function maybeInitializeZoomApp() {
     await refreshRtmsStatus();
     await maybeAutoStartRtms();
     const meeting = normalizeZoomMeetingContext(contextResult.value || {});
+    const meetingUuid = uuidResult.value && (uuidResult.value.meetingUUID || uuidResult.value.uuid || '');
+    if (meetingUuid) meeting.meetingUuid = meetingUuid;
     if (!meeting.meetingId && uuidResult.value) {
-      meeting.meetingId = uuidResult.value.meetingUUID || uuidResult.value.meetingId || uuidResult.value.meetingID || '';
+      meeting.meetingId = meetingUuid || uuidResult.value.meetingId || uuidResult.value.meetingID || '';
     }
     let participants = [];
     if (typeof window.zoomSdk.getMeetingParticipants === 'function') {
@@ -833,7 +846,7 @@ function applyRtmsSessionState(session) {
 async function loadRtmsSessionState(id) {
   if (!id) return false;
   try {
-    const token = currentDashboardToken();
+    const token = currentDashboardToken() || (state.zoomSession && state.zoomSession.dashboardToken) || '';
     const tokenParam = token ? '?t=' + encodeURIComponent(token) : '';
     const response = await fetch('/api/rtms/sessions/' + encodeURIComponent(id) + tokenParam, { cache: 'no-store' });
     if (!response.ok) return false;
@@ -846,7 +859,12 @@ async function loadRtmsSessionState(id) {
 
 function startRtmsPolling() {
   const meeting = state.meetingContext || {};
-  const candidates = [meeting.meetingId, state.zoomSession && state.zoomSession.zoomMeetingId, currentDashboardSessionId()].filter(Boolean);
+  const candidates = [
+    meeting.meetingUuid,
+    meeting.meetingId,
+    state.zoomSession && state.zoomSession.zoomMeetingId,
+    currentDashboardSessionId()
+  ].filter(Boolean);
   if (!candidates.length || rtmsPollTimer) return;
 
   async function poll() {
