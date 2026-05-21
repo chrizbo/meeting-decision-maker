@@ -1131,7 +1131,8 @@ async function startRtmsClient(payload = {}) {
   const joined = client.join(Object.assign({}, payload, {
     client: process.env.ZM_RTMS_CLIENT || process.env.ZOOM_CLIENT_ID,
     secret: process.env.ZM_RTMS_SECRET || process.env.ZOOM_CLIENT_SECRET,
-    pollInterval: Number(process.env.RTMS_POLL_INTERVAL_MS || 10)
+    pollInterval: Number(process.env.RTMS_POLL_INTERVAL_MS || 10),
+    ca: process.env.RTMS_CA_PATH || '/etc/ssl/certs/ca-certificates.crt'
   }));
   if (!joined) {
     state.status = 'start_failed';
