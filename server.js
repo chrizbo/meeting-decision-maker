@@ -1018,10 +1018,20 @@ function timestampUnitScale(unit) {
   return 1;
 }
 
+function resolveTimestampUnit(value, unitHint) {
+  const inferred = transcriptTimestampUnit(value);
+  if (!unitHint) return inferred;
+  const absolute = Math.abs(Number(value));
+  if (unitHint === 'ns' && absolute < 1_000_000_000_000_000) return inferred;
+  if (unitHint === 'us' && absolute < 1_000_000_000_000) return inferred;
+  if (unitHint === 'ms' && absolute >= 1_000_000_000_000_000) return inferred;
+  return unitHint;
+}
+
 function timestampToSeconds(timestamp, state, unitHint) {
   const value = Number(timestamp != null ? timestamp : Date.now());
   if (!Number.isFinite(value)) return state.transcript.length ? state.transcript[state.transcript.length - 1].end : 0;
-  const unit = state.firstTranscriptTimestampUnit || unitHint || transcriptTimestampUnit(value);
+  const unit = state.firstTranscriptTimestampUnit || resolveTimestampUnit(value, unitHint);
   if (state.firstTranscriptTimestamp == null) {
     state.firstTranscriptTimestamp = value;
     state.firstTranscriptTimestampUnit = unit;
@@ -1041,7 +1051,7 @@ function normalizedTranscriptStart(rawTimestamp, state, metadata = {}) {
   const previousCue = state.transcript[state.transcript.length - 1];
   const parsedStart = timestampToSeconds(rawTimestamp, state, metadata.timestampUnit);
   if (!previousCue || parsedStart > previousCue.start) return parsedStart;
-  return Math.max(arrivalStart, previousCue.start + 0.001);
+  return Math.max(arrivalStart, previousCue.end || previousCue.start + 3);
 }
 
 function transcriptWindowForServerCue(state, cue) {
