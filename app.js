@@ -246,7 +246,6 @@ const els = {
   controlsMenu: document.querySelector('#controlsMenu'),
   playButton: document.querySelector('#playButton'),
   resetButton: document.querySelector('#resetButton'),
-  rtmsButton: document.querySelector('#rtmsButton'),
   rtmsStatus: document.querySelector('#rtmsStatus'),
   toggleTranscriptButton: document.querySelector('#toggleTranscriptButton'),
   workspace: document.querySelector('.workspace'),
@@ -305,6 +304,7 @@ const els = {
 };
 
 let rtmsPollTimer = null;
+let rtmsStarted = false;
 let runwayTimerFrame = null;
 
 function configuredRunwayDuration() {
@@ -474,16 +474,7 @@ function rtmsStatusText(response) {
 }
 
 function setRtmsButton(status) {
-  if (!els.rtmsButton) return;
-  const normalized = String(status || '').toLowerCase();
   if (els.rtmsStatus) els.rtmsStatus.textContent = status ? 'RTMS: ' + status : 'RTMS status unknown';
-  if (normalized.includes('start') || normalized.includes('active') || normalized.includes('running')) {
-    els.rtmsButton.textContent = 'Stop RTMS';
-    els.rtmsButton.dataset.rtmsActive = 'true';
-    return;
-  }
-  els.rtmsButton.textContent = 'Start RTMS';
-  els.rtmsButton.dataset.rtmsActive = 'false';
 }
 
 async function refreshRtmsStatus() {
@@ -501,46 +492,19 @@ async function refreshRtmsStatus() {
   }
 }
 
-async function toggleRtms() {
-  if (!window.zoomSdk) {
-    setRtmsButton('Zoom SDK unavailable');
-    showZoomDiagnostics(['Zoom SDK unavailable']);
-    return;
-  }
-  const active = els.rtmsButton.dataset.rtmsActive === 'true';
-  const method = active ? 'stopRTMS' : 'startRTMS';
-  if (typeof window.zoomSdk[method] !== 'function') {
-    setRtmsButton(method + ' unavailable');
-    showZoomDiagnostics([method + ' unavailable']);
-    return;
-  }
-
-  els.rtmsButton.disabled = true;
-  try {
-    const response = await window.zoomSdk[method]();
-    const status = rtmsStatusText(response) || (active ? 'stopping' : 'starting');
-    setRtmsButton(active ? 'stopped' : 'started');
-    showZoomDiagnostics(['RTMS ' + status]);
-  } catch (error) {
-    showZoomDiagnostics(['RTMS ' + method + ': ' + zoomErrorMessage(error)]);
-  } finally {
-    els.rtmsButton.disabled = false;
-    await refreshRtmsStatus();
-  }
-}
-
 async function maybeAutoStartRtms() {
   if (!window.zoomSdk || typeof window.zoomSdk.startRTMS !== 'function') {
     setRtmsButton('startRTMS unavailable');
     showZoomDiagnostics(['startRTMS unavailable']);
     return;
   }
-  if (els.rtmsButton && els.rtmsButton.dataset.rtmsActive === 'true') return;
+  if (rtmsStarted) return;
 
   try {
     const response = await window.zoomSdk.startRTMS();
+    rtmsStarted = true;
     const status = rtmsStatusText(response) || 'start requested';
-    setRtmsButton('started');
+    setRtmsButton(status);
     showZoomDiagnostics(['RTMS ' + status]);
   } catch (error) {
     showZoomDiagnostics(['RTMS auto-start: ' + zoomErrorMessage(error)]);
@@ -627,7 +591,6 @@ async function maybeInitializeZoomApp() {
   state.transcriptVisible = false;
   els.workspace.classList.add('transcript-hidden');
   els.toggleTranscriptButton.textContent = 'Show Transcript';
-  if (els.rtmsButton) els.rtmsButton.hidden = false;
   setRtmsButton('checking APIs');
 
   if (currentDashboardSessionId()) return;
@@ -1753,7 +1716,6 @@ els.copyDashboardButton.addEventListener('click', copyDashboardUrl);
 els.shareDashboardButton.addEventListener('click', shareDashboard);
 els.openRunwayButton.addEventListener('click', showRunway);
 els.runwayLiveButton.addEventListener('click', hideRunway);
-if (els.rtmsButton) els.rtmsButton.addEventListener('click', toggleRtms);
 
 els.transcriptFile.addEventListener('change', async function(event) {
   const file = event.target.files[0];
