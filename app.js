@@ -1795,7 +1795,9 @@ async function initializeApp() {
   await maybeInitializeZoomApp();
   await loadAnalysisConfig();
   await loadLlmOutput();
-  loadTranscript(demoVtt, 'product-decision-demo.vtt');
+  if (!document.body.classList.contains('zoom-app-surface')) {
+    loadTranscript(demoVtt, 'product-decision-demo.vtt');
+  }
   applyMeetingContext(state.meetingContext || fakeZoomMeeting);
   startRtmsPolling();
 }

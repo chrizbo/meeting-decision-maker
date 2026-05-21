@@ -639,6 +639,10 @@ h2 {
   font-size: 13px;
 }
 
+.zoom-app-surface .playback-row {
+  display: none;
+}
+
 select {
   min-width: 88px;
   border: 1px solid var(--line);
