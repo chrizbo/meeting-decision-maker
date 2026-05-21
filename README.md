@@ -20,6 +20,7 @@ Start with a human-shared web page using mock transcript playback, then use the 
 - `docs/zoom-marketplace-test-plan.md`: Zoom Marketplace review test plan
 - `docs/future-specs/recap-drafting.md`: future recap drafting and brief preview workflow
 - `docs/future-specs/meeting-series-linking.md`: future meeting-series linking and carry-forward context workflow
+- `docs/future-specs/meeting-runway.md`: future start board for orienting the first minutes of a meeting
 - `docs/future-specs/meeting-library.md`: future Meeting Library concept for accessible meetings, briefs, and series
 - `skills/`: portable red-team agent skills and meeting-tool configs
 - `sample-transcripts/`: synthetic transcript fixtures for prototyping

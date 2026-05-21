@@ -6,6 +6,209 @@ const fakeZoomMeeting = {
   dashboardSlug: '/m/7QK4-MVP'
 };
 
+const DEFAULT_RUNWAY_SECONDS = 90;
+
+const runwayCases = {
+  default: {
+    title: 'Start with the decision in view',
+    agendaTitle: 'Agenda',
+    purpose: 'Decide whether the first prototype should prioritize live facilitation or post-meeting recap.',
+    agendaItems: [
+      {
+        title: 'Frame the product question',
+        owner: 'Maya',
+        desiredOutcome: 'Name the decision this meeting needs to make.'
+      },
+      {
+        title: 'Compare the live board and recap paths',
+        owner: 'Jordan',
+        desiredOutcome: 'Surface tradeoffs, assumptions, and risks.'
+      },
+      {
+        title: 'Choose the first prototype slice',
+        owner: 'Maya',
+        desiredOutcome: 'Leave with a build direction and next action.'
+      }
+    ],
+    decisionFrame: {
+      mode: 'Decide',
+      owner: 'Maya Patel',
+      successCondition: 'One MVP direction, one main risk, and one build action are clear.'
+    },
+    roles: [
+      { label: 'Host', value: 'Maya Patel' },
+      { label: 'Decision owner', value: 'Maya Patel' },
+      { label: 'Notes owner', value: 'Room Clarity' }
+    ],
+    participationNorm: 'Raise risks early, even if they are not fully formed.',
+    carryForwardItems: [
+      'Test whether the shared board changes live meeting behavior.',
+      'Keep the first agent set small: assumptions, pre-mortem, argument dissection.',
+      'Do not let Zoom-native integration block the static prototype.'
+    ],
+    openingPrompt: 'Which agenda item actually needs a decision today?'
+  },
+  'messy-agenda': {
+    title: 'Start by naming the meeting shape',
+    agendaTitle: 'Likely Topics',
+    purpose: 'The source agenda is loose, so use these inferred topics to quickly decide what this meeting is really for.',
+    agendaItems: [
+      {
+        title: 'Pricing comments',
+        owner: 'Possibly Maya',
+        desiredOutcome: 'Clarify whether this is a decision, review, or follow-up topic.'
+      },
+      {
+        title: 'Beta timing concern',
+        owner: 'Not clear',
+        desiredOutcome: 'Name whether timing needs a choice today.'
+      },
+      {
+        title: 'Customer feedback thread',
+        owner: 'Jordan',
+        desiredOutcome: 'Separate new evidence from background context.'
+      }
+    ],
+    decisionFrame: {
+      mode: 'Needs confirmation',
+      owner: 'Not clear',
+      successCondition: 'The room agrees what must be decided, reviewed, or parked.'
+    },
+    roles: [
+      { label: 'Host', value: 'Maya Patel' },
+      { label: 'Topic owner', value: 'Needs confirmation' },
+      { label: 'Notes owner', value: 'Room Clarity' }
+    ],
+    participationNorm: 'If the agenda feels fuzzy, say what outcome you thought this meeting was supposed to produce.',
+    carryForwardItems: [
+      'Meeting description mentioned pricing, beta timing, and customer feedback without a sequence.',
+      'No explicit decision owner was found.',
+      'Treat these as editable guesses, not commitments.'
+    ],
+    openingPrompt: 'What needs to be decided, reviewed, or unblocked today?'
+  },
+  'docs-attached': {
+    title: 'Start from the attached docs',
+    agendaTitle: 'Agenda and Doc Signals',
+    purpose: 'Use the attached materials to orient the room without turning the opening into document review.',
+    agendaItems: [
+      {
+        title: 'Confirm beta scope',
+        docTitle: 'PRD draft',
+        url: 'https://docs.google.com/document/d/mock-prd-draft',
+        owner: 'Maya',
+        desiredOutcome: 'Use the recently changed pricing and packaging section as decision context.'
+      },
+      {
+        title: 'Close launch owner gaps',
+        docTitle: 'Launch checklist',
+        url: 'https://docs.google.com/spreadsheets/d/mock-launch-checklist',
+        owner: 'Jordan',
+        desiredOutcome: 'Resolve three remaining owner gaps.'
+      },
+      {
+        title: 'Resolve prior beta cutoff',
+        docTitle: 'Prior meeting notes',
+        url: 'https://docs.google.com/document/d/mock-prior-meeting-notes',
+        owner: 'Room Clarity',
+        desiredOutcome: 'Use the unresolved prior decision as the carry-forward thread.'
+      }
+    ],
+    decisionFrame: {
+      mode: 'Review then decide',
+      owner: 'Maya Patel',
+      successCondition: 'Confirm whether the docs support a beta scope decision today.'
+    },
+    roles: [
+      { label: 'Host', value: 'Maya Patel' },
+      { label: 'Doc owner', value: 'Jordan Lee' },
+      { label: 'Decision owner', value: 'Maya Patel' }
+    ],
+    participationNorm: 'Reference the doc when it changes the decision; skip it when it is just background.',
+    carryForwardItems: [
+      'Open PRD comment asks whether beta users get advanced reporting.',
+      'Checklist is missing owners for support docs, analytics review, and sales enablement.',
+      'Prior notes asked for a smaller beta but did not define the cutoff.'
+    ],
+    openingPrompt: 'Which attached-doc signal should change what we decide today?'
+  },
+  'weak-frame': {
+    title: 'The decision frame needs confirmation',
+    agendaTitle: 'Possible Focus',
+    purpose: 'The meeting has useful context, but the decision authority and success condition are not yet clear.',
+    agendaItems: [
+      {
+        title: 'Live board usefulness',
+        owner: 'Maya',
+        desiredOutcome: 'Decide whether this is evidence gathering or a product direction choice.'
+      },
+      {
+        title: 'Host attention risk',
+        owner: 'Jordan',
+        desiredOutcome: 'Clarify whether the risk blocks the next slice.'
+      },
+      {
+        title: 'Prototype next step',
+        owner: 'Not clear',
+        desiredOutcome: 'Assign one concrete follow-up if the room aligns.'
+      }
+    ],
+    decisionFrame: {
+      mode: 'Decide, align, or explore?',
+      owner: 'Needs confirmation',
+      successCondition: 'The room chooses the kind of meeting before treating anything as a decision.'
+    },
+    roles: [
+      { label: 'Host', value: 'Maya Patel' },
+      { label: 'Decision owner', value: 'Unconfirmed' },
+      { label: 'Risk owner', value: 'Unconfirmed' }
+    ],
+    participationNorm: 'Do not let silence turn an unclear frame into accidental agreement.',
+    carryForwardItems: [
+      'There are signs of a product decision, but no explicit owner.',
+      'The group may only need alignment before a later decision.',
+      'The board should capture uncertainty rather than invent authority.'
+    ],
+    openingPrompt: 'Are we deciding something today, or getting aligned enough to decide later?'
+  },
+  'sparse-context': {
+    title: 'Start with one useful question',
+    agendaTitle: 'Available Clues',
+    purpose: 'There is not enough structured context to build a confident runway, so keep the start lightweight.',
+    agendaItems: [
+      {
+        title: 'Meeting topic only',
+        owner: 'Unknown',
+        desiredOutcome: 'Product Decision Review'
+      },
+      {
+        title: 'Participants',
+        owner: 'Unknown',
+        desiredOutcome: 'Maya Patel and Jordan Lee are expected.'
+      }
+    ],
+    decisionFrame: {
+      mode: 'Unknown',
+      owner: 'Unknown',
+      successCondition: 'The host names the goal before the conversation drifts.'
+    },
+    roles: [
+      { label: 'Host', value: 'Maya Patel' },
+      { label: 'Decision owner', value: 'Unknown' },
+      { label: 'Notes owner', value: 'Room Clarity' }
+    ],
+    participationNorm: 'Name missing context early instead of filling it in silently.',
+    carryForwardItems: [
+      'No agenda, docs, or prior brief are attached in this simulation.',
+      'Runway content should stay modest when confidence is low.',
+      'The first minute should help the host frame the meeting.'
+    ],
+    openingPrompt: 'What would make this meeting worth ending early?'
+  }
+};
+
+const runwayStub = configuredRunwayData();
+
 const demoVtt = "WEBVTT\n\nNOTE\nSynthetic transcript fixture for Meeting Decision Maker prototype. No real meeting content.\n\n00:00:02.000 --> 00:00:08.000\nMaya Patel: Let's use this session to decide whether the first prototype should focus on a live meeting board or a post-meeting summary.\n\n00:00:08.500 --> 00:00:15.000\nJordan Lee: I think the live board is the better first bet because it lets us see decisions forming while the conversation is still happening.\n\n00:00:15.500 --> 00:00:22.000\nMaya Patel: The summary is easier to build, though. We could upload a transcript, extract decisions, and avoid the timing problem for now.\n\n00:00:22.500 --> 00:00:31.000\nJordan Lee: True, but if we do that first, we may learn a lot about summarization and not much about whether the shared page changes the meeting behavior.\n\n00:00:31.500 --> 00:00:39.000\nMaya Patel: So the product decision is whether the MVP optimizes for implementation speed or for testing the live facilitation experience.\n\n00:00:39.500 --> 00:00:47.000\nJordan Lee: Exactly. My assumption is that the live facilitation experience is the differentiated part. The decision log is useful, but less novel.\n\n00:00:47.500 --> 00:00:56.000\nMaya Patel: What has to be true for that to work is that a host can actually pay attention to the page while also running the meeting.\n\n00:00:56.500 --> 00:01:04.000\nJordan Lee: That is the biggest risk. Maybe the host needs a very low-friction queue: decisions, risks, and agent hands, nothing else.\n\n00:01:04.500 --> 00:01:13.000\nMaya Patel: Another assumption is that people will tolerate the page being screen-shared. It could feel useful, or it could feel like visual noise.\n\n00:01:13.500 --> 00:01:21.000\nJordan Lee: We can test that with mock transcript playback. If the page gets distracting, we simplify before we touch Zoom RTMS.\n\n00:01:21.500 --> 00:01:31.000\nMaya Patel: If we imagine the live board failing, I think it fails because the agent suggestions arrive too late or are too generic to influence the discussion.\n\n00:01:31.500 --> 00:01:39.000\nJordan Lee: Good point. The warning sign would be the host repeatedly ignoring suggestions or saying the team already covered them.\n\n00:01:39.500 --> 00:01:48.000\nMaya Patel: Then the mitigation is to tune the agents around fewer, higher-quality interventions. We should start with three agents, not a whole library.\n\n00:01:48.500 --> 00:01:57.000\nJordan Lee: Assumptions Challenge, Pre-Mortem, and Argument Dissection feel like the right first three because they map to decisions, plans, and claims.\n\n00:01:57.500 --> 00:02:07.000\nMaya Patel: The argument for the live board is that it creates an observable meeting artifact. What evidence do we have that people want that during the meeting, not after?\n\n00:02:07.500 --> 00:02:15.000\nJordan Lee: Mostly intuition and prior feedback. We should not pretend we know yet. The prototype should test whether it helps the host intervene.\n\n00:02:15.500 --> 00:02:24.000\nMaya Patel: Then let's make the decision lightweight: build the human-shared live board first, support VTT and TXT fixtures, and replay transcripts on a timer.\n\n00:02:24.500 --> 00:02:33.000\nJordan Lee: Agreed. We will keep the post-meeting dashboard, but the first product question is whether live decision support changes the conversation.\n\n00:02:33.500 --> 00:02:42.000\nMaya Patel: Let's capture that as the decision. MVP is a timed mock-transcript live board, shared by the host, with three queued red-team agents.\n\n00:02:42.500 --> 00:02:48.000\nJordan Lee: And the next action is to build the playback loop and agent queue before we worry about Zoom-native integration.\n\n00:02:49.000 --> 00:02:58.000\nMaya Patel: Decision: the transcript rail should be hideable during screen share, because sometimes the board needs to be the main artifact.\n\n00:02:58.500 --> 00:03:07.000\nJordan Lee: Agreed. The assumption is that hosts will want both modes: transcript visible while reviewing evidence, hidden when facilitating the group.\n\n00:03:07.500 --> 00:03:16.000\nMaya Patel: The risk is that hiding the transcript could make the board feel less grounded if people cannot see why a decision appeared.\n\n00:03:16.500 --> 00:03:25.000\nJordan Lee: Then the mitigation is to keep evidence timestamps on each card, even when the transcript panel is hidden.\n\n00:03:25.500 --> 00:03:35.000\nMaya Patel: Decision: clicking any decision, risk, action, or agent issue should open a facilitation modal with suggested next steps.\n\n00:03:35.500 --> 00:03:45.000\nJordan Lee: The argument for that is that the host should not just see an alert; they need help knowing what to say next.\n\n00:03:45.500 --> 00:03:54.000\nMaya Patel: What evidence do we have that hosts will use a modal live rather than just ignore it?\n\n00:03:54.500 --> 00:04:04.000\nJordan Lee: We do not know yet. The prototype should tell us whether the modal is helpful or too much interaction during a meeting.\n\n00:04:04.500 --> 00:04:14.000\nMaya Patel: Decision: risks and actions should be removable with a small x when the host thinks the capture is wrong or not useful.\n\n00:04:14.500 --> 00:04:23.000\nJordan Lee: That creates a failure mode too. If it is too easy to remove things, a host might erase useful dissent too quickly.\n\n00:04:23.500 --> 00:04:32.000\nMaya Patel: The warning sign is if the host removes agent issues before the team has a chance to consider them.\n\n00:04:32.500 --> 00:04:42.000\nJordan Lee: Action: we should eventually track dismissed items so the meeting record can show what was removed and by whom.\n\n00:04:42.500 --> 00:04:52.000\nMaya Patel: Decision: the shared dashboard URL can be open-by-link for the prototype, but it must be hard to guess.\n\n00:04:52.500 --> 00:05:02.000\nJordan Lee: Longer term, the dashboard should support account access through Google or Zoom login before we use this with sensitive meetings.\n\n00:05:02.500 --> 00:05:12.000\nMaya Patel: Decision: keep the full transcript with the meeting record for now, because the evidence matters while we are learning the product shape.\n\n00:05:12.500 --> 00:05:23.000\nJordan Lee: The assumption is that prototype users are comfortable with that retention because they control the uploaded transcript fixtures.\n\n00:05:23.500 --> 00:05:34.000\nMaya Patel: If that assumption is wrong, the product needs retention controls earlier than we planned.\n\n00:05:34.500 --> 00:05:44.000\nJordan Lee: Action: add retention settings to the production-readiness list, but do not block the static prototype on that.\n";
 
 const state = {
@@ -29,7 +232,13 @@ const state = {
   boardDirty: true,
   openModalItem: null,
   zoomSession: null,
-  meetingContext: fakeZoomMeeting
+  meetingContext: fakeZoomMeeting,
+  runwayData: runwayStub,
+  runwayVisible: true,
+  runwayTimerActive: true,
+  runwayDuration: configuredRunwayDuration(),
+  runwayRemaining: configuredRunwayDuration(),
+  runwayLastTick: 0
 };
 
 const els = {
@@ -45,12 +254,26 @@ const els = {
   speedSelect: document.querySelector('#speedSelect'),
   meetingStatus: document.querySelector('#meetingStatus'),
   zoomDiagnostics: document.querySelector('#zoomDiagnostics'),
+  board: document.querySelector('.board'),
   meetingName: document.querySelector('#meetingName'),
   meetingAttendees: document.querySelector('#meetingAttendees'),
   boardTitle: document.querySelector('#boardTitle'),
+  openRunwayButton: document.querySelector('#openRunwayButton'),
   openDashboardButton: document.querySelector('#openDashboardButton'),
   copyDashboardButton: document.querySelector('#copyDashboardButton'),
   shareDashboardButton: document.querySelector('#shareDashboardButton'),
+  runwayPanel: document.querySelector('#runwayPanel'),
+  runwayLiveButton: document.querySelector('#runwayLiveButton'),
+  runwayProgress: document.querySelector('#runwayProgress'),
+  runwayTimer: document.querySelector('#runwayTimer'),
+  runwayTitle: document.querySelector('#runwayTitle'),
+  runwayPurpose: document.querySelector('#runwayPurpose'),
+  runwayAgendaTitle: document.querySelector('#runwayAgendaTitle'),
+  runwayAgendaList: document.querySelector('#runwayAgendaList'),
+  runwayDecisionFrame: document.querySelector('#runwayDecisionFrame'),
+  runwayCarryForward: document.querySelector('#runwayCarryForward'),
+  runwayNorm: document.querySelector('#runwayNorm'),
+  runwayOpeningPrompt: document.querySelector('#runwayOpeningPrompt'),
   clock: document.querySelector('#clock'),
   progressBar: document.querySelector('#progressBar'),
   transcriptList: document.querySelector('#transcriptList'),
@@ -82,6 +305,22 @@ const els = {
 };
 
 let rtmsPollTimer = null;
+let runwayTimerFrame = null;
+
+function configuredRunwayDuration() {
+  const params = new URLSearchParams(window.location.search);
+  const requested = Number(params.get('runwaySeconds'));
+  if (Number.isFinite(requested) && requested > 0) {
+    return Math.min(Math.max(Math.round(requested), 5), 180);
+  }
+  return DEFAULT_RUNWAY_SECONDS;
+}
+
+function configuredRunwayData() {
+  const params = new URLSearchParams(window.location.search);
+  const requestedCase = params.get('runwayCase') || 'default';
+  return runwayCases[requestedCase] || runwayCases.default;
+}
 
 function applyMeetingContext(meeting) {
   state.meetingContext = meeting;
@@ -633,10 +872,117 @@ function resetState(keepTranscript) {
   state.boardDirty = true;
   state.playing = false;
   state.lastTick = 0;
+  resetRunway();
   els.playButton.textContent = 'Start';
   els.meetingStatus.textContent = keepTranscript === false
     ? meeting.topic + ' · transcript loaded'
     : meeting.topic + ' · reset';
+}
+
+function resetRunway() {
+  cancelRunwayTimer();
+  state.runwayVisible = true;
+  state.runwayTimerActive = true;
+  state.runwayDuration = configuredRunwayDuration();
+  state.runwayRemaining = state.runwayDuration;
+  state.runwayLastTick = 0;
+  startRunwayTimer();
+}
+
+function showRunway() {
+  cancelRunwayTimer();
+  state.runwayVisible = true;
+  state.runwayTimerActive = false;
+  state.runwayRemaining = 0;
+  renderRunway();
+}
+
+function hideRunway() {
+  cancelRunwayTimer();
+  state.runwayVisible = false;
+  state.runwayTimerActive = false;
+  state.runwayLastTick = 0;
+  renderRunway();
+}
+
+function startRunwayTimer() {
+  if (!state.runwayVisible || !state.runwayTimerActive) return;
+  cancelRunwayTimer();
+  state.runwayLastTick = 0;
+  runwayTimerFrame = requestAnimationFrame(tickRunway);
+}
+
+function cancelRunwayTimer() {
+  if (runwayTimerFrame) cancelAnimationFrame(runwayTimerFrame);
+  runwayTimerFrame = null;
+}
+
+function tickRunway(now) {
+  runwayTimerFrame = null;
+  if (!state.runwayVisible || !state.runwayTimerActive) return;
+  if (!state.runwayLastTick) state.runwayLastTick = now;
+  const elapsed = (now - state.runwayLastTick) / 1000;
+  state.runwayLastTick = now;
+  state.runwayRemaining = Math.max(0, state.runwayRemaining - elapsed);
+  renderRunwayTimer();
+  if (state.runwayRemaining <= 0) {
+    hideRunway();
+    return;
+  }
+  runwayTimerFrame = requestAnimationFrame(tickRunway);
+}
+
+function renderRunway() {
+  if (!els.runwayPanel) return;
+  els.board.classList.toggle('runway-active', state.runwayVisible);
+  els.runwayPanel.hidden = !state.runwayVisible;
+  els.openRunwayButton.textContent = state.runwayVisible ? 'Context Open' : 'Runway';
+  els.openRunwayButton.disabled = state.runwayVisible;
+  if (!state.runwayVisible) return;
+
+  const data = state.runwayData;
+  els.runwayTitle.textContent = data.title;
+  els.runwayAgendaTitle.textContent = data.agendaTitle || 'Agenda';
+  els.runwayPurpose.textContent = data.purpose;
+  els.runwayAgendaList.innerHTML = data.agendaItems.map(function(item) {
+    const source = item.url
+      ? ' <a class="runway-doc-link" href="' + escapeHtml(item.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(item.docTitle || 'Source doc') + '</a>'
+      : '';
+    const title = '<strong>' + escapeHtml(item.title) + '</strong>';
+    return '<li>' + title +
+      '<span>' + escapeHtml(item.owner + ' · ' + item.desiredOutcome) + source + '</span></li>';
+  }).join('');
+  els.runwayDecisionFrame.innerHTML = [
+    ['Mode', data.decisionFrame.mode],
+    ['Owner', data.decisionFrame.owner],
+    ['Success', data.decisionFrame.successCondition]
+  ].map(runwayDefinitionRow).join('');
+  els.runwayCarryForward.innerHTML = data.carryForwardItems.map(function(item) {
+    return '<li>' + escapeHtml(item) + '</li>';
+  }).join('');
+  els.runwayNorm.textContent = data.participationNorm;
+  els.runwayOpeningPrompt.textContent = data.openingPrompt;
+  renderRunwayTimer();
+}
+
+function runwayDefinitionRow(row) {
+  return '<div><dt>' + escapeHtml(row[0]) + '</dt><dd>' + escapeHtml(row[1]) + '</dd></div>';
+}
+
+function renderRunwayTimer() {
+  if (!els.runwayLiveButton) return;
+  const active = state.runwayTimerActive && state.runwayRemaining > 0;
+  const progress = active ? 1 - (state.runwayRemaining / state.runwayDuration) : 1;
+  els.runwayTimer.textContent = active ? formatRunwayTime(state.runwayRemaining) : 'Close';
+  els.runwayProgress.style.width = Math.min(Math.max(progress, 0), 1) * 100 + '%';
+  els.runwayLiveButton.classList.toggle('counting', active);
+}
+
+function formatRunwayTime(seconds) {
+  const total = Math.ceil(seconds);
+  const min = String(Math.floor(total / 60)).padStart(2, '0');
+  const sec = String(total % 60).padStart(2, '0');
+  return min + ':' + sec;
 }
 
 function formatTime(seconds) {
@@ -658,6 +1004,7 @@ function renderTranscript() {
 function renderAll() {
   els.clock.textContent = formatTime(state.currentTime);
   els.progressBar.style.width = Math.min((state.currentTime / state.duration) * 100, 100) + '%';
+  renderRunway();
   renderCueHighlight();
   if (state.boardDirty) {
     renderDecisions();
@@ -1375,6 +1722,8 @@ els.speedSelect.addEventListener('change', function(event) {
 els.openDashboardButton.addEventListener('click', openDashboard);
 els.copyDashboardButton.addEventListener('click', copyDashboardUrl);
 els.shareDashboardButton.addEventListener('click', shareDashboard);
+els.openRunwayButton.addEventListener('click', showRunway);
+els.runwayLiveButton.addEventListener('click', hideRunway);
 if (els.rtmsButton) els.rtmsButton.addEventListener('click', toggleRtms);
 
 els.transcriptFile.addEventListener('change', async function(event) {

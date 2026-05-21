@@ -73,12 +73,55 @@
           </div>
           <div class="meeting-link">
             <div class="dashboard-actions">
+              <button id="openRunwayButton" type="button">Runway</button>
               <button id="openDashboardButton" type="button">Open</button>
               <button id="copyDashboardButton" type="button">Copy</button>
               <button id="shareDashboardButton" type="button">Share</button>
             </div>
           </div>
         </div>
+
+        <section id="runwayPanel" class="runway-panel" aria-labelledby="runwayTitle">
+          <div class="runway-main">
+            <div>
+              <p class="eyebrow">Meeting Runway</p>
+            </div>
+            <div class="runway-action">
+              <button id="runwayLiveButton" class="runway-live-button" type="button">
+                <span>Live Board</span>
+                <span id="runwayTimer">01:30</span>
+                <span id="runwayProgress" class="runway-progress" aria-hidden="true"></span>
+              </button>
+            </div>
+          </div>
+
+          <article class="runway-provocation">
+            <div>
+              <p class="eyebrow">Meeting Provocation</p>
+              <h3 id="runwayTitle">Start with the decision in view</h3>
+              <p id="runwayPurpose" class="runway-purpose"></p>
+            </div>
+            <div class="runway-provocation-details">
+              <p id="runwayNorm"></p>
+              <strong id="runwayOpeningPrompt"></strong>
+            </div>
+          </article>
+
+          <div class="runway-grid">
+            <article class="runway-block agenda-block">
+              <h4 id="runwayAgendaTitle">Agenda</h4>
+              <ol id="runwayAgendaList"></ol>
+            </article>
+            <article class="runway-block">
+              <h4>Decision Frame</h4>
+              <dl id="runwayDecisionFrame"></dl>
+            </article>
+            <article class="runway-block">
+              <h4>Carry Forward</h4>
+              <ul id="runwayCarryForward"></ul>
+            </article>
+          </div>
+        </section>
 
         <div class="decision-strip" id="decisionStrip">
           <article class="decision-card empty-state">
@@ -159,6 +202,6 @@
   </div>
 
   <script src="https://appssdk.zoom.us/sdk.js"></script>
-  <script src="/app.js?v=20260518-rtms-autostart"></script>
+  <script src="/app.js?v=20260520-runway-slice"></script>
 </body>
 </html>
