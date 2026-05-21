@@ -995,12 +995,10 @@ function timestampToSeconds(timestamp, state) {
   const value = Number(timestamp != null ? timestamp : Date.now());
   if (state.firstTranscriptTimestamp == null) state.firstTranscriptTimestamp = value;
   const relative = Math.max(0, value - state.firstTranscriptTimestamp);
-  // Unix epoch in milliseconds (> ~10 billion)
-  if (state.firstTranscriptTimestamp > 10_000_000_000) return relative / 1000;
-  // Unix epoch in seconds (> ~1 billion)
-  if (state.firstTranscriptTimestamp > 1_000_000_000) return relative;
-  // RTMS SDK sends microseconds from session start
-  return relative / 1_000_000;
+  // Date.now() fallback and Zoom event_ts are epoch milliseconds (year 2001 ≈ 978 billion ms)
+  if (state.firstTranscriptTimestamp > 978_307_200_000) return relative / 1000;
+  // RTMS SDK sends nanoseconds from session start (first timestamp is near 0)
+  return relative / 1_000_000_000;
 }
 
 function transcriptWindowForServerCue(state, cue) {
