@@ -801,18 +801,25 @@ function applyRtmsSessionState(session) {
   if (!session || !Array.isArray(session.transcript)) return;
   const previousDuration = state.duration || 0;
   const previousCueCount = state.cues.length;
-  state.cues = session.transcript.map(function(cue, index) {
-    const fallbackStart = index && state.cues[index - 1] ? state.cues[index - 1].end : 0;
-    const start = normalizedCueSeconds(cue.start, fallbackStart);
-    const end = Math.max(start, normalizedCueSeconds(cue.end, start + 3));
-    return {
+  const nextCues = [];
+  session.transcript.forEach(function(cue, index) {
+    const previousCue = nextCues[nextCues.length - 1];
+    const fallbackStart = previousCue ? previousCue.end : index * 3;
+    let start = normalizedCueSeconds(cue.start, fallbackStart);
+    if (previousCue && start <= previousCue.start) {
+      start = fallbackStart;
+    }
+    let end = normalizedCueSeconds(cue.end, start + 3);
+    if (end <= start) end = start + 3;
+    nextCues.push({
       id: cue.id || 'rtms-' + index,
       start,
       end,
       speaker: cue.speaker || 'Zoom participant',
       text: cue.text || ''
-    };
+    });
   });
+  state.cues = nextCues;
   state.duration = Math.max.apply(null, state.cues.map(function(cue) { return cue.end; }).concat([1]));
   state.decisions = (session.decisions || []).map(function(item) {
     return {
