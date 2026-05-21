@@ -506,7 +506,10 @@ async function maybeAutoStartRtms() {
     const status = rtmsStatusText(response) || 'start requested';
     setRtmsButton(status);
   } catch (error) {
-    showZoomDiagnostics(['RTMS auto-start: ' + zoomErrorMessage(error)]);
+    // startRTMS can fail when RTMS is already active from a server-side webhook trigger — treat as non-fatal
+    rtmsStarted = true;
+    console.warn('RTMS auto-start:', zoomErrorMessage(error));
+    setRtmsButton('listening');
   } finally {
     await refreshRtmsStatus();
   }
@@ -1810,6 +1813,10 @@ async function initializeApp() {
     loadTranscript(demoVtt, 'product-decision-demo.vtt');
   }
   applyMeetingContext(state.meetingContext || fakeZoomMeeting);
+  // Ensure runway content and board are rendered even when loadTranscript is skipped (Zoom App mode)
+  renderAll();
+  // Start the runway countdown regardless of whether a transcript was loaded
+  startRunwayTimer();
   startRtmsPolling();
 }
 
