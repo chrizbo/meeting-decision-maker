@@ -256,6 +256,7 @@ const els = {
   streamErrorTitle: document.querySelector('#streamErrorTitle'),
   streamErrorSummary: document.querySelector('#streamErrorSummary'),
   streamErrorDetails: document.querySelector('#streamErrorDetails'),
+  retryStreamButton: document.querySelector('#retryStreamButton'),
   board: document.querySelector('.board'),
   meetingName: document.querySelector('#meetingName'),
   meetingAttendees: document.querySelector('#meetingAttendees'),
@@ -497,22 +498,25 @@ function setRtmsButton(status) {
 async function refreshRtmsStatus() {
   if (!window.zoomSdk || typeof window.zoomSdk.getRTMSStatus !== 'function') {
     setRtmsButton('API unavailable');
-    return;
+    return '';
   }
   try {
     const response = await window.zoomSdk.getRTMSStatus();
     const status = rtmsStatusText(response);
     setRtmsButton(status);
+    return status;
   } catch (error) {
     showStreamError(
       'Unable to check the live stream.',
       'Room Clarity could not verify whether the meeting stream is available.',
       zoomErrorMessage(error)
     );
+    return '';
   }
 }
 
-async function maybeAutoStartRtms() {
+async function maybeAutoStartRtms(options) {
+  const force = Boolean(options && options.force);
   if (!window.zoomSdk || typeof window.zoomSdk.startRTMS !== 'function') {
     setRtmsButton('startRTMS unavailable');
     showStreamError(
@@ -522,27 +526,40 @@ async function maybeAutoStartRtms() {
     );
     return;
   }
-  if (rtmsStarted) return;
+  if (rtmsStarted && !force) return;
+  if (force) rtmsStarted = false;
 
   try {
+    if (els.retryStreamButton) els.retryStreamButton.disabled = true;
+    clearStreamError();
+    setRtmsButton(force ? 'restarting' : 'starting');
     const response = await window.zoomSdk.startRTMS();
     rtmsStarted = true;
     const status = rtmsStatusText(response) || 'start requested';
     setRtmsButton(status);
   } catch (error) {
-    // startRTMS can fail when the stream is already active from a server-side webhook trigger.
-    rtmsStarted = true;
     const message = zoomErrorMessage(error);
     console.warn('RTMS auto-start:', message);
     showStreamError(
       'Unable to start the live meeting stream.',
-      'Room Clarity opened, but Zoom did not start sending live transcript data.',
+      'Room Clarity opened, but Zoom did not start sending live transcript data. You can retry without resetting this board.',
       message
     );
-    setRtmsButton('listening');
+    rtmsStarted = false;
+    setRtmsButton('start failed');
   } finally {
-    await refreshRtmsStatus();
+    const status = await refreshRtmsStatus();
+    if (/active|started|running|listening/i.test(status)) {
+      rtmsStarted = true;
+      clearStreamError();
+    }
+    if (els.retryStreamButton) els.retryStreamButton.disabled = false;
   }
+}
+
+async function retryLiveMeetingStream() {
+  await maybeAutoStartRtms({ force: true });
+  startRtmsPolling();
 }
 
 async function safeZoomCall(name, fallback) {
@@ -1795,6 +1812,7 @@ els.speedSelect.addEventListener('change', function(event) {
 els.openDashboardButton.addEventListener('click', openDashboard);
 els.copyDashboardButton.addEventListener('click', copyDashboardUrl);
 els.shareDashboardButton.addEventListener('click', shareDashboard);
+els.retryStreamButton.addEventListener('click', retryLiveMeetingStream);
 els.openRunwayButton.addEventListener('click', showRunway);
 els.runwayLiveButton.addEventListener('click', hideRunway);
 

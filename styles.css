@@ -580,6 +580,20 @@ h1 {
   line-height: 1.4;
 }
 
+.stream-retry-button {
+  min-height: 32px;
+  margin-top: 10px;
+  padding: 0 12px;
+  border-color: #c99377;
+  background: #fffdf8;
+  color: #5a2f19;
+}
+
+.stream-retry-button:hover {
+  border-color: #a86745;
+  background: #fff8f2;
+}
+
 .stream-error details {
   max-width: 420px;
   color: #6f4229;
