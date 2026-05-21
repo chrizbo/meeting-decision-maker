@@ -486,7 +486,6 @@ async function refreshRtmsStatus() {
     const response = await window.zoomSdk.getRTMSStatus();
     const status = rtmsStatusText(response);
     setRtmsButton(status);
-    if (status) showZoomDiagnostics(['RTMS: ' + status]);
   } catch (error) {
     showZoomDiagnostics(['RTMS status: ' + zoomErrorMessage(error)]);
   }
@@ -495,7 +494,6 @@ async function refreshRtmsStatus() {
 async function maybeAutoStartRtms() {
   if (!window.zoomSdk || typeof window.zoomSdk.startRTMS !== 'function') {
     setRtmsButton('startRTMS unavailable');
-    showZoomDiagnostics(['startRTMS unavailable']);
     return;
   }
   if (rtmsStarted) return;
@@ -505,7 +503,6 @@ async function maybeAutoStartRtms() {
     rtmsStarted = true;
     const status = rtmsStatusText(response) || 'start requested';
     setRtmsButton(status);
-    showZoomDiagnostics(['RTMS ' + status]);
   } catch (error) {
     showZoomDiagnostics(['RTMS auto-start: ' + zoomErrorMessage(error)]);
   } finally {
@@ -607,15 +604,12 @@ async function maybeInitializeZoomApp() {
     const rtmsApis = ['startRTMS', 'stopRTMS', 'getRTMSStatus', 'onRTMSStatusChange'].filter(function(name) {
       return typeof window.zoomSdk[name] === 'function' || supportedApis.includes(name);
     });
-    showZoomDiagnostics([
-      rtmsApis.length ? 'RTMS APIs: ' + rtmsApis.join(', ') : 'RTMS APIs unavailable'
-    ]);
+    if (!rtmsApis.length) showZoomDiagnostics(['RTMS APIs unavailable']);
     if (typeof window.zoomSdk.onRTMSStatusChange === 'function') {
       try {
         await window.zoomSdk.onRTMSStatusChange(function(event) {
           const status = rtmsStatusText(event);
           setRtmsButton(status);
-          showZoomDiagnostics(['RTMS: ' + (status || 'status changed')]);
         });
       } catch (error) {
         showZoomDiagnostics(['RTMS listener: ' + zoomErrorMessage(error)]);
@@ -1795,7 +1789,8 @@ async function initializeApp() {
   await maybeInitializeZoomApp();
   await loadAnalysisConfig();
   await loadLlmOutput();
-  if (!document.body.classList.contains('zoom-app-surface')) {
+  const sessionId = currentDashboardSessionId();
+  if (!document.body.classList.contains('zoom-app-surface') && (!sessionId || sessionId === 'demo-session')) {
     loadTranscript(demoVtt, 'product-decision-demo.vtt');
   }
   applyMeetingContext(state.meetingContext || fakeZoomMeeting);
