@@ -1067,8 +1067,14 @@ async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata =
   if (!text) return { ignored: true, reason: 'empty transcript' };
 
   const rawTs = timestamp != null ? timestamp : (metadata.startTs != null ? metadata.startTs : payload.event_ts);
-  if (state.transcript.length === 0) console.log('RTMS first cue raw timestamp:', rawTs, 'type:', typeof rawTs);
+  const cueIndex = state.transcript.length;
+  if (cueIndex < 3) {
+    console.log(`RTMS cue[${cueIndex}] rawTs=${rawTs} type=${typeof rawTs} start_time=${payload.start_time} timestamp=${payload.timestamp} event_ts=${payload.event_ts} endTime=${metadata.endTime} unit=${state.firstTranscriptTimestampUnit}`);
+  }
   const start = normalizedTranscriptStart(rawTs, state, metadata);
+  if (cueIndex < 3) {
+    console.log(`RTMS cue[${cueIndex}] computed start=${start}s firstTs=${state.firstTranscriptTimestamp} unit=${state.firstTranscriptTimestampUnit}`);
+  }
   const rawEnd = metadata.endTime != null ? Number(metadata.endTime) : null;
   const parsedEnd = rawEnd != null && Number.isFinite(rawEnd) ? timestampToSeconds(rawEnd, state) : null;
   const end = (parsedEnd != null && parsedEnd > start) ? parsedEnd : start + 3;
@@ -1172,7 +1178,9 @@ async function startRtmsClient(payload = {}) {
   });
   let transcriptCount = 0;
   client.onTranscriptData(function(buffer, size, timestamp, metadata) {
-    if (transcriptCount === 0) console.log('RTMS first transcript:', key, 'user:', metadata && metadata.userName);
+    if (transcriptCount < 3) {
+      console.log(`RTMS SDK transcript[${transcriptCount}] key=${key} timestamp=${timestamp} type=${typeof timestamp} user=${metadata && metadata.userName}`);
+    }
     transcriptCount++;
     ingestRtmsTranscript(payload, buffer, size, timestamp, Object.assign({ timestampUnit: 'ns' }, metadata)).catch(function(error) {
       console.error('RTMS transcript analysis failed:', error.message);
@@ -1261,6 +1269,13 @@ async function handleRtmsWebhookEvent(event) {
 
   const transcriptText = payload.text || payload.transcript || payload.caption || payload.message;
   if (transcriptText) {
+    // Log full payload keys on first few transcript events so we can see what Zoom actually sends.
+    const state = getRtmsState(payload);
+    if (state.transcript.length < 2) {
+      console.log('RTMS webhook transcript payload keys:', Object.keys(payload).join(', '));
+      console.log('RTMS webhook ts fields: start_time=%s end_time=%s timestamp=%s event_ts=%s',
+        payload.start_time, payload.end_time, payload.timestamp, event.event_ts);
+    }
     // start_time is the transcript-specific Unix timestamp (ms); timestamp/event_ts is the generic event time
     // and is the same for every cue in a batch, so it must not be used as the primary source.
     return ingestRtmsTranscript(payload, transcriptText, transcriptText.length, payload.start_time || payload.timestamp || event.event_ts, {
