@@ -759,7 +759,7 @@ function applyRtmsSessionState(session) {
       detail: item.summary,
       evidence: item.evidence,
       transcriptReference: buildTranscriptReference(item.evidence, item.summary),
-      conversation: 'Review this RTMS-derived decision and confirm whether it belongs in the meeting record.',
+      conversation: decisionConversation(item.status || 'forming'),
       steps: ['Confirm the commitment.', 'Ask for objections or missing evidence.', 'Accept or reject the decision.']
     };
   });
