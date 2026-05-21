@@ -16,7 +16,6 @@
         <div>
           <h1>Room Clarity <span>Meeting Decision Maker</span></h1>
           <p id="meetingStatus" class="visually-hidden" aria-live="polite">Demo meeting · waiting to start</p>
-          <p id="zoomDiagnostics" class="zoom-diagnostics" hidden></p>
         </div>
       </div>
       <div class="topbar-menu">
@@ -28,11 +27,20 @@
           </label>
           <button id="toggleTranscriptButton" type="button">Hide Transcript</button>
           <button id="resetButton" type="button">Reset</button>
-          <p id="rtmsStatus" class="rtms-control-status">RTMS status unknown</p>
           <button id="playButton" type="button" class="primary">Start</button>
         </div>
       </div>
     </header>
+    <section id="streamError" class="stream-error" role="alert" hidden>
+      <div>
+        <strong id="streamErrorTitle">Unable to receive the live meeting stream.</strong>
+        <p id="streamErrorSummary">Room Clarity can still show the meeting shell, but live transcript and decision updates are unavailable.</p>
+      </div>
+      <details>
+        <summary>More details</summary>
+        <p id="streamErrorDetails"></p>
+      </details>
+    </section>
 
     <main class="workspace">
       <section class="panel transcript-panel" aria-labelledby="transcriptTitle">
@@ -62,7 +70,6 @@
         <div class="board-header">
           <div>
             <div class="board-title-row">
-              <span class="status-pill board-status">listening</span>
             </div>
             <h2 id="boardTitle">Product Direction</h2>
             <div class="meeting-context">
@@ -124,9 +131,8 @@
 
         <div class="decision-strip" id="decisionStrip">
           <article class="decision-card empty-state">
-            <span class="status-pill">listening</span>
             <h3>No decision captured yet</h3>
-            <p>The board will fill as the transcript replays.</p>
+            <p>The board will fill as the meeting transcript arrives.</p>
           </article>
         </div>
 

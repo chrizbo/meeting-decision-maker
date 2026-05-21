@@ -238,7 +238,8 @@ const state = {
   runwayTimerActive: true,
   runwayDuration: configuredRunwayDuration(),
   runwayRemaining: configuredRunwayDuration(),
-  runwayLastTick: 0
+  runwayLastTick: 0,
+  demoMode: false
 };
 
 const els = {
@@ -246,13 +247,15 @@ const els = {
   controlsMenu: document.querySelector('#controlsMenu'),
   playButton: document.querySelector('#playButton'),
   resetButton: document.querySelector('#resetButton'),
-  rtmsStatus: document.querySelector('#rtmsStatus'),
   toggleTranscriptButton: document.querySelector('#toggleTranscriptButton'),
   workspace: document.querySelector('.workspace'),
   transcriptFile: document.querySelector('#transcriptFile'),
   speedSelect: document.querySelector('#speedSelect'),
   meetingStatus: document.querySelector('#meetingStatus'),
-  zoomDiagnostics: document.querySelector('#zoomDiagnostics'),
+  streamError: document.querySelector('#streamError'),
+  streamErrorTitle: document.querySelector('#streamErrorTitle'),
+  streamErrorSummary: document.querySelector('#streamErrorSummary'),
+  streamErrorDetails: document.querySelector('#streamErrorDetails'),
   board: document.querySelector('.board'),
   meetingName: document.querySelector('#meetingName'),
   meetingAttendees: document.querySelector('#meetingAttendees'),
@@ -375,6 +378,7 @@ async function loadDashboardSession() {
       meetingId: session.zoomMeetingId || '',
       host: session.host || 'Meeting host',
       attendees: Array.isArray(session.attendees) ? session.attendees : [],
+      meetingUuid: session.zoomMeetingUuid || '',
       dashboardSlug: session.dashboardUrl || absoluteDashboardPath(session.dashboardPath)
     };
     state.zoomSession = session;
@@ -405,12 +409,23 @@ function zoomErrorMessage(error) {
   return error.reason || error.message || error.errorMessage || error.errorCode || String(error);
 }
 
-function showZoomDiagnostics(parts) {
-  const text = parts.filter(Boolean).join(' · ');
-  if (!text || !els.zoomDiagnostics) return;
-  els.zoomDiagnostics.textContent = text;
-  els.zoomDiagnostics.hidden = false;
-  console.info('Meeting Decision Maker Zoom diagnostics', text);
+function showStreamError(title, summary, details) {
+  if (!els.streamError) return;
+  els.streamErrorTitle.textContent = title || 'Unable to receive the live meeting stream.';
+  els.streamErrorSummary.textContent = summary || 'Room Clarity can still show the meeting shell, but live transcript and decision updates are unavailable.';
+  els.streamErrorDetails.textContent = details || 'No additional details were provided.';
+  els.streamError.hidden = false;
+  document.querySelector('.app-shell').classList.add('stream-error-visible');
+  console.info('Meeting Decision Maker stream error', {
+    title: els.streamErrorTitle.textContent,
+    summary: els.streamErrorSummary.textContent,
+    details: els.streamErrorDetails.textContent
+  });
+}
+
+function clearStreamError() {
+  if (els.streamError) els.streamError.hidden = true;
+  document.querySelector('.app-shell').classList.remove('stream-error-visible');
 }
 
 function isBrowserUnsupportedZoomError(error) {
@@ -476,7 +491,7 @@ function rtmsStatusText(response) {
 }
 
 function setRtmsButton(status) {
-  if (els.rtmsStatus) els.rtmsStatus.textContent = status ? 'RTMS: ' + status : 'RTMS status unknown';
+  if (status) console.info('Meeting Decision Maker stream status', status);
 }
 
 async function refreshRtmsStatus() {
@@ -489,13 +504,22 @@ async function refreshRtmsStatus() {
     const status = rtmsStatusText(response);
     setRtmsButton(status);
   } catch (error) {
-    showZoomDiagnostics(['RTMS status: ' + zoomErrorMessage(error)]);
+    showStreamError(
+      'Unable to check the live stream.',
+      'Room Clarity could not verify whether the meeting stream is available.',
+      zoomErrorMessage(error)
+    );
   }
 }
 
 async function maybeAutoStartRtms() {
   if (!window.zoomSdk || typeof window.zoomSdk.startRTMS !== 'function') {
     setRtmsButton('startRTMS unavailable');
+    showStreamError(
+      'Live stream is not available in this meeting.',
+      'The Zoom client did not expose a live transcript stream API to Room Clarity.',
+      'startRTMS is unavailable from the Zoom Apps SDK in this running context.'
+    );
     return;
   }
   if (rtmsStarted) return;
@@ -506,9 +530,15 @@ async function maybeAutoStartRtms() {
     const status = rtmsStatusText(response) || 'start requested';
     setRtmsButton(status);
   } catch (error) {
-    // startRTMS can fail when RTMS is already active from a server-side webhook trigger — treat as non-fatal
+    // startRTMS can fail when the stream is already active from a server-side webhook trigger.
     rtmsStarted = true;
-    console.warn('RTMS auto-start:', zoomErrorMessage(error));
+    const message = zoomErrorMessage(error);
+    console.warn('RTMS auto-start:', message);
+    showStreamError(
+      'Unable to start the live meeting stream.',
+      'Room Clarity opened, but Zoom did not start sending live transcript data.',
+      message
+    );
     setRtmsButton('listening');
   } finally {
     await refreshRtmsStatus();
@@ -571,21 +601,20 @@ async function maybeInitializeZoomApp() {
         'onRTMSStatusChange'
       ]
     });
-    showZoomDiagnostics([
-      configResponse.runningContext ? 'config: ' + configResponse.runningContext : '',
-      configResponse.auth && configResponse.auth.status ? 'auth: ' + configResponse.auth.status : '',
-      Array.isArray(configResponse.unsupportedApis) && configResponse.unsupportedApis.length
-        ? 'unsupported: ' + configResponse.unsupportedApis.join(', ')
-        : ''
-    ]);
+    if (Array.isArray(configResponse.unsupportedApis) && configResponse.unsupportedApis.length) {
+      console.info('Meeting Decision Maker unsupported Zoom APIs', configResponse.unsupportedApis);
+    }
   } catch (error) {
     if (isBrowserUnsupportedZoomError(error)) {
       els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + ' · browser dashboard';
-      if (els.rtmsStatus) els.rtmsStatus.textContent = 'RTMS starts inside Zoom';
       return;
     }
     els.meetingStatus.textContent = fakeZoomMeeting.topic + ' · Zoom SDK unavailable';
-    showZoomDiagnostics(['config error: ' + zoomErrorMessage(error)]);
+    showStreamError(
+      'Unable to initialize the Zoom app.',
+      'Room Clarity could not connect to the Zoom app environment for this meeting.',
+      zoomErrorMessage(error)
+    );
     return;
   }
 
@@ -609,7 +638,13 @@ async function maybeInitializeZoomApp() {
     const rtmsApis = ['startRTMS', 'stopRTMS', 'getRTMSStatus', 'onRTMSStatusChange'].filter(function(name) {
       return typeof window.zoomSdk[name] === 'function' || supportedApis.includes(name);
     });
-    if (!rtmsApis.length) showZoomDiagnostics(['RTMS APIs unavailable']);
+    if (!rtmsApis.length) {
+      showStreamError(
+        'Live stream controls are unavailable.',
+        'The Zoom app loaded, but this meeting context does not expose live stream controls.',
+        'Supported API count: ' + supportedApis.length
+      );
+    }
     if (typeof window.zoomSdk.onRTMSStatusChange === 'function') {
       try {
         await window.zoomSdk.onRTMSStatusChange(function(event) {
@@ -617,7 +652,11 @@ async function maybeInitializeZoomApp() {
           setRtmsButton(status);
         });
       } catch (error) {
-        showZoomDiagnostics(['RTMS listener: ' + zoomErrorMessage(error)]);
+        showStreamError(
+          'Unable to monitor live stream status.',
+          'Room Clarity can continue trying to receive transcript updates, but stream status changes may not be visible.',
+          zoomErrorMessage(error)
+        );
       }
     }
     await refreshRtmsStatus();
@@ -655,12 +694,12 @@ async function maybeInitializeZoomApp() {
       const userRole = userContextResult.value && (userContextResult.value.role || userContextResult.value.userRole);
       const note = runningContext ? ' · ' + runningContext : '';
       els.meetingStatus.textContent = meeting.topic + note + ' · ready';
-      showZoomDiagnostics([
+      console.info('Meeting Decision Maker Zoom diagnostics', [
         'meeting context: ' + contextResult.error,
         uuidResult.ok && meeting.meetingId ? 'uuid: yes' : 'uuid: ' + (uuidResult.error || 'none'),
         userRole ? 'role: ' + userRole : '',
         supportedCount ? 'supported APIs: ' + supportedCount : ''
-      ]);
+      ].filter(Boolean).join(' · '));
       console.info('Meeting Decision Maker Zoom diagnostics', {
         getMeetingContext: contextResult.error,
         getMeetingUUID: uuidResult.ok ? uuidResult.value : uuidResult.error,
@@ -672,7 +711,11 @@ async function maybeInitializeZoomApp() {
     }
   } catch (error) {
     els.meetingStatus.textContent = fakeZoomMeeting.topic + ' · Zoom session unavailable';
-    showZoomDiagnostics(['session error: ' + zoomErrorMessage(error)]);
+    showStreamError(
+      'Unable to prepare the meeting stream.',
+      'Room Clarity could not create or connect to a live meeting session.',
+      zoomErrorMessage(error)
+    );
     console.info('Meeting Decision Maker Zoom session error', error);
   }
 }
@@ -807,7 +850,8 @@ function applyRtmsSessionState(session) {
   state.boardDirty = true;
   renderTranscript();
   renderAll();
-  els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + ' · RTMS transcript ' + state.cues.length + ' cues';
+  clearStreamError();
+  els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + ' · live transcript ' + state.cues.length + ' cues';
 
   // Start a wall-clock tick so the timer keeps running between polls
   if (state.cues.length && !rtmsClockTimer) {
@@ -830,10 +874,23 @@ async function loadRtmsSessionState(id) {
     const token = currentDashboardToken() || (state.zoomSession && state.zoomSession.dashboardToken) || '';
     const tokenParam = token ? '?t=' + encodeURIComponent(token) : '';
     const response = await fetch('/api/rtms/sessions/' + encodeURIComponent(id) + tokenParam, { cache: 'no-store' });
+    if (response.status === 403) {
+      showStreamError(
+        'Unable to open the live meeting stream.',
+        'This dashboard link is missing valid access to the live transcript stream.',
+        'The stream endpoint returned 403 for stream id ' + id + '.'
+      );
+      return false;
+    }
     if (!response.ok) return false;
     applyRtmsSessionState(await response.json());
     return true;
   } catch (error) {
+    showStreamError(
+      'Unable to load the live meeting stream.',
+      'Room Clarity could not reach the stream endpoint for this dashboard.',
+      zoomErrorMessage(error)
+    );
     return false;
   }
 }
@@ -843,6 +900,7 @@ function startRtmsPolling() {
   const candidates = [
     meeting.meetingUuid,
     meeting.meetingId,
+    state.zoomSession && state.zoomSession.zoomMeetingUuid,
     state.zoomSession && state.zoomSession.zoomMeetingId,
     currentDashboardSessionId()
   ].filter(Boolean);
@@ -994,7 +1052,7 @@ function formatTime(seconds) {
 function renderTranscript() {
   if (!state.cues.length) {
     els.transcriptList.innerHTML = rtmsPollTimer
-      ? '<p class="transcript-waiting">Waiting for RTMS transcript…</p>'
+      ? '<p class="transcript-waiting">Waiting for live transcript…</p>'
       : '';
     return;
   }
@@ -1035,7 +1093,7 @@ function renderDecisions() {
   if (!state.decisions.length) {
     els.decisionStrip.innerHTML = '<article class="decision-card empty-state">' +
       '<h3>No decision captured yet</h3>' +
-      '<p>The board will fill as the transcript replays.</p>' +
+      '<p>The board will fill as the meeting transcript arrives.</p>' +
       '</article>';
     return;
   }
@@ -1810,7 +1868,12 @@ async function initializeApp() {
   await loadLlmOutput();
   const sessionId = currentDashboardSessionId();
   if (!document.body.classList.contains('zoom-app-surface') && (!sessionId || sessionId === 'demo-session')) {
+    state.demoMode = true;
+    document.body.classList.add('demo-mode');
     loadTranscript(demoVtt, 'product-decision-demo.vtt');
+  } else {
+    state.demoMode = false;
+    document.body.classList.remove('demo-mode');
   }
   applyMeetingContext(state.meetingContext || fakeZoomMeeting);
   // Ensure runway content and board are rendered even when loadTranscript is skipped (Zoom App mode)

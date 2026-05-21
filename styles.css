@@ -494,13 +494,6 @@ h1 {
   font-weight: 680;
 }
 
-.zoom-diagnostics {
-  margin-top: 4px;
-  color: #8c6f20;
-  font-size: 11px;
-  line-height: 1.35;
-}
-
 .topbar-menu {
   position: relative;
 }
@@ -538,15 +531,6 @@ h1 {
   justify-content: center;
 }
 
-.rtms-control-status {
-  margin: 0;
-  padding: 2px 4px;
-  color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.25;
-  text-align: center;
-}
-
 .file-control input {
   position: absolute;
   inline-size: 1px;
@@ -565,6 +549,55 @@ h1 {
   gap: 14px;
   align-items: stretch;
   height: calc(100vh - 104px);
+}
+
+.stream-error {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  margin: -2px 0 14px;
+  padding: 13px 14px;
+  border: 1px solid #dfc0ad;
+  border-radius: 8px;
+  background: #fff6ef;
+  color: #5a2f19;
+}
+
+.stream-error[hidden] {
+  display: none;
+}
+
+.stream-error strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 14px;
+}
+
+.stream-error p {
+  color: #6f4229;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.stream-error details {
+  max-width: 420px;
+  color: #6f4229;
+  font-size: 13px;
+}
+
+.stream-error summary {
+  cursor: pointer;
+  color: #5a2f19;
+  font-weight: 760;
+}
+
+.stream-error details p {
+  margin-top: 8px;
+}
+
+.app-shell.stream-error-visible .workspace {
+  height: calc(100vh - 170px);
 }
 
 .panel, .board {
@@ -630,7 +663,7 @@ h2 {
 }
 
 .playback-row {
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
@@ -639,8 +672,8 @@ h2 {
   font-size: 13px;
 }
 
-.zoom-app-surface .playback-row {
-  display: none;
+.demo-mode .playback-row {
+  display: flex;
 }
 
 select {
@@ -710,10 +743,6 @@ select {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-}
-
-.board-status {
-  flex: 0 0 auto;
 }
 
 .meeting-context {

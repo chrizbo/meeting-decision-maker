@@ -829,6 +829,7 @@ function sessionForResponse(input, dashboardToken = '') {
     host: input.host,
     attendees: Array.isArray(input.attendees) ? input.attendees : [],
     zoomMeetingId: input.zoomMeetingId || null,
+    zoomMeetingUuid: input.zoomMeetingUuid || null,
     platform: input.platform || 'web',
     createdAt: input.createdAt,
     updatedAt: input.updatedAt
@@ -899,7 +900,13 @@ async function getSessionByAccessId(id) {
     .where('zoomMeetingId', '==', id)
     .limit(1)
     .get();
-  return snapshot.empty ? null : snapshot.docs[0].data();
+  if (!snapshot.empty) return snapshot.docs[0].data();
+
+  const uuidSnapshot = await firestore.collection(sessionsCollection)
+    .where('zoomMeetingUuid', '==', id)
+    .limit(1)
+    .get();
+  return uuidSnapshot.empty ? null : uuidSnapshot.docs[0].data();
 }
 
 async function hasRtmsDashboardAccess(req, state, requestedId) {
