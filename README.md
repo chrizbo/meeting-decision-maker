@@ -194,15 +194,19 @@ Incoming Zoom webhook events are verified with `ZOOM_WEBHOOK_SECRET_TOKEN`, `x-z
 
 Session metadata and RTMS session reads have a small in-memory per-client rate limit to slow URL and token guessing. This is a starter guard for the single-service prototype; production multi-instance deployments should move abuse controls to a shared limiter or edge protection layer.
 
-Inside the Zoom client, the meeting controls menu shows a **Start RTMS** button and an RTMS status line. The app attempts to call `zoomSdk.startRTMS()` after Zoom SDK initialization. If Zoom blocks the API with `40316` / marketplace verification errors, the backend remains ready but live RTMS cannot start until Zoom grants the app access.
+Inside the Zoom client, the meeting controls menu shows a **Start RTMS** button and an RTMS status line. The app attempts to call `zoomSdk.startRTMS()` automatically after Zoom SDK initialization. If Zoom blocks the API with `40316` / marketplace verification errors, the backend remains ready but live RTMS cannot start until Zoom grants the app access.
+
+**RTMS live feed flow (Zoom app):** The Zoom App calls `getMeetingUUID()` during initialization and stores the meeting UUID on the meeting context. This UUID is the primary candidate used to poll `/api/rtms/sessions/:id`, because the server keys RTMS sessions by `meeting_uuid` from the RTMS webhook payload. The session dashboard token stored in memory is used for that poll (not the URL `?t=` parameter, which is absent when the app is running inside Zoom).
 
 Opening the dashboard in a normal browser is supported for viewing and mock transcript testing. The Zoom Apps SDK does not run in a normal browser, so browser mode does not start RTMS. Browser dashboards poll matching `/api/rtms/sessions/:id` records and will display RTMS transcript/analysis state when a matching server-side RTMS session exists.
+
+**Session UUID linking:** When the Zoom App creates a backend session via `POST /api/sessions`, it now passes `meetingUuid` alongside `zoomMeetingId`. The server stores this as `zoomMeetingUuid` and includes it in the `getSessionByAccessId` lookup so the RTMS access check can verify the dashboard token even when the request is made by meeting UUID rather than numeric meeting ID.
 
 Inspect RTMS sessions:
 
 ```bash
 curl -H "x-admin-token: $ROOM_CLARITY_ADMIN_TOKEN" "$SERVICE_URL/api/rtms/sessions"
-curl "$SERVICE_URL/api/rtms/sessions/MEETING_OR_STREAM_ID?t=DASHBOARD_TOKEN"
+curl "$SERVICE_URL/api/rtms/sessions/MEETING_UUID?t=DASHBOARD_TOKEN"
 ```
 
-For local route testing, the webhook also accepts transcript-like payloads with `payload.text`, `payload.transcript`, `payload.caption`, or `payload.message`.
+The `/api/rtms/sessions/:id` route accepts the meeting UUID, stream ID, or session ID — whichever the client has available. For local route testing, the webhook also accepts transcript-like payloads with `payload.text`, `payload.transcript`, `payload.caption`, or `payload.message`.
