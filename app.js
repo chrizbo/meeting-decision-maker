@@ -1078,6 +1078,12 @@ function formatTime(seconds) {
   return min + ':' + sec;
 }
 
+function evidenceSpeaker(evidence) {
+  if (!evidence) return '';
+  const idx = evidence.indexOf(' · ');
+  return idx >= 0 ? evidence.slice(idx + 3) : evidence;
+}
+
 function normalizedCueSeconds(value, fallback) {
   const seconds = Number(value);
   return Number.isFinite(seconds) && seconds >= 0 ? seconds : fallback;
@@ -1136,7 +1142,7 @@ function renderDecisions() {
       '<span class="status-pill ' + item.status + '">' + item.status + '</span>' +
       '<h3>' + escapeHtml(item.title) + '</h3>' +
       '<p>' + escapeHtml(item.detail) + '</p>' +
-      '<p class="agent-evidence">' + escapeHtml(item.evidence) + '</p>' +
+      '<p class="agent-evidence">' + escapeHtml(evidenceSpeaker(item.evidence)) + '</p>' +
       '</article>';
   }).join('');
 }
@@ -1157,7 +1163,7 @@ function renderAgents() {
       '<span class="priority-pill ' + agent.priority + '">' + agent.priority + '</span></div>' +
       (agent.discussionSuggested ? '<div class="agent-auto-note">Possibly discussed</div>' : '') +
       '<p>' + escapeHtml(agent.intervention) + '</p>' +
-      '<div class="agent-evidence">' + escapeHtml(agent.evidence) + '</div>' +
+      '<div class="agent-evidence">' + escapeHtml(evidenceSpeaker(agent.evidence)) + '</div>' +
       '<div class="agent-actions">' +
       '<button type="button" data-action="discussed" data-agent-id="' + agent.id + '">Discussed</button>' +
       '<button type="button" data-action="dismiss" data-agent-id="' + agent.id + '">Dismiss</button>' +
@@ -1172,7 +1178,7 @@ function stackItem(item, type) {
     '<button class="remove-item" type="button" aria-label="Remove ' + type + '" data-remove-type="' + type + '" data-remove-id="' + item.id + '">x</button>' +
     '</div>' +
     '<p>' + escapeHtml(item.detail) + '</p>' +
-    '<p class="agent-evidence">' + escapeHtml(item.evidence) + '</p>' +
+    '<p class="agent-evidence">' + escapeHtml(evidenceSpeaker(item.evidence)) + '</p>' +
     '</article>';
 }
 

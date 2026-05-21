@@ -1069,10 +1069,13 @@ async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata =
   const rawTs = timestamp != null ? timestamp : (metadata.startTs != null ? metadata.startTs : payload.event_ts);
   if (state.transcript.length === 0) console.log('RTMS first cue raw timestamp:', rawTs, 'type:', typeof rawTs);
   const start = normalizedTranscriptStart(rawTs, state, metadata);
+  const rawEnd = metadata.endTime != null ? Number(metadata.endTime) : null;
+  const parsedEnd = rawEnd != null && Number.isFinite(rawEnd) ? timestampToSeconds(rawEnd, state) : null;
+  const end = (parsedEnd != null && parsedEnd > start) ? parsedEnd : start + 3;
   const cue = {
     id: randomUUID(),
     start,
-    end: start + 3,
+    end,
     speaker: metadata.userName || metadata.displayName || metadata.user || 'Zoom participant',
     text,
     evidence: `${formatServerTime(start)} · ${metadata.userName || metadata.displayName || 'Zoom participant'}`
@@ -1258,8 +1261,11 @@ async function handleRtmsWebhookEvent(event) {
 
   const transcriptText = payload.text || payload.transcript || payload.caption || payload.message;
   if (transcriptText) {
-    return ingestRtmsTranscript(payload, transcriptText, transcriptText.length, payload.timestamp || event.event_ts, {
-      userName: payload.speaker || payload.user_name || payload.participant_name
+    // start_time is the transcript-specific Unix timestamp (ms); timestamp/event_ts is the generic event time
+    // and is the same for every cue in a batch, so it must not be used as the primary source.
+    return ingestRtmsTranscript(payload, transcriptText, transcriptText.length, payload.start_time || payload.timestamp || event.event_ts, {
+      userName: payload.speaker || payload.user_name || payload.participant_name,
+      endTime: payload.end_time
     });
   }
 
