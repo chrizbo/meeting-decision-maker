@@ -33,6 +33,86 @@ body.legal-page {
   background: #f7f3ea;
 }
 
+.oauth-page {
+  background: #f7f3ea;
+}
+
+.oauth-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.oauth-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px clamp(18px, 5vw, 64px);
+  border-bottom: 1px solid rgba(35, 37, 36, 0.14);
+  background: rgba(247, 243, 234, 0.94);
+}
+
+.oauth-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-weight: 780;
+  text-decoration: none;
+}
+
+.oauth-brand img {
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+}
+
+.oauth-content {
+  display: grid;
+  place-items: center;
+  padding: 48px 18px;
+}
+
+.oauth-card {
+  width: min(100%, 620px);
+  padding: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.oauth-mark {
+  width: 68px;
+  height: 68px;
+  display: block;
+  margin-bottom: 26px;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(35, 37, 36, 0.18);
+}
+
+.oauth-card h1 {
+  margin: 0;
+  font-size: clamp(2.15rem, 6vw, 3.5rem);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.oauth-card p:not(.home-kicker) {
+  margin: 18px 0 0;
+  color: #3d4642;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.oauth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
 .home-nav {
   position: sticky;
   top: 0;
@@ -1191,6 +1271,20 @@ button:disabled {
     min-height: 34px;
     display: inline-flex;
     align-items: center;
+  }
+
+  .oauth-nav {
+    align-items: flex-start;
+    padding: 14px 18px;
+  }
+
+  .oauth-content {
+    place-items: start center;
+    padding: 34px 18px;
+  }
+
+  .oauth-card {
+    padding: 26px;
   }
 
   .home-hero {
