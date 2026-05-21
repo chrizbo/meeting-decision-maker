@@ -1094,6 +1094,8 @@ async function startRtmsClient(payload = {}) {
   }
   if (rtmsClients.has(payload.rtms_stream_id)) return { started: false, reason: 'already connected' };
 
+  console.log('RTMS starting:', key, 'media_type:', payload.media_type, 'stream_id:', payload.rtms_stream_id);
+
   const rtms = await loadRtmsSdk();
   const client = new rtms.Client();
   rtmsClients.set(key, client);
@@ -1108,13 +1110,16 @@ async function startRtmsClient(payload = {}) {
     state.statusReason = reason || null;
     state.updatedAt = new Date().toISOString();
   });
+  let transcriptCount = 0;
   client.onTranscriptData(function(buffer, size, timestamp, metadata) {
+    if (transcriptCount === 0) console.log('RTMS first transcript:', key, 'user:', metadata && metadata.userName);
+    transcriptCount++;
     ingestRtmsTranscript(payload, buffer, size, timestamp, metadata).catch(function(error) {
       console.error('RTMS transcript analysis failed:', error.message);
     });
   });
   client.onLeave(function(reason) {
-    console.log('RTMS leave:', key, reason);
+    console.log('RTMS leave:', key, 'reason:', reason, 'status:', state.status);
     if (!['stopped', 'interrupted'].includes(state.status)) {
       state.status = 'ended';
       state.statusReason = reason || null;

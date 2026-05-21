@@ -3,7 +3,7 @@ FROM node:24-trixie-slim
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev && mkdir -p /app/logs
 
 COPY server.js ./
 COPY *.html *.png styles.css app.js zoom-launch.js ./
