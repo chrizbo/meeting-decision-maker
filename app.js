@@ -458,6 +458,11 @@ function rtmsStatusText(response) {
   const raw = response.status || response.state || response.rtmsStatus || response.message || response.result;
   if (raw === null || raw === undefined || raw === '') return '';
   if (typeof raw !== 'string') {
+    // Zoom SDK may return { status: [{displayName, status, timestamp}, ...] }
+    if (Array.isArray(raw)) {
+      const first = raw[0];
+      return first ? String(first.status || first.state || first.message || 'connecting') : '';
+    }
     // Zoom SDK may return { status: { rtmsStatus: "inactive", ... } }
     if (typeof raw === 'object') {
       const inner = raw.rtmsStatus || raw.status || raw.state || raw.message;
@@ -1011,6 +1016,12 @@ function formatTime(seconds) {
 }
 
 function renderTranscript() {
+  if (!state.cues.length) {
+    els.transcriptList.innerHTML = rtmsPollTimer
+      ? '<p class="transcript-waiting">Waiting for RTMS transcript…</p>'
+      : '';
+    return;
+  }
   els.transcriptList.innerHTML = state.cues.map(function(cue) {
     return '<article class="transcript-cue" id="' + cue.id + '" data-cue-id="' + cue.id + '">' +
       '<div class="transcript-meta"><span>' + formatTime(cue.start) + '</span><span>' + escapeHtml(cue.speaker) + '</span></div>' +
