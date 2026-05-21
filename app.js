@@ -782,11 +782,16 @@ function loadTranscript(raw, filename) {
 
 function applyRtmsSessionState(session) {
   if (!session || !Array.isArray(session.transcript)) return;
+  const previousDuration = state.duration || 0;
+  const previousCueCount = state.cues.length;
   state.cues = session.transcript.map(function(cue, index) {
+    const fallbackStart = index && state.cues[index - 1] ? state.cues[index - 1].end : 0;
+    const start = normalizedCueSeconds(cue.start, fallbackStart);
+    const end = Math.max(start, normalizedCueSeconds(cue.end, start + 3));
     return {
       id: cue.id || 'rtms-' + index,
-      start: Number(cue.start || 0),
-      end: Number(cue.end || cue.start || 0) || Number(cue.start || 0) + 3,
+      start,
+      end,
       speaker: cue.speaker || 'Zoom participant',
       text: cue.text || ''
     };
@@ -846,7 +851,7 @@ function applyRtmsSessionState(session) {
       steps: agentSteps(item.agent)
     };
   });
-  state.currentTime = state.duration;
+  state.currentTime = Math.max(state.currentTime || 0, state.duration);
   state.boardDirty = true;
   renderTranscript();
   renderAll();
@@ -854,6 +859,7 @@ function applyRtmsSessionState(session) {
   els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + ' · live transcript ' + state.cues.length + ' cues';
 
   // Start a wall-clock tick so the timer keeps running between polls
+  const hasNewTranscript = state.cues.length > previousCueCount || state.duration > previousDuration;
   if (state.cues.length && !rtmsClockTimer) {
     rtmsClockBase = { wallMs: Date.now(), sessionSeconds: state.duration };
     rtmsClockTimer = setInterval(function() {
@@ -862,9 +868,8 @@ function applyRtmsSessionState(session) {
       els.clock.textContent = formatTime(state.currentTime);
       els.progressBar.style.width = Math.min((state.currentTime / state.duration) * 100, 100) + '%';
     }, 1000);
-  } else if (rtmsClockBase) {
-    // Reset the base each time new transcript data comes in
-    rtmsClockBase = { wallMs: Date.now(), sessionSeconds: state.duration };
+  } else if (rtmsClockBase && hasNewTranscript) {
+    rtmsClockBase = { wallMs: Date.now(), sessionSeconds: Math.max(state.currentTime, state.duration) };
   }
 }
 
@@ -1043,10 +1048,15 @@ function formatRunwayTime(seconds) {
 }
 
 function formatTime(seconds) {
-  const total = Math.floor(seconds);
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
   const min = String(Math.floor(total / 60)).padStart(2, '0');
   const sec = String(total % 60).padStart(2, '0');
   return min + ':' + sec;
+}
+
+function normalizedCueSeconds(value, fallback) {
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : fallback;
 }
 
 function renderTranscript() {

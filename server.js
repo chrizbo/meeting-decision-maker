@@ -978,6 +978,7 @@ function getRtmsState(payload = {}) {
       analyses: [],
       status: 'created',
       statusReason: null,
+      firstTranscriptTimestampUnit: null,
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }));
@@ -998,14 +999,34 @@ function normalizeTranscriptText(buffer, size) {
   return '';
 }
 
-function timestampToSeconds(timestamp, state) {
+function transcriptTimestampUnit(value) {
+  const absolute = Math.abs(value);
+  if (absolute >= 1_000_000_000_000_000_000) return 'ns';
+  if (absolute >= 1_000_000_000_000_000) return 'us';
+  if (absolute >= 1_000_000_000_000) return 'ms';
+  if (absolute >= 1_000_000_000) return 's';
+  if (absolute >= 10_000_000) return 'ns';
+  if (absolute >= 10_000) return 'ms';
+  return 's';
+}
+
+function timestampUnitScale(unit) {
+  if (unit === 'ns') return 1_000_000_000;
+  if (unit === 'us') return 1_000_000;
+  if (unit === 'ms') return 1000;
+  return 1;
+}
+
+function timestampToSeconds(timestamp, state, unitHint) {
   const value = Number(timestamp != null ? timestamp : Date.now());
-  if (state.firstTranscriptTimestamp == null) state.firstTranscriptTimestamp = value;
-  const relative = Math.max(0, value - state.firstTranscriptTimestamp);
-  // Date.now() fallback and Zoom event_ts are epoch milliseconds (year 2001 ≈ 978 billion ms)
-  if (state.firstTranscriptTimestamp > 978_307_200_000) return relative / 1000;
-  // RTMS SDK sends nanoseconds from session start (first timestamp is near 0)
-  return relative / 1_000_000_000;
+  if (!Number.isFinite(value)) return state.transcript.length ? state.transcript[state.transcript.length - 1].end : 0;
+  const unit = state.firstTranscriptTimestampUnit || unitHint || transcriptTimestampUnit(value);
+  if (state.firstTranscriptTimestamp == null) {
+    state.firstTranscriptTimestamp = value;
+    state.firstTranscriptTimestampUnit = unit;
+  }
+  const scale = timestampUnitScale(state.firstTranscriptTimestampUnit);
+  return Math.max(0, (value - state.firstTranscriptTimestamp) / scale);
 }
 
 function transcriptWindowForServerCue(state, cue) {
@@ -1022,7 +1043,7 @@ async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata =
 
   const rawTs = timestamp != null ? timestamp : (metadata.startTs != null ? metadata.startTs : payload.event_ts);
   if (state.transcript.length === 0) console.log('RTMS first cue raw timestamp:', rawTs, 'type:', typeof rawTs);
-  const start = timestampToSeconds(rawTs, state);
+  const start = timestampToSeconds(rawTs, state, metadata.timestampUnit);
   const cue = {
     id: randomUUID(),
     start,
@@ -1125,7 +1146,7 @@ async function startRtmsClient(payload = {}) {
   client.onTranscriptData(function(buffer, size, timestamp, metadata) {
     if (transcriptCount === 0) console.log('RTMS first transcript:', key, 'user:', metadata && metadata.userName);
     transcriptCount++;
-    ingestRtmsTranscript(payload, buffer, size, timestamp, metadata).catch(function(error) {
+    ingestRtmsTranscript(payload, buffer, size, timestamp, Object.assign({ timestampUnit: 'ns' }, metadata)).catch(function(error) {
       console.error('RTMS transcript analysis failed:', error.message);
     });
   });
