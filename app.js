@@ -305,6 +305,8 @@ const els = {
 
 let rtmsPollTimer = null;
 let rtmsStarted = false;
+let rtmsClockTimer = null;
+let rtmsClockBase = null; // { wallMs, sessionSeconds } snapshot when clock started
 let runwayTimerFrame = null;
 
 function configuredRunwayDuration() {
@@ -803,6 +805,20 @@ function applyRtmsSessionState(session) {
   renderTranscript();
   renderAll();
   els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + ' · RTMS transcript ' + state.cues.length + ' cues';
+
+  // Start a wall-clock tick so the timer keeps running between polls
+  if (state.cues.length && !rtmsClockTimer) {
+    rtmsClockBase = { wallMs: Date.now(), sessionSeconds: state.duration };
+    rtmsClockTimer = setInterval(function() {
+      const elapsed = (Date.now() - rtmsClockBase.wallMs) / 1000;
+      state.currentTime = rtmsClockBase.sessionSeconds + elapsed;
+      els.clock.textContent = formatTime(state.currentTime);
+      els.progressBar.style.width = Math.min((state.currentTime / state.duration) * 100, 100) + '%';
+    }, 1000);
+  } else if (rtmsClockBase) {
+    // Reset the base each time new transcript data comes in
+    rtmsClockBase = { wallMs: Date.now(), sessionSeconds: state.duration };
+  }
 }
 
 async function loadRtmsSessionState(id) {

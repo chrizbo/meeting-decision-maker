@@ -992,7 +992,7 @@ function normalizeTranscriptText(buffer, size) {
 }
 
 function timestampToSeconds(timestamp, state) {
-  const value = Number(timestamp || Date.now());
+  const value = Number(timestamp != null ? timestamp : Date.now());
   if (state.firstTranscriptTimestamp == null) state.firstTranscriptTimestamp = value;
   const relative = Math.max(0, value - state.firstTranscriptTimestamp);
   // Unix epoch in milliseconds (> ~10 billion)
@@ -1015,7 +1015,9 @@ async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata =
   const text = normalizeTranscriptText(buffer, size);
   if (!text) return { ignored: true, reason: 'empty transcript' };
 
-  const start = timestampToSeconds(timestamp || metadata.startTs || payload.event_ts, state);
+  const rawTs = timestamp != null ? timestamp : (metadata.startTs != null ? metadata.startTs : payload.event_ts);
+  if (state.transcript.length === 0) console.log('RTMS first cue raw timestamp:', rawTs, 'type:', typeof rawTs);
+  const start = timestampToSeconds(rawTs, state);
   const cue = {
     id: randomUUID(),
     start,
