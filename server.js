@@ -993,10 +993,14 @@ function normalizeTranscriptText(buffer, size) {
 
 function timestampToSeconds(timestamp, state) {
   const value = Number(timestamp || Date.now());
-  if (!state.firstTranscriptTimestamp) state.firstTranscriptTimestamp = value;
-  if (value > 10_000_000_000) return Math.max(0, (value - state.firstTranscriptTimestamp) / 1000);
-  if (value > 10_000_000) return Math.max(0, (value - state.firstTranscriptTimestamp) / 1000);
-  return value > 1000 ? value / 1000 : value;
+  if (state.firstTranscriptTimestamp == null) state.firstTranscriptTimestamp = value;
+  const relative = Math.max(0, value - state.firstTranscriptTimestamp);
+  // Unix epoch in milliseconds (> ~10 billion)
+  if (state.firstTranscriptTimestamp > 10_000_000_000) return relative / 1000;
+  // Unix epoch in seconds (> ~1 billion)
+  if (state.firstTranscriptTimestamp > 1_000_000_000) return relative;
+  // RTMS SDK sends microseconds from session start
+  return relative / 1_000_000;
 }
 
 function transcriptWindowForServerCue(state, cue) {
