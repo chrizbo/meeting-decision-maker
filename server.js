@@ -979,6 +979,7 @@ function getRtmsState(payload = {}) {
       status: 'created',
       statusReason: null,
       firstTranscriptTimestampUnit: null,
+      firstTranscriptWallMs: null,
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }));
@@ -1029,6 +1030,20 @@ function timestampToSeconds(timestamp, state, unitHint) {
   return Math.max(0, (value - state.firstTranscriptTimestamp) / scale);
 }
 
+function transcriptArrivalSeconds(state) {
+  const now = Date.now();
+  if (state.firstTranscriptWallMs == null) state.firstTranscriptWallMs = now;
+  return Math.max(0, (now - state.firstTranscriptWallMs) / 1000);
+}
+
+function normalizedTranscriptStart(rawTimestamp, state, metadata = {}) {
+  const arrivalStart = transcriptArrivalSeconds(state);
+  const previousCue = state.transcript[state.transcript.length - 1];
+  const parsedStart = timestampToSeconds(rawTimestamp, state, metadata.timestampUnit);
+  if (!previousCue || parsedStart > previousCue.start) return parsedStart;
+  return Math.max(arrivalStart, previousCue.start + 0.001);
+}
+
 function transcriptWindowForServerCue(state, cue) {
   const windowStart = Math.max(0, cue.start - 90);
   return state.transcript.filter(function(item) {
@@ -1043,7 +1058,7 @@ async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata =
 
   const rawTs = timestamp != null ? timestamp : (metadata.startTs != null ? metadata.startTs : payload.event_ts);
   if (state.transcript.length === 0) console.log('RTMS first cue raw timestamp:', rawTs, 'type:', typeof rawTs);
-  const start = timestampToSeconds(rawTs, state, metadata.timestampUnit);
+  const start = normalizedTranscriptStart(rawTs, state, metadata);
   const cue = {
     id: randomUUID(),
     start,
