@@ -1182,7 +1182,7 @@ async function startRtmsClient(payload = {}) {
       console.log(`RTMS SDK transcript[${transcriptCount}] key=${key} timestamp=${timestamp} type=${typeof timestamp} user=${metadata && metadata.userName}`);
     }
     transcriptCount++;
-    ingestRtmsTranscript(payload, buffer, size, timestamp, Object.assign({ timestampUnit: 'ns' }, metadata)).catch(function(error) {
+    ingestRtmsTranscript(payload, buffer, size, timestamp, Object.assign({ timestampUnit: 'us' }, metadata)).catch(function(error) {
       console.error('RTMS transcript analysis failed:', error.message);
     });
   });

@@ -23,7 +23,7 @@ Zoom RTMS webhook transcript payloads have three timestamp fields:
 - `end_time` — Unix ms timestamp for when this segment ended. Use this.
 - `timestamp` — Generic event-level timestamp. **Same value for every cue in a batch.** Do not use as the primary cue time — all cues will collapse to 00:00.
 
-The server uses `payload.start_time || payload.timestamp || event.event_ts` (in that priority order) in `handleRtmsWebhookEvent`. The SDK path passes `timestamp` directly as a nanosecond value, which is fine because it is cue-specific.
+The server uses `payload.start_time || payload.timestamp || event.event_ts` (in that priority order) in `handleRtmsWebhookEvent`. The SDK path (`onTranscriptData`) passes `timestamp` directly as a **microsecond** Unix timestamp (confirmed empirically — values ~1.779e15 for 2026). The hint passed to `ingestRtmsTranscript` must be `'us'`, not `'ns'`; using `'ns'` makes all relative diffs ~microseconds wide and they floor to 00:00.
 
 If all transcript entries show 00:00, check whether `start_time` is present on incoming webhook payloads (`console.log` in `ingestRtmsTranscript` logs the first raw timestamp).
 
