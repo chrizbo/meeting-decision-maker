@@ -3,50 +3,54 @@ const fakeZoomMeeting = {
   meetingId: '843 2219 0042',
   host: 'Maya Patel',
   attendees: ['Maya Patel', 'Jordan Lee'],
-  dashboardSlug: '/m/7QK4-MVP'
+  dashboardSlug: '/m/7QK4-MVP',
+  agenda: 'Team sync: pick our first build direction\n\nWe need to decide between a live facilitation board and a post-meeting decision summary as our first prototype. Both paths have merit but we can only build one first.\n\nTentative agenda:\n- Review the tradeoffs (Jordan, ~15 min)\n- Name the top risks and open assumptions on each path\n- Make the call — Maya owns the decision\n\nPlease come prepared with your top assumption about which path will teach us more.\n\nGoal: leave with one clear direction and one assigned next step.'
 };
 
 const DEFAULT_RUNWAY_SECONDS = 90;
 
 const runwayCases = {
   default: {
-    title: 'Start with the decision in view',
+    title: 'Live board vs. recap: choose the first build slice',
     agendaTitle: 'Agenda',
-    purpose: 'Decide whether the first prototype should prioritize live facilitation or post-meeting recap.',
+    purpose: 'Choose a first prototype direction so the team can start building Monday. The two paths are a live facilitation board and a post-meeting recap tool.',
     agendaItems: [
       {
-        title: 'Frame the product question',
+        title: 'Agree on what this decision is really about',
         owner: 'Maya',
-        desiredOutcome: 'Name the decision this meeting needs to make.'
+        timeBudget: 5,
+        desiredOutcome: 'The room names the core product bet, not just a build choice.'
       },
       {
-        title: 'Compare the live board and recap paths',
+        title: 'Surface the top risks and assumptions for each path',
         owner: 'Jordan',
-        desiredOutcome: 'Surface tradeoffs, assumptions, and risks.'
+        timeBudget: 15,
+        desiredOutcome: 'At least one falsifiable assumption per path is on the board before we choose.'
       },
       {
-        title: 'Choose the first prototype slice',
+        title: 'Choose a direction and assign the first action',
         owner: 'Maya',
-        desiredOutcome: 'Leave with a build direction and next action.'
+        timeBudget: 10,
+        desiredOutcome: 'One direction chosen, one named risk owner, one concrete next step assigned.'
       }
     ],
     decisionFrame: {
       mode: 'Decide',
       owner: 'Maya Patel',
-      successCondition: 'One MVP direction, one main risk, and one build action are clear.'
+      successCondition: 'One direction chosen, one risk owned, one next action clear before we leave.'
     },
     roles: [
       { label: 'Host', value: 'Maya Patel' },
       { label: 'Decision owner', value: 'Maya Patel' },
       { label: 'Notes owner', value: 'Room Clarity' }
     ],
-    participationNorm: 'Raise risks early, even if they are not fully formed.',
+    participationNorm: 'Name your assumptions out loud — especially the ones you think are obvious.',
     carryForwardItems: [
       'Test whether the shared board changes live meeting behavior.',
       'Keep the first agent set small: assumptions, pre-mortem, argument dissection.',
       'Do not let Zoom-native integration block the static prototype.'
     ],
-    openingPrompt: 'Which agenda item actually needs a decision today?'
+    openingPrompt: 'What would have to be true for us to be confident in this choice by end of meeting?'
   },
   'messy-agenda': {
     title: 'Start by naming the meeting shape',
@@ -239,7 +243,8 @@ const state = {
   runwayDuration: configuredRunwayDuration(),
   runwayRemaining: configuredRunwayDuration(),
   runwayLastTick: 0,
-  demoMode: false
+  demoMode: false,
+  reviewMode: false
 };
 
 const els = {
@@ -247,7 +252,8 @@ const els = {
   controlsMenu: document.querySelector('#controlsMenu'),
   playButton: document.querySelector('#playButton'),
   resetButton: document.querySelector('#resetButton'),
-  toggleTranscriptButton: document.querySelector('#toggleTranscriptButton'),
+  transcriptHeaderToggle: document.querySelector('#transcriptHeaderToggle'),
+  showFeedButton: document.querySelector('#showFeedButton'),
   workspace: document.querySelector('.workspace'),
   transcriptFile: document.querySelector('#transcriptFile'),
   speedSelect: document.querySelector('#speedSelect'),
@@ -261,7 +267,10 @@ const els = {
   meetingName: document.querySelector('#meetingName'),
   meetingAttendees: document.querySelector('#meetingAttendees'),
   boardTitle: document.querySelector('#boardTitle'),
-  openRunwayButton: document.querySelector('#openRunwayButton'),
+  stepper: document.querySelector('#meetingStepper'),
+  stepRunway: document.querySelector('#stepRunway'),
+  stepMeeting: document.querySelector('#stepMeeting'),
+  stepRecap: document.querySelector('#stepRecap'),
   openDashboardButton: document.querySelector('#openDashboardButton'),
   copyDashboardButton: document.querySelector('#copyDashboardButton'),
   shareDashboardButton: document.querySelector('#shareDashboardButton'),
@@ -274,7 +283,7 @@ const els = {
   runwayAgendaTitle: document.querySelector('#runwayAgendaTitle'),
   runwayAgendaList: document.querySelector('#runwayAgendaList'),
   runwayDecisionFrame: document.querySelector('#runwayDecisionFrame'),
-  runwayCarryForward: document.querySelector('#runwayCarryForward'),
+
   runwayNorm: document.querySelector('#runwayNorm'),
   runwayOpeningPrompt: document.querySelector('#runwayOpeningPrompt'),
   clock: document.querySelector('#clock'),
@@ -304,7 +313,12 @@ const els = {
   modalRejectDecision: document.querySelector('#modalRejectDecision'),
   modalAgentActions: document.querySelector('#modalAgentActions'),
   modalDiscussed: document.querySelector('#modalDiscussed'),
-  modalDismiss: document.querySelector('#modalDismiss')
+  modalDismiss: document.querySelector('#modalDismiss'),
+  modalPromoteRisk: document.querySelector('#modalPromoteRisk'),
+  modalPromoteOpenQuestion: document.querySelector('#modalPromoteOpenQuestion'),
+  briefPanel: document.querySelector('#briefPanel'),
+  briefContent: document.querySelector('#briefContent'),
+  copyBriefButton: document.querySelector('#copyBriefButton')
 };
 
 let rtmsPollTimer = null;
@@ -332,7 +346,7 @@ function applyMeetingContext(meeting) {
   state.meetingContext = meeting;
   els.boardTitle.textContent = meeting.topic;
   els.meetingName.textContent = meeting.meetingId ? 'Zoom meeting ' + meeting.meetingId : 'Meeting session';
-  els.meetingAttendees.textContent = meeting.attendees.join(', ');
+  if (els.meetingAttendees) els.meetingAttendees.textContent = meeting.attendees.join(', ');
   els.meetingStatus.textContent = meeting.topic + ' · host ' + meeting.host;
 }
 
@@ -396,12 +410,14 @@ async function loadDashboardSession() {
 function normalizeZoomMeetingContext(context) {
   const meetingId = context.meetingID || context.meetingId || context.meetingNumber || context.meetingUUID || '';
   const topic = context.meetingTopic || context.topic || context.meetingName || fakeZoomMeeting.topic;
+  const agenda = context.agenda || context.meetingAgenda || context.description || '';
   return {
     topic: topic,
     meetingId: String(meetingId || '').trim(),
     host: context.hostName || context.userName || 'Zoom host',
     attendees: context.userName ? [context.userName] : [],
-    dashboardSlug: fakeZoomMeeting.dashboardSlug
+    dashboardSlug: fakeZoomMeeting.dashboardSlug,
+    agenda: agenda
   };
 }
 
@@ -573,6 +589,31 @@ async function safeZoomCall(name, fallback) {
   }
 }
 
+async function loadRunwayFromAgenda(meeting) {
+  const agenda = meeting.agenda || '';
+  if (!agenda.trim()) return;
+  try {
+    const response = await fetch('/api/analyze-runway', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        topic: meeting.topic,
+        agenda: agenda,
+        host: meeting.host,
+        participants: meeting.attendees || []
+      })
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    if (data.runway && data.runway.agendaItems && data.runway.agendaItems.length) {
+      state.runwayData = data.runway;
+      renderRunway();
+    }
+  } catch (error) {
+    console.info('Meeting Decision Maker runway analysis unavailable', error && error.message);
+  }
+}
+
 async function createMeetingSession(meeting) {
   const response = await fetch('/api/sessions', {
     method: 'POST',
@@ -636,9 +677,7 @@ async function maybeInitializeZoomApp() {
   }
 
   document.body.classList.add('zoom-app-surface');
-  state.transcriptVisible = false;
-  els.workspace.classList.add('transcript-hidden');
-  els.toggleTranscriptButton.textContent = 'Show Transcript';
+  setTranscriptVisible(false);
   setRtmsButton('checking APIs');
 
   if (currentDashboardSessionId()) return;
@@ -701,6 +740,7 @@ async function maybeInitializeZoomApp() {
     meeting.dashboardSlug = session.dashboardUrl || absoluteDashboardPath(session.dashboardPath);
     state.zoomSession = session;
     applyMeetingContext(meeting);
+    loadRunwayFromAgenda(meeting);
     if (contextResult.ok) {
       els.meetingStatus.textContent = meeting.topic + ' · ready';
     } else {
@@ -958,6 +998,9 @@ function resetState(keepTranscript) {
   state.boardDirty = true;
   state.playing = false;
   state.lastTick = 0;
+  state.reviewMode = false;
+  document.body.classList.remove('review-mode-active');
+  els.briefPanel.hidden = true;
   resetRunway();
   els.playButton.textContent = 'Start';
   els.meetingStatus.textContent = keepTranscript === false
@@ -981,6 +1024,7 @@ function showRunway() {
   state.runwayTimerActive = false;
   state.runwayRemaining = 0;
   renderRunway();
+  renderStepper();
 }
 
 function hideRunway() {
@@ -989,6 +1033,7 @@ function hideRunway() {
   state.runwayTimerActive = false;
   state.runwayLastTick = 0;
   renderRunway();
+  renderStepper();
 }
 
 function startRunwayTimer() {
@@ -1022,8 +1067,6 @@ function renderRunway() {
   if (!els.runwayPanel) return;
   els.board.classList.toggle('runway-active', state.runwayVisible);
   els.runwayPanel.hidden = !state.runwayVisible;
-  els.openRunwayButton.textContent = state.runwayVisible ? 'Context Open' : 'Runway';
-  els.openRunwayButton.disabled = state.runwayVisible;
   if (!state.runwayVisible) return;
 
   const data = state.runwayData;
@@ -1034,7 +1077,8 @@ function renderRunway() {
     const source = item.url
       ? ' <a class="runway-doc-link" href="' + escapeHtml(item.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(item.docTitle || 'Source doc') + '</a>'
       : '';
-    const title = '<strong>' + escapeHtml(item.title) + '</strong>';
+    const time = item.timeBudget ? '<span class="agenda-time">' + item.timeBudget + ' min</span>' : '';
+    const title = '<strong>' + escapeHtml(item.title) + '</strong>' + time;
     return '<li>' + title +
       '<span>' + escapeHtml(item.owner + ' · ' + item.desiredOutcome) + source + '</span></li>';
   }).join('');
@@ -1043,9 +1087,6 @@ function renderRunway() {
     ['Owner', data.decisionFrame.owner],
     ['Success', data.decisionFrame.successCondition]
   ].map(runwayDefinitionRow).join('');
-  els.runwayCarryForward.innerHTML = data.carryForwardItems.map(function(item) {
-    return '<li>' + escapeHtml(item) + '</li>';
-  }).join('');
   els.runwayNorm.textContent = data.participationNorm;
   els.runwayOpeningPrompt.textContent = data.openingPrompt;
   renderRunwayTimer();
@@ -1108,12 +1149,14 @@ function renderAll() {
   els.clock.textContent = formatTime(state.currentTime);
   els.progressBar.style.width = Math.min((state.currentTime / state.duration) * 100, 100) + '%';
   renderRunway();
+  renderStepper();
   renderCueHighlight();
   if (state.boardDirty) {
     renderDecisions();
     renderStacks();
     renderAgents();
     renderAudit();
+    if (state.reviewMode) renderBriefPanel();
     state.boardDirty = false;
   }
 }
@@ -1138,8 +1181,15 @@ function renderDecisions() {
     return;
   }
   els.decisionStrip.innerHTML = state.decisions.map(function(item) {
-    return '<article class="decision-card interactive-card" data-open-type="decision" data-open-id="' + item.id + '">' +
+    const excluded = item.excludedFromBrief === true;
+    const excludeBtn = state.reviewMode
+      ? '<button class="exclude-item' + (excluded ? ' undo-exclude' : '') + '" type="button" aria-label="' + (excluded ? 'Re-include in brief' : 'Exclude from brief') + '" data-exclude-type="decision" data-exclude-id="' + item.id + '">' + (excluded ? '↩' : 'x') + '</button>'
+      : '';
+    return '<article class="decision-card interactive-card' + (excluded ? ' excluded-from-brief' : '') + '" data-open-type="decision" data-open-id="' + item.id + '">' +
+      '<div class="decision-card-header">' +
       '<span class="status-pill ' + item.status + '">' + item.status + '</span>' +
+      excludeBtn +
+      '</div>' +
       '<h3>' + escapeHtml(item.title) + '</h3>' +
       '<p>' + escapeHtml(item.detail) + '</p>' +
       '<p class="agent-evidence">' + escapeHtml(evidenceSpeaker(item.evidence)) + '</p>' +
@@ -1172,10 +1222,14 @@ function renderAgents() {
 }
 
 function stackItem(item, type) {
-  return '<article class="stack-item interactive" data-open-type="' + type + '" data-open-id="' + item.id + '">' +
+  const excluded = item.excludedFromBrief === true;
+  const actionBtn = state.reviewMode
+    ? '<button class="exclude-item' + (excluded ? ' undo-exclude' : '') + '" type="button" aria-label="' + (excluded ? 'Re-include in brief' : 'Exclude from brief') + '" data-exclude-type="' + type + '" data-exclude-id="' + item.id + '">' + (excluded ? '↩' : 'x') + '</button>'
+    : '<button class="remove-item" type="button" aria-label="Remove ' + type + '" data-remove-type="' + type + '" data-remove-id="' + item.id + '">x</button>';
+  return '<article class="stack-item interactive' + (excluded ? ' excluded-from-brief' : '') + '" data-open-type="' + type + '" data-open-id="' + item.id + '">' +
     '<div class="stack-item-header">' +
     '<strong>' + escapeHtml(item.title) + '</strong>' +
-    '<button class="remove-item" type="button" aria-label="Remove ' + type + '" data-remove-type="' + type + '" data-remove-id="' + item.id + '">x</button>' +
+    actionBtn +
     '</div>' +
     '<p>' + escapeHtml(item.detail) + '</p>' +
     '<p class="agent-evidence">' + escapeHtml(evidenceSpeaker(item.evidence)) + '</p>' +
@@ -1184,6 +1238,41 @@ function stackItem(item, type) {
 
 function emptyStack(text) {
   return '<div class="stack-item"><p>' + text + '</p></div>';
+}
+
+function currentStep() {
+  if (state.reviewMode) return 'recap';
+  return state.runwayVisible ? 'runway' : 'meeting';
+}
+
+function renderStepper() {
+  if (!els.stepper) return;
+  els.stepper.dataset.step = currentStep();
+}
+
+function goToStep(step) {
+  if (step === 'runway') {
+    if (state.reviewMode) setReviewMode(false);
+    showRunway();
+  } else if (step === 'meeting') {
+    if (state.reviewMode) setReviewMode(false);
+    hideRunway();
+  } else if (step === 'recap') {
+    if (state.runwayVisible) hideRunway();
+    setReviewMode(true);
+  }
+}
+
+function setReviewMode(active) {
+  state.reviewMode = active;
+  if (active && state.runwayVisible) {
+    state.runwayVisible = false;
+    cancelRunwayTimer();
+  }
+  document.body.classList.toggle('review-mode-active', active);
+  els.briefPanel.hidden = !active;
+  state.boardDirty = true;
+  renderAll();
 }
 
 function tick(now) {
@@ -1198,6 +1287,7 @@ function tick(now) {
     state.playing = false;
     els.playButton.textContent = 'Start';
     els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + ' · playback complete';
+    if (!state.reviewMode) setReviewMode(true);
     return;
   }
   requestAnimationFrame(tick);
@@ -1767,6 +1857,94 @@ function renderAudit() {
   }).join('') || '<div class="audit-empty">Dismissed and rejected items will appear here.</div>';
 }
 
+function toggleExcludeFromBrief(type, id) {
+  const item = findBoardItem(type, id);
+  if (!item) return;
+  item.excludedFromBrief = !item.excludedFromBrief;
+  state.boardDirty = true;
+  renderAll();
+}
+
+// --- BRIEF ---
+
+function briefItems() {
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  return {
+    topic: meeting.topic || 'Meeting',
+    decisions: state.decisions.filter(function(d) { return !d.excludedFromBrief; }),
+    actions: state.actions.filter(function(a) { return !a.excludedFromBrief; }),
+    risks: state.risks.filter(function(r) { return !r.excludedFromBrief && !r.isOpenQuestion; }),
+    openQuestions: state.risks.filter(function(r) { return !r.excludedFromBrief && r.isOpenQuestion; })
+  };
+}
+
+function renderBriefPanel() {
+  const items = briefItems();
+  const sections = [];
+
+  if (items.decisions.length) {
+    sections.push('<div class="brief-section">' +
+      '<h4>Decisions</h4><ul>' +
+      items.decisions.map(function(d) {
+        return '<li><strong>' + escapeHtml(d.title) + '</strong>' +
+          (d.detail ? ' — ' + escapeHtml(d.detail) : '') + '</li>';
+      }).join('') +
+      '</ul></div>');
+  }
+  if (items.actions.length) {
+    sections.push('<div class="brief-section">' +
+      '<h4>Actions</h4><ul>' +
+      items.actions.map(function(a) {
+        return '<li><strong>' + escapeHtml(a.title) + '</strong>' +
+          (a.detail ? ' — ' + escapeHtml(a.detail) : '') + '</li>';
+      }).join('') +
+      '</ul></div>');
+  }
+  if (items.risks.length) {
+    sections.push('<div class="brief-section">' +
+      '<h4>Risks &amp; Watchpoints</h4><ul>' +
+      items.risks.map(function(r) {
+        return '<li><strong>' + escapeHtml(r.title) + '</strong>' +
+          (r.detail ? ' — ' + escapeHtml(r.detail) : '') + '</li>';
+      }).join('') +
+      '</ul></div>');
+  }
+  if (items.openQuestions.length) {
+    sections.push('<div class="brief-section">' +
+      '<h4>Open Questions</h4><ul>' +
+      items.openQuestions.map(function(q) {
+        return '<li><strong>' + escapeHtml(q.title) + '</strong>' +
+          (q.detail ? ' — ' + escapeHtml(q.detail) : '') + '</li>';
+      }).join('') +
+      '</ul></div>');
+  }
+
+  els.briefContent.innerHTML = sections.length
+    ? sections.join('')
+    : '<p class="brief-empty">No items included. Use the board above to accept decisions or promote agent issues, then exclude anything that should not appear here.</p>';
+}
+
+function exportBriefAsMarkdown() {
+  const items = briefItems();
+  const lines = ['# Meeting Brief — ' + items.topic, ''];
+
+  function appendSection(heading, list) {
+    if (!list.length) return;
+    lines.push('## ' + heading, '');
+    list.forEach(function(item) {
+      lines.push('- **' + item.title + '**' + (item.detail ? ': ' + item.detail : ''));
+    });
+    lines.push('');
+  }
+
+  appendSection('Decisions', items.decisions);
+  appendSection('Actions', items.actions);
+  appendSection('Risks & Watchpoints', items.risks);
+  appendSection('Open Questions', items.openQuestions);
+
+  return lines.join('\n').trim();
+}
+
 function handleOpenClick(event) {
   const target = event.target.closest('[data-open-type][data-open-id]');
   if (!target) return;
@@ -1805,11 +1983,20 @@ els.playButton.addEventListener('click', function() {
   if (state.playing) requestAnimationFrame(tick);
 });
 
-els.toggleTranscriptButton.addEventListener('click', function() {
-  state.transcriptVisible = !state.transcriptVisible;
-  els.workspace.classList.toggle('transcript-hidden', !state.transcriptVisible);
-  els.toggleTranscriptButton.textContent = state.transcriptVisible ? 'Hide Transcript' : 'Show Transcript';
-  setControlsMenu(false);
+function setTranscriptVisible(visible) {
+  state.transcriptVisible = visible;
+  els.workspace.classList.toggle('transcript-hidden', !visible);
+  els.transcriptHeaderToggle.setAttribute('aria-label', visible ? 'Hide live feed' : 'Show live feed');
+  els.transcriptHeaderToggle.setAttribute('title', visible ? 'Hide feed' : 'Show feed');
+  els.transcriptHeaderToggle.textContent = visible ? '‹' : '›';
+}
+
+els.transcriptHeaderToggle.addEventListener('click', function() {
+  setTranscriptVisible(!state.transcriptVisible);
+});
+
+els.showFeedButton.addEventListener('click', function() {
+  setTranscriptVisible(true);
 });
 
 els.resetButton.addEventListener('click', function() {
@@ -1826,8 +2013,10 @@ els.openDashboardButton.addEventListener('click', openDashboard);
 els.copyDashboardButton.addEventListener('click', copyDashboardUrl);
 els.shareDashboardButton.addEventListener('click', shareDashboard);
 els.retryStreamButton.addEventListener('click', retryLiveMeetingStream);
-els.openRunwayButton.addEventListener('click', showRunway);
-els.runwayLiveButton.addEventListener('click', hideRunway);
+els.runwayLiveButton.addEventListener('click', function() { goToStep('meeting'); });
+els.stepRunway.addEventListener('click', function() { goToStep('runway'); });
+els.stepMeeting.addEventListener('click', function() { goToStep('meeting'); });
+els.stepRecap.addEventListener('click', function() { goToStep('recap'); });
 
 els.transcriptFile.addEventListener('change', async function(event) {
   const file = event.target.files[0];
@@ -1840,6 +2029,14 @@ els.transcriptFile.addEventListener('change', async function(event) {
 document.addEventListener('click', function(event) {
   if (!event.target.closest('.topbar-menu')) {
     setControlsMenu(false);
+  }
+
+  const excludeButton = event.target.closest('[data-exclude-type]');
+  if (excludeButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleExcludeFromBrief(excludeButton.dataset.excludeType, excludeButton.dataset.excludeId);
+    return;
   }
 
   const removeButton = event.target.closest('[data-remove-type]');
@@ -1884,6 +2081,52 @@ els.modalDismiss.addEventListener('click', function() {
   markAgent(state.openModalItem.id, 'dismiss');
 });
 
+els.modalPromoteRisk.addEventListener('click', function() {
+  if (!state.openModalItem || state.openModalItem.type !== 'agent') return;
+  const agent = state.agents.find(function(a) { return a.id === state.openModalItem.id; });
+  if (!agent) return;
+  state.risks.unshift({
+    id: makeId('risk'),
+    title: agent.intervention,
+    detail: agent.intervention,
+    evidence: agent.evidence,
+    transcriptReference: agent.transcriptReference || buildTranscriptReference(agent.evidence, agent.intervention),
+    conversation: 'Promoted from agent issue. Ask whether this risk is acceptable, preventable, or something the team should monitor.',
+    steps: ['Confirm the risk is accurately described.', 'Assign an owner or mitigation path.', 'Decide whether to log, monitor, or accept the risk.'],
+    promotedFromAgentId: agent.id
+  });
+  state.boardDirty = true;
+  markAgent(agent.id, 'dismiss');
+});
+
+els.modalPromoteOpenQuestion.addEventListener('click', function() {
+  if (!state.openModalItem || state.openModalItem.type !== 'agent') return;
+  const agent = state.agents.find(function(a) { return a.id === state.openModalItem.id; });
+  if (!agent) return;
+  state.risks.unshift({
+    id: makeId('risk'),
+    title: agent.intervention,
+    detail: agent.intervention,
+    evidence: agent.evidence,
+    transcriptReference: agent.transcriptReference || buildTranscriptReference(agent.evidence, agent.intervention),
+    conversation: 'Promoted as an open question. Discuss whether this needs resolution before the group can proceed.',
+    steps: ['Confirm the question is accurately stated.', 'Identify who needs to answer it.', 'Decide whether to table, assign, or resolve it now.'],
+    promotedFromAgentId: agent.id,
+    isOpenQuestion: true
+  });
+  state.boardDirty = true;
+  markAgent(agent.id, 'dismiss');
+});
+
+els.copyBriefButton.addEventListener('click', function() {
+  const markdown = exportBriefAsMarkdown();
+  navigator.clipboard.writeText(markdown).then(function() {
+    const original = els.copyBriefButton.textContent;
+    els.copyBriefButton.textContent = 'Copied!';
+    setTimeout(function() { els.copyBriefButton.textContent = original; }, 1500);
+  });
+});
+
 els.modalClose.addEventListener('click', closeDetailModal);
 els.modal.addEventListener('click', function(event) {
   if (event.target === els.modal) closeDetailModal();
@@ -1912,6 +2155,7 @@ async function initializeApp() {
     state.demoMode = true;
     document.body.classList.add('demo-mode');
     loadTranscript(demoVtt, 'product-decision-demo.vtt');
+    loadRunwayFromAgenda(fakeZoomMeeting);
   } else {
     state.demoMode = false;
     document.body.classList.remove('demo-mode');

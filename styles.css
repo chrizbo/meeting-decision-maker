@@ -639,6 +639,40 @@ h1 {
 
 .panel-header.compact { min-height: 78px; }
 
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-icon-button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  padding: 0;
+}
+
+.panel-icon-button:hover {
+  background: var(--surface-strong);
+  color: var(--ink);
+}
+
+.show-feed-button {
+  display: none;
+}
+
+.workspace.transcript-hidden .show-feed-button {
+  display: block;
+}
+
 .eyebrow {
   color: var(--muted);
   text-transform: uppercase;
@@ -679,11 +713,18 @@ h2 {
 .playback-row {
   display: none;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
+  gap: 10px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--line);
   color: var(--muted);
   font-size: 13px;
+}
+
+.playback-speed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .demo-mode .playback-row {
@@ -749,23 +790,27 @@ select {
 }
 
 .board-header {
-  min-height: 86px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding-bottom: 0;
 }
 
-.board-title-row {
+.board-header-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding-bottom: 14px;
 }
 
 .meeting-context {
-  margin-top: 8px;
+  margin-top: 6px;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 12px;
+  gap: 6px 10px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .meeting-context strong {
@@ -775,17 +820,18 @@ select {
 .meeting-link {
   display: flex;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .dashboard-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
 }
 
 .dashboard-actions button {
-  min-height: 32px;
-  padding: 0 10px;
+  min-height: 30px;
+  padding: 0 9px;
   font-size: 12px;
 }
 
@@ -793,6 +839,91 @@ select {
   border-color: var(--green);
   background: var(--green);
   color: white;
+}
+
+/* Meeting stepper */
+
+.meeting-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 12px 0 14px;
+  border-top: 1px solid var(--line);
+  margin-top: 2px;
+}
+
+.step-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px 4px 4px;
+  background: none;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 0;
+  transform: none;
+}
+
+.step-btn:hover {
+  background: var(--green-soft);
+  transform: none;
+}
+
+.step-pip {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.step-label {
+  display: none;
+  font-size: 12px;
+  font-weight: 640;
+  color: var(--ink);
+}
+
+.step-connector {
+  flex: 1;
+  height: 2px;
+  background: var(--line);
+  min-width: 10px;
+  transition: background 0.15s;
+}
+
+/* Active step */
+.meeting-stepper[data-step="runway"] #stepRunway .step-pip,
+.meeting-stepper[data-step="meeting"] #stepMeeting .step-pip,
+.meeting-stepper[data-step="recap"] #stepRecap .step-pip {
+  background: var(--green);
+  border-color: var(--green);
+}
+
+/* Past steps */
+.meeting-stepper[data-step="meeting"] #stepRunway .step-pip,
+.meeting-stepper[data-step="recap"] #stepRunway .step-pip,
+.meeting-stepper[data-step="recap"] #stepMeeting .step-pip {
+  background: var(--green-soft);
+  border-color: var(--green);
+}
+
+/* Active label */
+.meeting-stepper[data-step="runway"] #stepRunway .step-label,
+.meeting-stepper[data-step="meeting"] #stepMeeting .step-label,
+.meeting-stepper[data-step="recap"] #stepRecap .step-label {
+  display: inline;
+}
+
+/* Passed connectors */
+.meeting-stepper[data-step="meeting"] [data-connects="runway-meeting"],
+.meeting-stepper[data-step="recap"] [data-connects="runway-meeting"],
+.meeting-stepper[data-step="recap"] [data-connects="meeting-recap"] {
+  background: var(--green);
 }
 
 .runway-panel {
@@ -1005,6 +1136,18 @@ select {
 
 .agenda-block {
   grid-row: span 1;
+}
+
+.agenda-time {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 720;
+  vertical-align: middle;
+  white-space: nowrap;
 }
 
 .runway-block dl {
@@ -1424,11 +1567,6 @@ button:disabled {
     padding: 14px;
   }
 
-  .board-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .meeting-link {
     width: 100%;
   }
@@ -1622,4 +1760,110 @@ button:disabled {
   border-color: var(--green);
   background: var(--green);
   color: white;
+}
+
+/* --- Review mode & brief --- */
+
+.decision-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.exclude-item {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  min-height: 28px;
+  min-width: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.exclude-item:hover {
+  background: #f0eee7;
+  color: var(--ink);
+  transform: none;
+}
+
+.exclude-item.undo-exclude {
+  color: var(--blue, #3b72e0);
+  font-size: 14px;
+}
+
+.excluded-from-brief {
+  opacity: 0.45;
+}
+
+.excluded-from-brief strong,
+.excluded-from-brief h3 {
+  text-decoration: line-through;
+}
+
+.review-mode-active #reviewModeButton {
+  border-color: var(--green);
+  background: var(--green);
+  color: white;
+}
+
+.brief-panel {
+  margin: 0 14px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+
+.brief-panel .section-title-row {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.brief-content {
+  padding: 12px 14px;
+}
+
+.brief-section {
+  margin-bottom: 16px;
+}
+
+.brief-section:last-child {
+  margin-bottom: 0;
+}
+
+.brief-section h4 {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.brief-section ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.brief-section li {
+  font-size: 13px;
+  line-height: 1.45;
+  margin-bottom: 5px;
+  color: var(--ink);
+}
+
+.brief-section li:last-child {
+  margin-bottom: 0;
+}
+
+.brief-empty {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
 }

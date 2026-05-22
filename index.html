@@ -25,9 +25,7 @@
             <input id="transcriptFile" type="file" accept=".vtt,.txt,text/vtt,text/plain">
             <span>Load Transcript</span>
           </label>
-          <button id="toggleTranscriptButton" type="button">Hide Transcript</button>
           <button id="resetButton" type="button">Reset</button>
-          <button id="playButton" type="button" class="primary">Start</button>
         </div>
       </div>
     </header>
@@ -49,43 +47,65 @@
           <div>
             <h2 id="transcriptTitle">Live Feed</h2>
           </div>
-          <div class="timer" id="clock">00:00</div>
+          <div class="panel-header-actions">
+            <button id="transcriptHeaderToggle" class="panel-icon-button" type="button" aria-label="Hide live feed" title="Hide feed">‹</button>
+            <div class="timer" id="clock">00:00</div>
+          </div>
         </div>
         <div class="progress-track" aria-hidden="true">
           <div id="progressBar" class="progress-bar"></div>
         </div>
         <div class="playback-row">
-          <label for="speedSelect">Speed</label>
-          <select id="speedSelect">
-            <option value="0.75">0.75x</option>
-            <option value="1" selected>1x</option>
-            <option value="1.5">1.5x</option>
-            <option value="2">2x</option>
-            <option value="4">4x</option>
-          </select>
+          <button id="playButton" type="button" class="primary">Start</button>
+          <div class="playback-speed">
+            <label for="speedSelect">Speed</label>
+            <select id="speedSelect">
+              <option value="0.75">0.75x</option>
+              <option value="1" selected>1x</option>
+              <option value="1.5">1.5x</option>
+              <option value="2">2x</option>
+              <option value="4">4x</option>
+            </select>
+          </div>
         </div>
         <div id="transcriptList" class="transcript-list" aria-live="polite"></div>
       </section>
 
       <section class="board" aria-labelledby="boardTitle">
         <div class="board-header">
-          <div>
-            <div class="board-title-row">
+          <div class="board-header-top">
+            <div>
+              <h2 id="boardTitle">Product Direction</h2>
+              <div class="meeting-context">
+                <strong id="meetingName">Product Decision Review</strong>
+                <span id="meetingAttendees"></span>
+              </div>
             </div>
-            <h2 id="boardTitle">Product Direction</h2>
-            <div class="meeting-context">
-              <strong id="meetingName">Product Decision Review</strong>
-              <span id="meetingAttendees">Maya Patel, Jordan Lee</span>
+            <div class="meeting-link">
+              <div class="dashboard-actions">
+                <button id="showFeedButton" class="show-feed-button" type="button">‹ Transcript</button>
+                <button id="openDashboardButton" type="button">Open</button>
+                <button id="copyDashboardButton" type="button">Copy</button>
+                <button id="shareDashboardButton" type="button">Share</button>
+              </div>
             </div>
           </div>
-          <div class="meeting-link">
-            <div class="dashboard-actions">
-              <button id="openRunwayButton" type="button">Runway</button>
-              <button id="openDashboardButton" type="button">Open</button>
-              <button id="copyDashboardButton" type="button">Copy</button>
-              <button id="shareDashboardButton" type="button">Share</button>
-            </div>
-          </div>
+          <nav class="meeting-stepper" id="meetingStepper" aria-label="Meeting phase">
+            <button class="step-btn" id="stepRunway" type="button">
+              <span class="step-pip" aria-hidden="true"></span>
+              <span class="step-label">Runway</span>
+            </button>
+            <span class="step-connector" data-connects="runway-meeting" aria-hidden="true"></span>
+            <button class="step-btn" id="stepMeeting" type="button">
+              <span class="step-pip" aria-hidden="true"></span>
+              <span class="step-label">Meeting</span>
+            </button>
+            <span class="step-connector" data-connects="meeting-recap" aria-hidden="true"></span>
+            <button class="step-btn" id="stepRecap" type="button">
+              <span class="step-pip" aria-hidden="true"></span>
+              <span class="step-label">Recap</span>
+            </button>
+          </nav>
         </div>
 
         <section id="runwayPanel" class="runway-panel" aria-labelledby="runwayTitle">
@@ -123,10 +143,6 @@
               <h4>Decision Frame</h4>
               <dl id="runwayDecisionFrame"></dl>
             </article>
-            <article class="runway-block">
-              <h4>Carry Forward</h4>
-              <ul id="runwayCarryForward"></ul>
-            </article>
           </div>
         </section>
 
@@ -161,6 +177,14 @@
             <span id="auditCount">0</span>
           </div>
           <div id="auditList" class="audit-list"></div>
+        </section>
+
+        <section id="briefPanel" class="brief-panel" aria-labelledby="briefTitle" hidden>
+          <div class="section-title-row">
+            <h3 id="briefTitle">Meeting Brief</h3>
+            <button id="copyBriefButton" type="button">Copy Brief</button>
+          </div>
+          <div id="briefContent" class="brief-content"></div>
         </section>
       </section>
 
@@ -201,6 +225,8 @@
           <div id="modalAgentActions" class="modal-agent-actions" hidden>
             <button id="modalDiscussed" type="button">Mark Discussed</button>
             <button id="modalDismiss" type="button">Dismiss Issue</button>
+            <button id="modalPromoteRisk" type="button">Promote to Risk</button>
+            <button id="modalPromoteOpenQuestion" type="button">Promote to Open Question</button>
           </div>
         </div>
       </section>
