@@ -8,8 +8,6 @@ Zoom's test-plan guidance asks for a clear, step-by-step document that explains 
 
 Room Clarity is a live meeting decision board. A meeting host launches the Zoom App during a Zoom meeting, creates a Room Clarity meeting session, and shares either the Zoom App surface or the generated dashboard URL with meeting participants. The board captures transcript cues and surfaces decisions, risks, action items, and red-team agent prompts.
 
-Important RTMS status note: Room Clarity is still waiting for RTMS to be enabled for this app/account so the team can complete end-to-end live RTMS testing. The app and backend RTMS paths are implemented and ready to test, but live RTMS start may remain blocked by Zoom until access is granted.
-
 Current production URL:
 
 ```text
@@ -168,7 +166,7 @@ Expected result:
 
 ## Test Scenario 6: Start RTMS From the Zoom App
 
-Purpose: verify the app's RTMS control path, subject to Zoom granting RTMS API access for the app. Room Clarity is still waiting for RTMS to be enabled so this end-to-end scenario may not be fully testable yet.
+Purpose: verify the app's end-to-end RTMS path — from SDK start to live transcript appearing on the dashboard.
 
 Steps:
 
@@ -181,21 +179,14 @@ Steps:
 7. Watch the Room Clarity dashboard for transcript-derived updates.
 8. Click Stop RTMS when finished.
 
-Expected result when RTMS is available:
+Expected result:
 
 - The app calls the Zoom Apps SDK RTMS start method.
 - Zoom sends RTMS webhook events to `https://roomclarity.com/api/zoom/rtms-webhook`.
 - The Room Clarity backend joins the RTMS stream.
-- Transcript cues appear in the dashboard state.
+- Transcript cues appear in the dashboard state with correct timestamps.
 - Decision, risk, action, or agent-prompt cards update from the transcript.
 - Stopping RTMS ends the stream and updates the app status.
-
-Expected result if RTMS is not yet granted:
-
-- Zoom may return an error such as `40316` indicating that the API has not passed marketplace verification or entitlement review.
-- The app remains usable as a launcher and dashboard.
-- The backend remains configured for RTMS, but live transcript ingestion cannot start until Zoom grants the app RTMS access.
-- This is the currently expected limitation until RTMS is enabled for Room Clarity.
 
 ## Test Scenario 7: Verify RTMS Webhook URL Validation
 
@@ -244,7 +235,7 @@ Before submitting or resubmitting for Zoom review, run this plan with a fresh Zo
 - A dashboard URL is created from the Zoom meeting context.
 - The dashboard URL opens in a browser.
 - App sharing or browser screen sharing works.
-- RTMS controls either start successfully or show the expected Zoom entitlement/verification message.
+- RTMS starts successfully, transcript cues appear on the dashboard, and stopping RTMS ends the stream.
 - Public support, documentation, privacy, terms, and configuration pages are reachable.
 - The developer contact email for the Zoom Marketplace submission is actively monitored.
 
@@ -254,4 +245,4 @@ Room Clarity is currently designed for the host-led meeting flow. A reviewer sho
 
 The current flow can be used with anyone after the host launches the Zoom App and shares the dashboard or app surface. A separate Room Clarity account is not required for participants or reviewers in this version.
 
-RTMS functionality depends on Zoom granting access to the relevant RTMS APIs. If RTMS start is blocked during review, the remaining Zoom App launcher, meeting-session creation, dashboard sharing, browser dashboard, and webhook configuration paths are still testable.
+RTMS is fully enabled and testable end-to-end. Reviewers can complete Scenario 6 in full: start RTMS from inside a Zoom meeting, speak test sentences, and confirm transcript-derived cards appear on the dashboard.
