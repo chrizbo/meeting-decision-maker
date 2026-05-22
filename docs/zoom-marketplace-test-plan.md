@@ -6,7 +6,7 @@ Zoom's test-plan guidance asks for a clear, step-by-step document that explains 
 
 ## App Summary
 
-Room Clarity is a live meeting decision board. A meeting host launches the Zoom App during a Zoom meeting, creates a Room Clarity meeting session, and shares either the Zoom App surface or the generated dashboard URL with meeting participants. The board captures transcript cues and surfaces decisions, risks, action items, and red-team agent prompts.
+Room Clarity is a live meeting decision board and recap aid. A meeting host launches the Zoom App during a Zoom meeting, creates a Room Clarity meeting session, and shares either the Zoom App surface or the generated dashboard URL with meeting participants. The board captures transcript cues and surfaces decisions, risks, action items, and red-team agent prompts. At the end of the meeting, the host can open the Recap step, exclude noisy items, promote useful agent prompts, and copy a reviewed meeting brief.
 
 Current production URL:
 
@@ -70,6 +70,7 @@ The app flow uses these Zoom App capabilities:
 - Read participant context when available to the host or co-host.
 - Create a Room Clarity meeting session from the Zoom meeting context.
 - Share the Zoom App surface or open the generated dashboard URL.
+- Review captured items in the Recap step and copy a meeting brief.
 - Start, stop, and inspect RTMS status when Zoom grants the app access to RTMS APIs.
 - Receive RTMS webhook events and transcript data in the backend.
 
@@ -188,7 +189,31 @@ Expected result:
 - Decision, risk, action, or agent-prompt cards update from the transcript.
 - Stopping RTMS ends the stream and updates the app status.
 
-## Test Scenario 7: Verify RTMS Webhook URL Validation
+## Test Scenario 7: Review and Copy the Meeting Brief
+
+Purpose: verify that the host can turn captured meeting artifacts into a reviewed brief after transcript playback or RTMS capture.
+
+Steps:
+
+1. Complete Scenario 5 with mock playback or Scenario 6 with live RTMS.
+2. In the Room Clarity board, open the `Recap` step. If mock playback was used, wait for playback to complete and confirm the app advances to recap review.
+3. Confirm the Meeting Brief panel includes sections for captured decisions, actions, risks, and open questions when those items exist.
+4. Use the exclude control on one decision, risk, action, or open question.
+5. Confirm the excluded item is visually marked on the board and removed from the Meeting Brief panel.
+6. Use the re-include control on the same item.
+7. Confirm the item returns to the Meeting Brief panel.
+8. Open an agent prompt detail, promote it to a risk or open question, then confirm the promoted item can appear in the brief.
+9. Click `Copy Brief`.
+10. Paste the clipboard contents into a text editor to inspect the copied Markdown.
+
+Expected result:
+
+- The Recap step is available from the board stepper.
+- The host can exclude and re-include items without deleting them from the board.
+- Promoted agent prompts become human-facing risk or open-question items before appearing in the brief.
+- The copied brief contains only included sections and does not require a separate Room Clarity account.
+
+## Test Scenario 8: Verify RTMS Webhook URL Validation
 
 Purpose: verify that Zoom can validate the configured RTMS webhook endpoint.
 
@@ -208,7 +233,7 @@ Expected result:
 - Zoom receives a valid encrypted response for endpoint validation.
 - Signed runtime webhook events are accepted only when their timestamp and signature are valid.
 
-## Test Scenario 8: Verify Support and Policy Pages
+## Test Scenario 9: Verify Support and Policy Pages
 
 Purpose: verify that required Marketplace support and policy links are reachable.
 
@@ -236,6 +261,7 @@ Before submitting or resubmitting for Zoom review, run this plan with a fresh Zo
 - The dashboard URL opens in a browser.
 - App sharing or browser screen sharing works.
 - RTMS starts successfully, transcript cues appear on the dashboard, and stopping RTMS ends the stream.
+- The Recap step opens, item exclusion updates the brief, promoted agent prompts can be included, and Copy Brief places Markdown on the clipboard.
 - Public support, documentation, privacy, terms, and configuration pages are reachable.
 - The developer contact email for the Zoom Marketplace submission is actively monitored.
 

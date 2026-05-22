@@ -2,7 +2,7 @@
 
 ## Status
 
-Future-facing spec. Do not implement until the live board and basic meeting review workflow are ready for this layer.
+First local slice implemented on `recap/brief-first-slice`. The current prototype supports a Recap step, item-level exclude/re-include controls, agent issue promotion into normal board items, and a copyable Markdown meeting brief. Durable storage, share links, audience-specific permissions, editing fields, carry-forward persistence, and duplicate merge remain future work.
 
 ## Goal
 
@@ -42,7 +42,7 @@ meeting_brief
 - updated_at
 ```
 
-The first implementation can keep this in browser state. Durable storage can come after the workflow feels right.
+The first implementation keeps this in browser state. Durable storage can come after the workflow feels right.
 
 ## Draft Inputs
 
@@ -131,14 +131,27 @@ Keep `promoted_from_agent_issue_id` as provenance, not as user-facing recap cont
 
 ## First Build Slice
 
-1. Add item flags: `includeInBrief`, `audienceVisibility`, and `carryForward`.
-2. Add simple review-mode controls for include/exclude and attendee visibility.
-3. Add a brief preview generated from current board state.
-4. Add agent modal actions that promote an issue into normal board items.
+Implemented:
+
+1. Add a `Recap` step to the meeting stepper.
+2. Add review mode that visually marks excluded board items.
+3. Add item-level exclude/re-include controls for decisions, risks, actions, and open questions.
+4. Add a brief preview generated from current board state.
+5. Add `Copy Brief`, exporting the included sections as Markdown.
+6. Add agent modal actions that promote an issue into a normal risk or open question.
+
+Deferred from the fuller model:
+
+- `audienceVisibility` controls.
+- `carryForward` controls and persistence.
+- Human rewrite fields.
+- Section editing.
+- Duplicate merge.
+- Durable brief records and attendee-facing share links.
 
 ## Open Questions
 
 - Should "assumption" become a first-class board item before recap drafting, or only inside recap sections at first?
-- Should the first preview be an in-app panel, a dedicated route, or both?
-- Should sharing start with copy/export before shareable links?
+- Should the first dedicated brief route reuse browser state, persisted session state, or a new `meeting_brief` record?
+- What editing fields are necessary before a copied brief is credible for real teams?
 - What is the minimum access model for attendee-facing brief links?

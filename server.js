@@ -667,6 +667,202 @@ async function analyzeCueWithGemini(input) {
   }));
 }
 
+function buildRunwayPrompt(input) {
+  const topic = String(input.topic || 'Meeting').slice(0, 300);
+  const agenda = String(input.agenda || '').slice(0, 2000);
+  const participants = Array.isArray(input.participants) ? input.participants.slice(0, 20).join(', ') : '';
+  const host = String(input.host || '').slice(0, 100);
+
+  return [
+    'You are a meeting facilitator. Parse the meeting information below into structured start-board content for a live meeting board.',
+    'Return only valid JSON with this exact shape:',
+    '{"title":"concise 8-12 word provocation title","purpose":"one sentence: why this meeting exists and what it must produce","agendaTitle":"Agenda","agendaItems":[{"title":"item title","owner":"name or null","timeBudget":minutes_integer_or_null,"desiredOutcome":"concrete result the group should have after this item"}],"decisionFrame":{"mode":"Decide|Align|Explore|Update|Review","owner":"name or null","successCondition":"one sentence: what must be true at end of meeting"},"participationNorm":"one short sentence to prevent false consensus","openingPrompt":"one host-sayable opening question"}',
+    'Rules: 3-5 agenda items; do not invent owners or timings not supported by the text; desired outcomes must be concrete; opening prompt must be a single sentence the host could say aloud; return only JSON.',
+    '',
+    'Meeting topic: ' + topic,
+    'Host: ' + (host || 'not specified'),
+    'Participants: ' + (participants || 'not specified'),
+    'Agenda / description:',
+    agenda || '(none provided)'
+  ].join('\n');
+}
+
+function buildGeminiRunwayRequest(input) {
+  return {
+    generationConfig: { temperature: 0.3, responseMimeType: 'application/json' },
+    contents: [{ role: 'user', parts: [{ text: buildRunwayPrompt(input) }] }]
+  };
+}
+
+function buildOpenAIRunwayRequest(input, model) {
+  return {
+    model,
+    input: [{ role: 'user', content: [{ type: 'input_text', text: buildRunwayPrompt(input) }] }],
+    text: { format: { type: 'json_object' } },
+    reasoning: { effort: openaiReasoningEffort },
+    store: false
+  };
+}
+
+function cleanRunwayResponse(parsed) {
+  const allowedModes = new Set(['Decide', 'Align', 'Explore', 'Update', 'Review']);
+  const agendaItems = Array.isArray(parsed.agendaItems)
+    ? parsed.agendaItems.slice(0, 5).map(function(item) {
+        if (!item || !item.title) return null;
+        const budget = Number.isInteger(item.timeBudget) && item.timeBudget > 0 ? item.timeBudget : undefined;
+        return Object.assign(
+          { title: String(item.title).slice(0, 120), desiredOutcome: String(item.desiredOutcome || '').slice(0, 200) },
+          item.owner ? { owner: String(item.owner).slice(0, 80) } : {},
+          budget ? { timeBudget: budget } : {}
+        );
+      }).filter(Boolean)
+    : [];
+  const frame = parsed.decisionFrame || {};
+  return {
+    title: String(parsed.title || '').slice(0, 120) || 'Meeting Runway',
+    purpose: String(parsed.purpose || '').slice(0, 300),
+    agendaTitle: 'Agenda',
+    agendaItems,
+    decisionFrame: {
+      mode: allowedModes.has(frame.mode) ? frame.mode : 'Decide',
+      owner: String(frame.owner || '').slice(0, 80),
+      successCondition: String(frame.successCondition || '').slice(0, 300)
+    },
+    participationNorm: String(parsed.participationNorm || '').slice(0, 200),
+    openingPrompt: String(parsed.openingPrompt || '').slice(0, 200)
+  };
+}
+
+async function analyzeRunwayWithProvider(input) {
+  const modelSpec = parseAnalysisModelSpec(input.model);
+  const provider = modelSpec.provider;
+  const model = modelSpec.model;
+  if (!analysisEnabled(provider)) {
+    const error = new Error(`${provider === 'openai' ? 'OpenAI' : 'Gemini'} analysis is not configured.`);
+    error.status = 503;
+    throw error;
+  }
+  const response = provider === 'openai'
+    ? await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { 'authorization': 'Bearer ' + openaiApiKey, 'content-type': 'application/json' },
+        body: JSON.stringify(buildOpenAIRunwayRequest(input, model))
+      })
+    : await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(geminiApiKey), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(buildGeminiRunwayRequest(input))
+      });
+  const body = await response.json().catch(function() { return {}; });
+  if (!response.ok) {
+    const msg = body.error && body.error.message ? body.error.message : `${provider} runway analysis failed`;
+    const error = new Error(msg);
+    error.status = 502;
+    throw error;
+  }
+  const text = provider === 'openai' ? openaiResponseText(body) : geminiResponseText(body);
+  return { source: provider, model, runway: cleanRunwayResponse(parseModelJson(text)) };
+}
+
+function buildBriefPrompt(input) {
+  const meeting = input.meeting || {};
+  const included = input.includedItems || {};
+  return [
+    'You are drafting a concise meeting brief from reviewed meeting-board items.',
+    'Use only the included items provided below. Do not invent decisions, attendees, dates, risks, assumptions, or open questions.',
+    'Return Markdown only. Do not wrap it in code fences.',
+    '',
+    'Required format:',
+    '## Meeting name',
+    'Date and attendees',
+    '',
+    '### Decisions',
+    '',
+    '* Decision 1',
+    '  * General info',
+    '  * Related risks and assumptions',
+    '* Decision 2',
+    '',
+    '### Open questions',
+    '',
+    '* Agent statement',
+    '* Agent statement',
+    '',
+    'Rules:',
+    '- Use the actual meeting name as the H2.',
+    '- Put the provided date and attendees on the line immediately after the H2.',
+    '- Under each decision, include a brief general-info bullet and, when available, one related risks-and-assumptions bullet.',
+    '- Put unresolved agent open issues and unresolved assumptions/open questions under Open questions.',
+    '- Keep bullets short and human-readable.',
+    '- If a section has no items, include the heading and a single bullet saying "None captured."',
+    '',
+    '# Meeting',
+    JSON.stringify({
+      name: meeting.name || 'Meeting',
+      date: meeting.date || '',
+      attendees: Array.isArray(meeting.attendees) ? meeting.attendees.slice(0, 30) : []
+    }, null, 2),
+    '',
+    '# Included reviewed items',
+    JSON.stringify(included, null, 2)
+  ].join('\n');
+}
+
+function buildGeminiBriefRequest(input) {
+  return {
+    generationConfig: { temperature: 0.25 },
+    contents: [{ role: 'user', parts: [{ text: buildBriefPrompt(input) }] }]
+  };
+}
+
+function buildOpenAIBriefRequest(input, model) {
+  return {
+    model,
+    input: [{ role: 'user', content: [{ type: 'input_text', text: buildBriefPrompt(input) }] }],
+    reasoning: { effort: openaiReasoningEffort },
+    store: false
+  };
+}
+
+function cleanBriefMarkdown(markdown) {
+  return String(markdown || '')
+    .replace(/^```(?:markdown)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim()
+    .slice(0, 12000);
+}
+
+async function analyzeBriefWithProvider(input) {
+  const modelSpec = parseAnalysisModelSpec(input && input.model);
+  const provider = modelSpec.provider;
+  const model = modelSpec.model;
+  if (!analysisEnabled(provider)) {
+    const error = new Error(`${provider === 'openai' ? 'OpenAI' : 'Gemini'} analysis is not configured.`);
+    error.status = 503;
+    throw error;
+  }
+  const response = provider === 'openai'
+    ? await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { 'authorization': 'Bearer ' + openaiApiKey, 'content-type': 'application/json' },
+        body: JSON.stringify(buildOpenAIBriefRequest(input || {}, model))
+      })
+    : await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(geminiApiKey), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(buildGeminiBriefRequest(input || {}))
+      });
+  const body = await response.json().catch(function() { return {}; });
+  if (!response.ok) {
+    const msg = body.error && body.error.message ? body.error.message : `${provider} brief analysis failed`;
+    const error = new Error(msg);
+    error.status = 502;
+    throw error;
+  }
+  const text = provider === 'openai' ? openaiResponseText(body) : geminiResponseText(body);
+  return { source: provider, model, markdown: cleanBriefMarkdown(text) };
+}
+
 function geminiResponseText(body) {
   return body.candidates &&
     body.candidates[0] &&
@@ -1402,6 +1598,28 @@ async function handleApi(req, res, pathname) {
         provider: error.provider || modelSpec.provider,
         model: error.model || modelSpec.model
       });
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/analyze-runway') {
+    let input = {};
+    try {
+      input = await readBody(req);
+      sendJson(res, 200, await analyzeRunwayWithProvider(input));
+    } catch (error) {
+      sendJson(res, error.status || 500, { error: error.message || 'Runway analysis failed' });
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/analyze-brief') {
+    let input = {};
+    try {
+      input = await readBody(req);
+      sendJson(res, 200, await analyzeBriefWithProvider(input));
+    } catch (error) {
+      sendJson(res, error.status || 500, { error: error.message || 'Brief analysis failed' });
     }
     return;
   }

@@ -319,6 +319,7 @@ Out of scope for the current local slice:
 
 ## Later Build Slices
 
+- **Carry Forward section**: The carry forward block has been removed from the runway UI until there is a mechanism to pull items from previous meetings. Restore it once meeting series linking or a prior-meeting brief integration is in place. The data model (`carry_forward_items`) and stub data in `app.js` can be removed at that point too. See `docs/future-specs/meeting-series-linking.md` for the continuity plan.
 - Start the runway countdown only when the board is visible, foregrounded, shared, or opened as the main dashboard surface.
 - Skip directly to the live board for late launches with existing meeting state.
 - Parse agenda from Zoom or calendar descriptions.

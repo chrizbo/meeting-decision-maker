@@ -244,7 +244,11 @@ const state = {
   runwayRemaining: configuredRunwayDuration(),
   runwayLastTick: 0,
   demoMode: false,
-  reviewMode: false
+  reviewMode: false,
+  briefMarkdown: '',
+  briefLoading: false,
+  briefError: '',
+  briefRequestKey: ''
 };
 
 const els = {
@@ -1208,9 +1212,15 @@ function renderAgents() {
   const visible = state.agents.filter(function(agent) { return state.filter === 'all' || agent.status === state.filter; });
   els.queueCount.textContent = state.agents.filter(function(agent) { return agent.status === 'open'; }).length;
   els.agentQueue.innerHTML = visible.map(function(agent) {
-    return '<article class="agent-card ' + agent.status + '" data-open-type="agent" data-open-id="' + agent.id + '" data-agent-id="' + agent.id + '">' +
+    const excluded = agent.excludedFromBrief === true;
+    const excludeBtn = state.reviewMode
+      ? '<button class="exclude-item' + (excluded ? ' undo-exclude' : '') + '" type="button" aria-label="' + (excluded ? 'Re-include in brief' : 'Exclude from brief') + '" data-exclude-type="agent" data-exclude-id="' + agent.id + '">' + (excluded ? '↩' : 'x') + '</button>'
+      : '';
+    return '<article class="agent-card ' + agent.status + (excluded ? ' excluded-from-brief' : '') + '" data-open-type="agent" data-open-id="' + agent.id + '" data-agent-id="' + agent.id + '">' +
       '<div class="agent-card-header"><div class="agent-name">' + escapeHtml(agent.agent) + '</div>' +
-      '<span class="priority-pill ' + agent.priority + '">' + agent.priority + '</span></div>' +
+      '<span class="priority-pill ' + agent.priority + '">' + agent.priority + '</span>' +
+      excludeBtn +
+      '</div>' +
       (agent.discussionSuggested ? '<div class="agent-auto-note">Possibly discussed</div>' : '') +
       '<p>' + escapeHtml(agent.intervention) + '</p>' +
       '<div class="agent-evidence">' + escapeHtml(evidenceSpeaker(agent.evidence)) + '</div>' +
@@ -1861,6 +1871,7 @@ function toggleExcludeFromBrief(type, id) {
   const item = findBoardItem(type, id);
   if (!item) return;
   item.excludedFromBrief = !item.excludedFromBrief;
+  state.briefRequestKey = '';
   state.boardDirty = true;
   renderAll();
 }
@@ -1871,78 +1882,200 @@ function briefItems() {
   const meeting = state.meetingContext || fakeZoomMeeting;
   return {
     topic: meeting.topic || 'Meeting',
+    date: new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }),
+    attendees: meeting.attendees || [],
     decisions: state.decisions.filter(function(d) { return !d.excludedFromBrief; }),
     actions: state.actions.filter(function(a) { return !a.excludedFromBrief; }),
     risks: state.risks.filter(function(r) { return !r.excludedFromBrief && !r.isOpenQuestion; }),
-    openQuestions: state.risks.filter(function(r) { return !r.excludedFromBrief && r.isOpenQuestion; })
+    openQuestions: state.risks.filter(function(r) { return !r.excludedFromBrief && r.isOpenQuestion; }),
+    agents: state.agents.filter(function(a) { return !a.excludedFromBrief && a.status === 'open'; })
   };
+}
+
+function evidenceSeconds(value) {
+  if (!value) return null;
+  const match = String(value).match(/(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function decisionWindow(decision, index, decisions) {
+  const start = evidenceSeconds(decision.evidence);
+  const next = decisions[index + 1] ? evidenceSeconds(decisions[index + 1].evidence) : null;
+  return { start: start === null ? -Infinity : start, end: next === null ? Infinity : next };
+}
+
+function itemsInDecisionWindow(list, window) {
+  return list.filter(function(item) {
+    const seconds = evidenceSeconds(item.evidence);
+    return seconds === null || (seconds >= window.start && seconds < window.end);
+  });
+}
+
+function briefDetail(item, fallback) {
+  return item.detail || item.summary || item.intervention || fallback || '';
+}
+
+function sortByEvidence(list) {
+  return list.slice().sort(function(a, b) {
+    const aSeconds = evidenceSeconds(a.evidence);
+    const bSeconds = evidenceSeconds(b.evidence);
+    if (aSeconds === null && bSeconds === null) return 0;
+    if (aSeconds === null) return 1;
+    if (bSeconds === null) return -1;
+    return aSeconds - bSeconds;
+  });
+}
+
+function relatedBriefGroups(decision, index, items) {
+  const window = decisionWindow(decision, index, items.decisions);
+  return [
+    { label: 'Assumptions / open questions', items: itemsInDecisionWindow(items.openQuestions, window), type: 'open-question' },
+    { label: 'Risks', items: itemsInDecisionWindow(items.risks, window), type: 'risk' },
+    { label: 'Agent open issues', items: itemsInDecisionWindow(items.agents, window), type: 'agent' },
+    { label: 'Actions', items: itemsInDecisionWindow(items.actions, window), type: 'action' }
+  ].filter(function(group) { return group.items.length; });
+}
+
+function itemLine(item, type) {
+  const title = type === 'agent' ? item.agent : item.title;
+  const detail = briefDetail(item);
+  return '**' + title + '**' + (detail ? ': ' + detail : '');
+}
+
+function includedBriefPayload(items) {
+  return {
+    decisions: sortByEvidence(items.decisions).map(function(item) {
+      return { title: item.title, detail: item.detail, status: item.status, evidence: item.evidence };
+    }),
+    risks: sortByEvidence(items.risks).map(function(item) {
+      return { title: item.title, detail: item.detail, evidence: item.evidence };
+    }),
+    assumptions: sortByEvidence(items.openQuestions).map(function(item) {
+      return { title: item.title, detail: item.detail, evidence: item.evidence };
+    }),
+    actions: sortByEvidence(items.actions).map(function(item) {
+      return { title: item.title, detail: item.detail, evidence: item.evidence };
+    }),
+    agentOpenIssues: sortByEvidence(items.agents).map(function(item) {
+      return { agent: item.agent, statement: item.intervention, priority: item.priority, evidence: item.evidence };
+    })
+  };
+}
+
+function briefKey(items) {
+  return JSON.stringify({
+    meeting: { topic: items.topic, date: items.date, attendees: items.attendees },
+    included: includedBriefPayload(items)
+  });
+}
+
+function fallbackBriefMarkdown(items) {
+  const lines = [
+    '## ' + items.topic,
+    items.date + ' · Attendees: ' + (items.attendees.length ? items.attendees.join(', ') : 'Not specified'),
+    '',
+    '### Decisions',
+    ''
+  ];
+  const decisions = sortByEvidence(items.decisions);
+  if (items.decisions.length) {
+    decisions.forEach(function(decision, index) {
+        const groups = relatedBriefGroups(decision, index, items);
+      const related = groups
+        .filter(function(group) { return group.type === 'risk' || group.type === 'open-question'; })
+        .flatMap(function(group) { return group.items.map(function(item) { return itemLine(item, group.type); }); });
+      lines.push('* ' + itemLine(decision, 'decision'));
+      lines.push('  * General info: ' + (briefDetail(decision) || 'Decision captured from the meeting board.'));
+      lines.push('  * Related risks and assumptions: ' + (related.length ? related.join('; ') : 'None captured.'));
+    });
+  } else {
+    lines.push('* None captured.');
+  }
+  lines.push('', '### Open questions', '');
+  const openQuestions = sortByEvidence(items.openQuestions).map(function(item) { return itemLine(item, 'open-question'); })
+    .concat(sortByEvidence(items.agents).map(function(item) { return item.intervention || itemLine(item, 'agent'); }));
+  if (openQuestions.length) {
+    openQuestions.forEach(function(line) { lines.push('* ' + line); });
+  } else {
+    lines.push('* None captured.');
+  }
+  return lines.join('\n').trim();
+}
+
+function markdownToBriefHtml(markdown) {
+  const html = String(markdown || '').split('\n').map(function(raw) {
+    const line = raw.trimEnd();
+    if (!line.trim()) return '';
+    if (line.startsWith('### ')) return '<h4>' + escapeHtml(line.slice(4)) + '</h4>';
+    if (line.startsWith('## ')) return '<h3>' + escapeHtml(line.slice(3)) + '</h3>';
+    if (line.startsWith('  * ')) return '<li class="brief-nested-item">' + inlineMarkdown(line.slice(4)) + '</li>';
+    if (line.startsWith('* ')) return '<li>' + inlineMarkdown(line.slice(2)) + '</li>';
+    return '<p>' + inlineMarkdown(line) + '</p>';
+  }).join('');
+  return '<div class="brief-markdown">' + html + '</div>';
+}
+
+function inlineMarkdown(value) {
+  return escapeHtml(value).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 }
 
 function renderBriefPanel() {
   const items = briefItems();
-  const sections = [];
-
-  if (items.decisions.length) {
-    sections.push('<div class="brief-section">' +
-      '<h4>Decisions</h4><ul>' +
-      items.decisions.map(function(d) {
-        return '<li><strong>' + escapeHtml(d.title) + '</strong>' +
-          (d.detail ? ' — ' + escapeHtml(d.detail) : '') + '</li>';
-      }).join('') +
-      '</ul></div>');
-  }
-  if (items.actions.length) {
-    sections.push('<div class="brief-section">' +
-      '<h4>Actions</h4><ul>' +
-      items.actions.map(function(a) {
-        return '<li><strong>' + escapeHtml(a.title) + '</strong>' +
-          (a.detail ? ' — ' + escapeHtml(a.detail) : '') + '</li>';
-      }).join('') +
-      '</ul></div>');
-  }
-  if (items.risks.length) {
-    sections.push('<div class="brief-section">' +
-      '<h4>Risks &amp; Watchpoints</h4><ul>' +
-      items.risks.map(function(r) {
-        return '<li><strong>' + escapeHtml(r.title) + '</strong>' +
-          (r.detail ? ' — ' + escapeHtml(r.detail) : '') + '</li>';
-      }).join('') +
-      '</ul></div>');
-  }
-  if (items.openQuestions.length) {
-    sections.push('<div class="brief-section">' +
-      '<h4>Open Questions</h4><ul>' +
-      items.openQuestions.map(function(q) {
-        return '<li><strong>' + escapeHtml(q.title) + '</strong>' +
-          (q.detail ? ' — ' + escapeHtml(q.detail) : '') + '</li>';
-      }).join('') +
-      '</ul></div>');
+  const key = briefKey(items);
+  if (state.analysisConfig.enabled && state.reviewMode && state.briefRequestKey !== key && !state.briefLoading) {
+    requestBriefAnalysis(items, key);
+  } else if (!state.analysisConfig.enabled && state.briefRequestKey !== key) {
+    state.briefMarkdown = fallbackBriefMarkdown(items);
+    state.briefRequestKey = key;
+    state.briefError = '';
   }
 
-  els.briefContent.innerHTML = sections.length
-    ? sections.join('')
-    : '<p class="brief-empty">No items included. Use the board above to accept decisions or promote agent issues, then exclude anything that should not appear here.</p>';
+  if (state.briefLoading) {
+    els.copyBriefButton.disabled = true;
+    els.briefContent.innerHTML = '<div class="brief-loading"><span></span><p>Generating meeting brief from included items...</p></div>';
+    return;
+  }
+  els.copyBriefButton.disabled = false;
+  const fallback = fallbackBriefMarkdown(items);
+  const markdown = state.briefMarkdown || fallback;
+  els.briefContent.innerHTML = (state.briefError ? '<p class="brief-error">' + escapeHtml(state.briefError) + '</p>' : '') +
+    (markdown ? markdownToBriefHtml(markdown) : '<p class="brief-empty">No items included. Use the board below to accept decisions, promote agent issues, or re-include anything that should appear here.</p>');
+}
+
+async function requestBriefAnalysis(items, key) {
+  state.briefLoading = true;
+  state.briefError = '';
+  state.briefRequestKey = key;
+  els.briefContent.innerHTML = '<div class="brief-loading"><span></span><p>Generating meeting brief from included items...</p></div>';
+  try {
+    const response = await fetch('/api/analyze-brief', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        meeting: { name: items.topic, date: items.date, attendees: items.attendees },
+        includedItems: includedBriefPayload(items)
+      })
+    });
+    if (!response.ok) throw new Error('Brief generation unavailable');
+    const result = await response.json();
+    if (state.briefRequestKey !== key) return;
+    state.briefMarkdown = result.markdown || fallbackBriefMarkdown(items);
+  } catch (error) {
+    if (state.briefRequestKey !== key) return;
+    state.briefMarkdown = fallbackBriefMarkdown(items);
+    state.briefError = 'Using local brief because LLM generation was unavailable.';
+  } finally {
+    if (state.briefRequestKey === key) {
+      state.briefLoading = false;
+      state.boardDirty = true;
+      renderAll();
+    }
+  }
 }
 
 function exportBriefAsMarkdown() {
-  const items = briefItems();
-  const lines = ['# Meeting Brief — ' + items.topic, ''];
-
-  function appendSection(heading, list) {
-    if (!list.length) return;
-    lines.push('## ' + heading, '');
-    list.forEach(function(item) {
-      lines.push('- **' + item.title + '**' + (item.detail ? ': ' + item.detail : ''));
-    });
-    lines.push('');
-  }
-
-  appendSection('Decisions', items.decisions);
-  appendSection('Actions', items.actions);
-  appendSection('Risks & Watchpoints', items.risks);
-  appendSection('Open Questions', items.openQuestions);
-
-  return lines.join('\n').trim();
+  return state.briefMarkdown || fallbackBriefMarkdown(briefItems());
 }
 
 function handleOpenClick(event) {
@@ -2165,7 +2298,7 @@ async function initializeApp() {
   renderAll();
   // Start the runway countdown regardless of whether a transcript was loaded
   startRunwayTimer();
-  startRtmsPolling();
+  if (!state.demoMode) startRtmsPolling();
 }
 
 initializeApp();

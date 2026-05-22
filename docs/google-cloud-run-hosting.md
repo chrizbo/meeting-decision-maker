@@ -15,7 +15,7 @@ Cloud Run is a good fit for the current prototype because it gives us:
 
 Start with one Cloud Run service:
 
-- `meeting-decision-maker-web`: serves the board, creates meeting sessions, runs LLM cue analysis, receives signed Zoom RTMS webhooks, and maintains in-memory RTMS session state.
+- `meeting-decision-maker-web`: serves the board, creates meeting sessions, runs LLM cue and runway analysis, receives signed Zoom RTMS webhooks, and maintains in-memory RTMS session state.
 
 Add these later when the product behavior is stable:
 
@@ -95,6 +95,8 @@ The homepage should be available at the service root. The board should be availa
 https://roomclarity.com/app
 https://roomclarity.com/m/demo-session
 ```
+
+The same deployment also serves the review/brief slice in browser state. The `Recap` step does not require a new Cloud Run service, but it does rely on the existing app assets and, when model-backed runway generation is used, the same Gemini/OpenAI secrets as live cue analysis.
 
 Enable Firestore-backed sessions in Cloud Run:
 

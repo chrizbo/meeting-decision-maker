@@ -547,8 +547,8 @@ h1 {
   display: grid;
   grid-template-columns: 320px minmax(470px, 1fr) 360px;
   gap: 14px;
-  align-items: stretch;
-  height: calc(100vh - 104px);
+  align-items: start;
+  min-height: calc(100vh - 104px);
 }
 
 .stream-error {
@@ -611,7 +611,12 @@ h1 {
 }
 
 .app-shell.stream-error-visible .workspace {
+  min-height: calc(100vh - 170px);
+}
+
+.app-shell.stream-error-visible .transcript-panel {
   height: calc(100vh - 170px);
+  max-height: calc(100vh - 170px);
 }
 
 .panel, .board {
@@ -626,6 +631,13 @@ h1 {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.transcript-panel {
+  height: calc(100vh - 104px);
+  max-height: calc(100vh - 104px);
+  position: sticky;
+  top: 18px;
 }
 
 .panel-header, .board-header {
@@ -1183,10 +1195,7 @@ select {
   gap: 12px;
   padding: 14px;
   min-height: 216px;
-  max-height: 300px;
   border-bottom: 1px solid var(--line);
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .decision-card, .board-section, .agent-card {
@@ -1197,7 +1206,6 @@ select {
 
 .decision-card {
   padding: 14px;
-  min-height: 160px;
   height: fit-content;
 }
 
@@ -1398,6 +1406,7 @@ button:disabled {
 }
 
 .agent-name {
+  flex: 1;
   font-size: 14px;
   font-weight: 800;
 }
@@ -1446,6 +1455,12 @@ button:disabled {
 
 .workspace.transcript-hidden .transcript-panel {
   display: none;
+}
+
+@media (min-width: 901px) {
+  .workspace.transcript-hidden .step-label {
+    display: inline;
+  }
 }
 
 @media (max-width: 900px) {
@@ -1554,7 +1569,9 @@ button:disabled {
 
   .transcript-panel {
     order: 2;
+    height: auto;
     max-height: 70vh;
+    position: static;
   }
 
   .agents-panel {
@@ -1825,8 +1842,79 @@ button:disabled {
   border-bottom: 1px solid var(--line);
 }
 
+.brief-note {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .brief-content {
   padding: 12px 14px;
+}
+
+.brief-loading {
+  min-height: 140px;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.brief-loading span {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--line);
+  border-top-color: var(--green);
+  border-radius: 999px;
+  animation: brief-spin 0.8s linear infinite;
+}
+
+@keyframes brief-spin {
+  to { transform: rotate(360deg); }
+}
+
+.brief-error {
+  margin-bottom: 10px;
+  padding: 9px 10px;
+  border: 1px solid #dfc0ad;
+  border-radius: 7px;
+  background: #fff6ef;
+  color: #6f4229;
+  font-size: 12px;
+}
+
+.brief-markdown h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.brief-markdown h4 {
+  margin: 16px 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.brief-markdown p {
+  color: #4b5551;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.brief-markdown li {
+  margin: 5px 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.brief-nested-item {
+  margin-left: 18px !important;
+  color: #4b5551;
 }
 
 .brief-section {
@@ -1856,6 +1944,46 @@ button:disabled {
   line-height: 1.45;
   margin-bottom: 5px;
   color: var(--ink);
+}
+
+.brief-decision-block {
+  padding: 10px 0;
+  border-bottom: 1px solid #ebe8df;
+}
+
+.brief-decision-block:first-of-type {
+  padding-top: 0;
+}
+
+.brief-decision-block:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.brief-decision-block p {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.brief-related-list {
+  margin: 7px 0 0;
+  padding-left: 18px;
+}
+
+.brief-related-list > li {
+  color: var(--muted);
+}
+
+.brief-related-list ul {
+  margin-top: 4px;
+}
+
+.brief-related-type {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .brief-section li:last-child {

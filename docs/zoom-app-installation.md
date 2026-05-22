@@ -2,7 +2,7 @@
 
 ## Current Zoom Shape
 
-The current Zoom version is a Zoom App launcher with RTMS plumbing.
+The current Zoom version is a Zoom App launcher with RTMS plumbing, a local runway/start-board, and a browser-state recap/brief review step.
 
 The launcher runs inside the Zoom desktop client, reads meeting context with the Zoom Apps SDK, creates a Room Clarity session through the Cloud Run service, then shows or opens the dashboard URL. When Zoom exposes RTMS APIs to the app, the launcher attempts `zoomSdk.startRTMS()` and the backend receives the resulting RTMS webhook events.
 
@@ -102,7 +102,7 @@ Using `--set-secrets` with only one secret can replace the existing set of secre
 
 ## 3. Configure Initial Capabilities
 
-For the launcher and RTMS prototype, keep permissions minimal but include RTMS capabilities.
+For the launcher, brief, and RTMS prototype, keep permissions minimal but include RTMS capabilities.
 
 Start with capabilities/scopes that let the app:
 
@@ -147,7 +147,8 @@ The launcher should:
 4. Display the returned `dashboardPath`.
 5. Let the host open the dashboard in a browser or share the app surface from Zoom.
 6. Let the host call `zoomSdk.startRTMS()` from the meeting controls menu when RTMS APIs are available.
-7. In normal browser mode, hide the unsupported Zoom SDK error and treat the page as a read-only/shared dashboard.
+7. Let the host move through `Runway`, `Meeting`, and `Recap` from the stepper.
+8. In normal browser mode, hide the unsupported Zoom SDK error and treat the page as a shared dashboard/review surface.
 
 ## 5. Install and Test the Development App
 
@@ -163,6 +164,7 @@ Before the app is public, install it only for development/testing:
 8. Create a session and verify the board URL opens.
 9. Open the app controls menu and check the RTMS status line.
 10. If Zoom allows the API, start RTMS and confirm `/api/rtms/sessions` shows transcript activity using the service admin token.
+11. Open the `Recap` step, exclude and re-include at least one item, and copy the generated meeting brief.
 
 If Zoom shows `Request pre-approve` instead of `Add` or `Install`, the Zoom account owner/admin must approve the app first.
 
@@ -176,6 +178,7 @@ Current backend behavior:
 4. `onTranscriptData` callbacks are normalized into transcript cues.
 5. Cues are analyzed with Gemini and accumulated in in-memory RTMS session state.
 6. Browser dashboard pages can poll matching RTMS session records and display transcript-derived board state.
+7. The Recap step builds a browser-state meeting brief from included decisions, actions, risks, and open questions.
 
 RTMS should not be used with real meetings until the app has clear consent, retention, and access-control behavior.
 

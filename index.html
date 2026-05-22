@@ -103,7 +103,7 @@
             <span class="step-connector" data-connects="meeting-recap" aria-hidden="true"></span>
             <button class="step-btn" id="stepRecap" type="button">
               <span class="step-pip" aria-hidden="true"></span>
-              <span class="step-label">Recap</span>
+              <span class="step-label">Brief</span>
             </button>
           </nav>
         </div>
@@ -146,6 +146,15 @@
           </div>
         </section>
 
+        <section id="briefPanel" class="brief-panel" aria-labelledby="briefTitle" hidden>
+          <div class="section-title-row">
+            <h3 id="briefTitle">Meeting Brief</h3>
+            <button id="copyBriefButton" type="button">Copy Brief</button>
+          </div>
+          <p class="brief-note">Exclude or dismiss items from decisions, risks, assumptions/open questions, or the agent queue to update this generated brief.</p>
+          <div id="briefContent" class="brief-content"></div>
+        </section>
+
         <div class="decision-strip" id="decisionStrip">
           <article class="decision-card empty-state">
             <h3>No decision captured yet</h3>
@@ -177,14 +186,6 @@
             <span id="auditCount">0</span>
           </div>
           <div id="auditList" class="audit-list"></div>
-        </section>
-
-        <section id="briefPanel" class="brief-panel" aria-labelledby="briefTitle" hidden>
-          <div class="section-title-row">
-            <h3 id="briefTitle">Meeting Brief</h3>
-            <button id="copyBriefButton" type="button">Copy Brief</button>
-          </div>
-          <div id="briefContent" class="brief-content"></div>
         </section>
       </section>
 

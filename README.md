@@ -1,10 +1,10 @@
 # Meeting Decision Maker
 
-A prototype meeting decision assistant for capturing decisions from meeting transcripts and surfacing red-team agent suggestions in a shared meeting page.
+A prototype meeting decision assistant for capturing decisions from meeting transcripts, surfacing red-team agent suggestions in a shared meeting page, and turning confirmed board items into a reviewed meeting brief.
 
 ## Current Direction
 
-Start with a human-shared web page using mock transcript playback, then use the Zoom App as the launcher for RTMS when Zoom grants the app access to `startRTMS`.
+Start with a human-shared web page using mock transcript playback, then use the Zoom App as the launcher for RTMS. The current prototype now covers the first full meeting arc: runway context, live board capture, and recap/brief review.
 
 ## Contents
 
@@ -18,7 +18,7 @@ Start with a human-shared web page using mock transcript playback, then use the 
 - `docs/auth-authorization-plan.md`: Zoom-first authentication and app-owned authorization plan
 - `docs/security-launch-plan.md`: security and privacy launch plan for external users
 - `docs/zoom-marketplace-test-plan.md`: Zoom Marketplace review test plan
-- `docs/future-specs/recap-drafting.md`: future recap drafting and brief preview workflow
+- `docs/future-specs/recap-drafting.md`: recap drafting and brief preview workflow, including the first local slice
 - `docs/future-specs/meeting-series-linking.md`: future meeting-series linking and carry-forward context workflow
 - `docs/future-specs/meeting-runway.md`: future start board for orienting the first minutes of a meeting
 - `docs/future-specs/meeting-library.md`: future Meeting Library concept for accessible meetings, briefs, and series
@@ -54,7 +54,7 @@ The shared-screen prototype is a static HTML/CSS/JavaScript app:
 
 - `index.html`: meeting board interface
 - `styles.css`: screen-share layout and visual design
-- `app.js`: fake Zoom meeting context, timed transcript playback, decision capture, and agent queue behavior
+- `app.js`: fake Zoom meeting context, runway, timed transcript playback, decision capture, agent queue behavior, and brief review
 
 The app tries to load `fixtures/mock-llm-output.json`, so local hosting is preferred. Open `index.html` directly only when you want the browser fallback rules.
 
@@ -63,6 +63,12 @@ python3 -m http.server 8080
 ```
 
 Then visit `http://localhost:8080`.
+
+The local board includes a three-step flow:
+
+1. `Runway`: a short start-board with purpose, agenda, decision frame, and opening prompt.
+2. `Meeting`: the live capture board for decisions, risks, actions, transcript cues, and agent prompts.
+3. `Recap`: review mode with item-level exclude/re-include controls and a generated meeting brief that can be copied as Markdown.
 
 ## Cloud Run Service
 
@@ -80,6 +86,8 @@ The service currently provides:
 - `GET /api/zoom/oauth/callback`
 - `POST /api/sessions`, returning a public dashboard path with a scoped access token
 - `GET /api/sessions/:id`, requiring a valid dashboard token for token-protected sessions
+- `POST /api/analyze-cue`
+- `POST /api/analyze-runway`
 - `POST /api/zoom/rtms-webhook`
 - `GET /api/rtms/sessions`
 - `GET /api/rtms/sessions/:id`
@@ -130,6 +138,8 @@ Local development defaults to in-memory sessions. Use `SESSION_STORE=firestore n
 The static prototype still loads `fixtures/mock-llm-output.json` when no live LLM provider is configured. The live service can invoke Gemini or OpenAI using the portable skills in `skills/` as the instruction layer. See `docs/llm-integration-notes.md`.
 
 The Node service can now invoke Gemini or OpenAI for live cue analysis. By default it uses Gemini with `gemini-2.5-flash-lite`, which is the fast/cost-efficient Gemini API option. Override it with `GEMINI_MODEL` when needed. Set `LLM_PROVIDER=openai` and `OPENAI_MODEL=gpt-5.4` to make OpenAI the service default, or use provider-qualified eval model strings such as `openai:gpt-5.4` without changing the service default. OpenAI reasoning defaults to `low`; override with `OPENAI_REASONING_EFFORT` for slower quality-oriented tests.
+
+The same provider configuration powers `/api/analyze-runway`, which turns a meeting topic, agenda/description, host, and participants into structured runway content. If no provider key is configured, the browser keeps using its static runway fixtures.
 
 For regular live meeting use, keep the default Gemini Flash-Lite path. OpenAI GPT-5.4 and GPT-5.5 are wired for model comparisons, qualitative judge passes, selective slow-lane analysis, and post-meeting synthesis experiments.
 
