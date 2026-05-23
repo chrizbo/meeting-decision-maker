@@ -7,8 +7,8 @@ Prepared for the Room Clarity Zoom Beta resubmission.
 | Requirement | Evidence | Status |
 | --- | --- | --- |
 | SSDLC | `ssdlc.md` | Ready |
-| SAST scan results | `scan-results.md` | Needs tool export from CodeQL or Semgrep |
-| DAST scan results | `scan-results.md` | Needs tool export from OWASP ZAP or equivalent |
+| SAST scan results | `scan-results.md`; `artifacts/run-26339140824/codeql-sast-results/javascript.sarif` | Ready |
+| DAST scan results | `scan-results.md`; `artifacts/run-26339140824/zap-baseline-results/report_html.html` | Ready |
 | Privacy Policy | `../../privacy.html` | Ready |
 | TLS 1.2 or higher | `tls-evidence.md` | Ready |
 | Security policy | `security-policy.md` | Ready |
@@ -34,7 +34,6 @@ Supporting evidence:
 
 ## Remaining Before Resubmission
 
-1. Run and attach a tool-generated SAST report, preferably GitHub CodeQL or Semgrep.
-2. Run and attach a DAST report against `https://roomclarity.com`, preferably OWASP ZAP baseline.
-3. Run the `Security scans` GitHub Actions workflow after this folder is pushed. Use the CodeQL result as SAST evidence and the `zap-baseline-results` artifact as DAST evidence.
-4. Convert or upload these Markdown files as PDFs/screenshots if Zoom's submission form does not accept repository links.
+1. Attach the final successful workflow run artifacts from `artifacts/run-26339140824/`.
+2. Convert or upload these Markdown files as PDFs/screenshots if Zoom's submission form does not accept repository links.
+3. Optional before marketplace publication: address the non-blocking ZAP hardening warnings for CSP fallback directives, permissions policy, cross-origin isolation headers, and SRI where compatible with the Zoom Apps SDK.

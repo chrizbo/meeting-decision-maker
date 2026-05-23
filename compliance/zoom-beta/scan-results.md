@@ -2,6 +2,10 @@
 
 Date checked: 2026-05-23
 
+Final successful GitHub Actions run: `26339140824`
+
+Run URL: `https://github.com/chrizbo/meeting-decision-maker/actions/runs/26339140824`
+
 ## Dependency Audit
 
 Command:
@@ -36,6 +40,8 @@ Result:
   }
 }
 ```
+
+Artifact: `artifacts/run-26339140824/npm-audit-results/npm-audit-results.json`
 
 ## Production Dependency Inventory
 
@@ -73,35 +79,42 @@ all cases
 
 ## SAST
 
-Status: required before Zoom Beta resubmission.
+Status: completed.
 
-The repository now includes `.github/workflows/security-scans.yml`, which runs CodeQL SAST on pull requests, pushes to `main`, weekly schedule, and manual dispatch.
+The repository includes `.github/workflows/security-scans.yml`, which runs CodeQL SAST on pull requests, pushes to `main`, weekly schedule, and manual dispatch.
 
-Recommended command if using GitHub CodeQL in CI:
+Final result from GitHub Actions run `26339140824`:
 
-```bash
-gh run list --workflow security-scans.yml --limit 5
-gh run view <RUN_ID> --log
+```text
+CodeQL SAST: success
+SARIF results: 0
 ```
 
-Recommended command if using Semgrep locally:
+Artifact: `artifacts/run-26339140824/codeql-sast-results/javascript.sarif`
 
-```bash
-semgrep scan --config p/owasp-top-ten --config p/javascript --json --output compliance/zoom-beta/semgrep-results.json
-```
+Note: an earlier run found a reflected exception-text issue in API error responses. The app was patched to return fixed public error messages, and the final CodeQL run completed with zero results.
 
-Attach the exported CodeQL or Semgrep report to the Zoom Technical Design evidence.
 
 ## DAST
 
-Status: required before Zoom Beta resubmission.
+Status: completed.
 
-The repository now includes `.github/workflows/security-scans.yml`, which runs an OWASP ZAP baseline scan on manual workflow dispatch. Use `https://roomclarity.com` as the `dast_target` input.
+The repository includes `.github/workflows/security-scans.yml`, which runs an OWASP ZAP baseline scan on manual workflow dispatch. The final scan used `https://roomclarity.com` as the `dast_target` input.
 
-Recommended command if using OWASP ZAP Baseline:
+Final result from GitHub Actions run `26339140824`:
 
-```bash
-docker run --rm -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t https://roomclarity.com -J zap-results.json -r zap-report.html
+```text
+OWASP ZAP DAST baseline: success
+High alerts: 0
+Medium alerts: 2
+Low alerts: 5
+Informational alerts: 4
 ```
 
-Attach the generated `zap-results.json` or `zap-report.html` to the Zoom Technical Design evidence.
+Artifacts:
+
+- `artifacts/run-26339140824/zap-baseline-results/report_html.html`
+- `artifacts/run-26339140824/zap-baseline-results/report_md.md`
+- `artifacts/run-26339140824/zap-baseline-results/report_json.json`
+
+The medium findings are hardening warnings for CSP fallback directives and SRI on the Zoom Apps SDK script. These should be reviewed for compatibility with the Zoom Apps SDK before broad marketplace publication.
