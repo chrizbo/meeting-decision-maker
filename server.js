@@ -88,6 +88,11 @@ function escapeHtml(value) {
   });
 }
 
+function publicErrorMessage(error, fallback) {
+  if (error && error.publicMessage) return String(error.publicMessage);
+  return fallback;
+}
+
 function appUrl(req, path) {
   if (publicBaseUrl) return `${publicBaseUrl}${path}`;
   const proto = req.headers['x-forwarded-proto'] || 'http';
@@ -1594,7 +1599,7 @@ async function handleApi(req, res, pathname) {
     } catch (error) {
       const modelSpec = parseAnalysisModelSpec(input.model);
       sendJson(res, error.status || 500, {
-        error: error.message || 'Analysis failed',
+        error: publicErrorMessage(error, 'Analysis failed'),
         provider: error.provider || modelSpec.provider,
         model: error.model || modelSpec.model
       });
@@ -1608,7 +1613,7 @@ async function handleApi(req, res, pathname) {
       input = await readBody(req);
       sendJson(res, 200, await analyzeRunwayWithProvider(input));
     } catch (error) {
-      sendJson(res, error.status || 500, { error: error.message || 'Runway analysis failed' });
+      sendJson(res, error.status || 500, { error: publicErrorMessage(error, 'Runway analysis failed') });
     }
     return;
   }
@@ -1619,7 +1624,7 @@ async function handleApi(req, res, pathname) {
       input = await readBody(req);
       sendJson(res, 200, await analyzeBriefWithProvider(input));
     } catch (error) {
-      sendJson(res, error.status || 500, { error: error.message || 'Brief analysis failed' });
+      sendJson(res, error.status || 500, { error: publicErrorMessage(error, 'Brief analysis failed') });
     }
     return;
   }
@@ -1654,7 +1659,7 @@ async function handleApi(req, res, pathname) {
       renderOAuthPage(req, res, 200, 'Room Clarity connected', 'Zoom authorized the development app. You can now open it from the Zoom Apps panel during a meeting.');
     } catch (error) {
       const status = error.status || 500;
-      renderOAuthPage(req, res, status, 'Zoom authorization could not finish', error.message || 'Unknown error');
+      renderOAuthPage(req, res, status, 'Zoom authorization could not finish', 'Zoom authorization failed. Please try again or contact support.');
     }
     return;
   }
@@ -1758,7 +1763,7 @@ const server = createServer(async (req, res) => {
     }
     await serveStatic(req, res, url.pathname);
   } catch (error) {
-    sendJson(res, error.status || 500, { error: error.message || 'Internal server error' });
+    sendJson(res, error.status || 500, { error: publicErrorMessage(error, 'Internal server error') });
   }
 });
 
