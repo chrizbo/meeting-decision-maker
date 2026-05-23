@@ -88,8 +88,7 @@ function escapeHtml(value) {
   });
 }
 
-function publicErrorMessage(error, fallback) {
-  if (error && error.publicMessage) return String(error.publicMessage);
+function publicErrorMessage(_error, fallback) {
   return fallback;
 }
 
