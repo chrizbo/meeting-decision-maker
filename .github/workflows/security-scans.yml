@@ -85,4 +85,5 @@ jobs:
         with:
           target: ${{ github.event.inputs.dast_target }}
           fail_action: false
+          allow_issue_writing: false
           artifact_name: zap-baseline-results
