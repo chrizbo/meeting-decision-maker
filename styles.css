@@ -1189,13 +1189,18 @@ select {
 }
 
 .decision-strip {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: start;
+  display: block;
+  column-count: 2;
+  column-gap: 12px;
   gap: 12px;
   padding: 14px;
   min-height: 216px;
   border-bottom: 1px solid var(--line);
+}
+
+.decision-strip:has(.empty-state) {
+  display: grid;
+  grid-template-columns: 1fr;
 }
 
 .decision-card, .board-section, .agent-card {
@@ -1205,8 +1210,12 @@ select {
 }
 
 .decision-card {
+  display: inline-block;
+  width: 100%;
+  margin: 0 0 12px;
   padding: 14px;
   height: fit-content;
+  break-inside: avoid;
 }
 
 .decision-card h3 {
@@ -1446,7 +1455,7 @@ button:disabled {
 @media (min-width: 901px) and (max-width: 1180px) {
   body { min-width: 980px; }
   .workspace { grid-template-columns: 290px minmax(420px, 1fr) 320px; }
-  .decision-strip { grid-template-columns: 1fr; }
+  .decision-strip { column-count: 1; }
 }
 
 .workspace.transcript-hidden {
@@ -1595,6 +1604,10 @@ button:disabled {
   .decision-strip,
   .board-grid {
     grid-template-columns: 1fr;
+  }
+
+  .decision-strip {
+    column-count: 1;
   }
 
   .runway-main,
@@ -1906,6 +1919,15 @@ button:disabled {
   line-height: 1.45;
 }
 
+.brief-markdown ul {
+  margin: 0 0 10px;
+  padding-left: 18px;
+}
+
+.brief-markdown ul ul {
+  margin: 6px 0 8px;
+}
+
 .brief-markdown li {
   margin: 5px 0;
   font-size: 13px;
@@ -1913,7 +1935,6 @@ button:disabled {
 }
 
 .brief-nested-item {
-  margin-left: 18px !important;
   color: #4b5551;
 }
 

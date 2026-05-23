@@ -871,6 +871,7 @@ function applyRtmsSessionState(session) {
       key: 'decision:' + item.title,
       status: item.status || 'forming',
       suggestedStatus: item.status || 'forming',
+      confirmedByHost: item.confirmedByHost === true,
       title: item.title,
       detail: item.summary,
       evidence: item.evidence,
@@ -1644,6 +1645,7 @@ function addDecision(status, title, detail, evidence, options) {
     key: key,
     status: decisionStatus,
     suggestedStatus: suggestedStatus,
+    confirmedByHost: false,
     title: title,
     detail: detail,
     evidence: evidence,
@@ -1785,7 +1787,7 @@ function openDetailModal(type, id) {
   els.modalDecisionActions.hidden = type !== 'decision';
   els.modalAgentActions.hidden = type !== 'agent';
   if (type === 'decision') {
-    els.modalAcceptDecision.disabled = item.status === 'accepted';
+    els.modalAcceptDecision.disabled = item.confirmedByHost === true;
     els.modalRejectDecision.disabled = item.status === 'rejected';
   }
   els.modal.classList.add('open');
@@ -1831,6 +1833,8 @@ function markDecision(id, action) {
   if (!decision) return;
   if (action === 'accepted') {
     decision.status = 'accepted';
+    decision.suggestedStatus = 'accepted';
+    decision.confirmedByHost = true;
     decision.conversation = 'The host accepted this decision. Ask whether the team wants to capture an owner, review point, or decision-log destination.';
     decision.steps = ['Capture the owner of the decision record.', 'Confirm the next action tied to the decision.', 'Log unresolved assumptions as risks if needed.'];
   }
@@ -2004,15 +2008,62 @@ function fallbackBriefMarkdown(items) {
 }
 
 function markdownToBriefHtml(markdown) {
+  let listOpen = false;
+  let nestedOpen = false;
+  let currentItemOpen = false;
+  const closeNested = function() {
+    if (!nestedOpen) return '';
+    nestedOpen = false;
+    return '</ul>';
+  };
+  const closeCurrentItem = function() {
+    let html = closeNested();
+    if (currentItemOpen) {
+      currentItemOpen = false;
+      html += '</li>';
+    }
+    return html;
+  };
+  const closeList = function() {
+    let html = closeCurrentItem();
+    if (listOpen) {
+      listOpen = false;
+      html += '</ul>';
+    }
+    return html;
+  };
   const html = String(markdown || '').split('\n').map(function(raw) {
     const line = raw.trimEnd();
-    if (!line.trim()) return '';
-    if (line.startsWith('### ')) return '<h4>' + escapeHtml(line.slice(4)) + '</h4>';
-    if (line.startsWith('## ')) return '<h3>' + escapeHtml(line.slice(3)) + '</h3>';
-    if (line.startsWith('  * ')) return '<li class="brief-nested-item">' + inlineMarkdown(line.slice(4)) + '</li>';
-    if (line.startsWith('* ')) return '<li>' + inlineMarkdown(line.slice(2)) + '</li>';
-    return '<p>' + inlineMarkdown(line) + '</p>';
-  }).join('');
+    if (!line.trim()) return closeList();
+    if (line.startsWith('### ')) return closeList() + '<h4>' + escapeHtml(line.slice(4)) + '</h4>';
+    if (line.startsWith('## ')) return closeList() + '<h3>' + escapeHtml(line.slice(3)) + '</h3>';
+    if (line.startsWith('  * ')) {
+      let prefix = '';
+      if (!listOpen) {
+        listOpen = true;
+        prefix += '<ul>';
+      }
+      if (!currentItemOpen) {
+        currentItemOpen = true;
+        prefix += '<li>';
+      }
+      if (!nestedOpen) {
+        nestedOpen = true;
+        prefix += '<ul>';
+      }
+      return prefix + '<li class="brief-nested-item">' + inlineMarkdown(line.slice(4)) + '</li>';
+    }
+    if (line.startsWith('* ')) {
+      let prefix = closeCurrentItem();
+      if (!listOpen) {
+        listOpen = true;
+        prefix += '<ul>';
+      }
+      currentItemOpen = true;
+      return prefix + '<li>' + inlineMarkdown(line.slice(2));
+    }
+    return closeList() + '<p>' + inlineMarkdown(line) + '</p>';
+  }).join('') + closeList();
   return '<div class="brief-markdown">' + html + '</div>';
 }
 
