@@ -939,15 +939,14 @@ select {
 }
 
 .runway-panel {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;
+  overscroll-behavior: auto;
   padding: clamp(16px, 2.6vw, 28px) clamp(16px, 2.6vw, 28px) 34px;
   background:
     linear-gradient(180deg, rgba(220, 235, 229, 0.62), rgba(255, 253, 248, 0) 220px),
     var(--surface);
-  scrollbar-gutter: stable;
 }
 
 .runway-panel[hidden] {
@@ -962,6 +961,7 @@ select {
 
 .board.runway-active {
   min-height: 0;
+  overflow: visible;
 }
 
 .board.runway-active #openRunwayButton {
@@ -1572,7 +1572,7 @@ button:disabled {
   }
 
   .board.runway-active {
-    height: calc(100vh - 154px);
+    height: auto;
     max-height: none;
   }
 
