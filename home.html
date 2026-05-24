@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Room Clarity</title>
-  <meta name="description" content="Room Clarity helps meeting hosts capture decisions, risks, actions, real-time agent feedback, and a reviewed meeting brief from live meeting transcripts.">
+  <meta name="description" content="Room Clarity helps meeting hosts make better decisions before the meeting ends with a live Zoom decision board, risk checks, action items, and reviewed briefs.">
   <link rel="icon" type="image/png" href="/meeting-decision-maker-icon.png">
   <link rel="apple-touch-icon" href="/meeting-decision-maker-icon.png">
   <link rel="stylesheet" href="/styles.css">
@@ -27,9 +27,9 @@
   <main>
     <section class="home-hero">
       <div class="home-hero-content">
-        <p class="home-kicker">For meeting hosts and facilitators</p>
+        <p class="home-kicker">For product, engineering, and strategy meetings</p>
         <h1>Room<br>Clarity</h1>
-        <p>Room Clarity helps teams leave meetings with clearer decisions, visible risks, concrete next steps, and a reviewed brief. It runs inside Zoom, listens for decision moments, gives the host a shared board while the meeting is happening, then turns confirmed items into a meeting brief — and publishes issues and a transcript to GitHub.</p>
+        <p>Make better decisions before the meeting ends. Room Clarity runs inside Zoom, watches for decision moments, surfaces risks and assumptions, and gives the host a live board to confirm decisions, actions, and follow-up work.</p>
         <div class="home-actions">
           <a class="home-button primary" href="https://marketplace.zoom.us/">Install from Zoom Marketplace</a>
           <a class="home-button" href="/app">Try the demo board</a>
@@ -39,24 +39,24 @@
         <img class="summary-mark" src="/meeting-decision-maker-icon.png" alt="">
         <dl>
           <div>
-            <dt>Captures</dt>
-            <dd>Decisions, risks, action items, and open questions.</dd>
+            <dt>Decides</dt>
+            <dd>Turns live conversation into candidate decisions, risks, actions, and open questions for the host to confirm.</dd>
           </div>
           <div>
-            <dt>Advises</dt>
-            <dd>Decision-support agents give timely feedback on assumptions, weak arguments, and likely failure modes.</dd>
+            <dt>Challenges</dt>
+            <dd>Decision-support agents flag assumptions, weak arguments, and likely failure modes while the room can still respond.</dd>
           </div>
           <div>
-            <dt>Shares</dt>
-            <dd>A live meeting board the host can open, screen-share, and review into a brief.</dd>
+            <dt>Aligns</dt>
+            <dd>A shared meeting board makes the decision visible while it is being made.</dd>
           </div>
           <div>
-            <dt>Publishes</dt>
-            <dd>Creates GitHub issues and comments from confirmed decisions and actions, and uploads the transcript as a pull request.</dd>
+            <dt>Ships</dt>
+            <dd>Creates GitHub issues and transcript pull requests from confirmed items, with host approval before anything is written.</dd>
           </div>
           <div>
-            <dt>Extends</dt>
-            <dd>Designed to support custom agent skills and integrations for the decisions and risks specific to your team.</dd>
+            <dt>Remembers</dt>
+            <dd>Produces a reviewed meeting brief with evidence-linked moments, dismissed items, and follow-through context.</dd>
           </div>
         </dl>
       </aside>
@@ -64,33 +64,62 @@
 
     <section id="how-it-works" class="home-section">
       <div class="section-copy">
-        <p class="home-kicker">What it does</p>
-        <h2>A working surface for decisions during the meeting and a brief after it.</h2>
+        <p class="home-kicker">The decision layer for Zoom</p>
+        <h2>Zoom records what happened. Room Clarity helps the room decide what happens next.</h2>
       </div>
       <div class="feature-grid">
         <article>
-          <h3>Captures the decision record</h3>
-          <p>Room Clarity watches transcript cues and keeps a visible board of decisions, risks, and action items for the host to confirm.</p>
+          <h3>Live decision board</h3>
+          <p>Room Clarity watches transcript cues and keeps a visible board of candidate decisions, risks, and action items for the host to confirm.</p>
         </article>
         <article>
-          <h3>Gives in-meeting feedback</h3>
+          <h3>In-meeting challenge</h3>
           <p>Built-in decision-support agents flag assumptions, failure modes, and weak arguments while the host still has a chance to ask a better question.</p>
         </article>
         <article>
-          <h3>Adapts to your team</h3>
-          <p>Room Clarity is designed to support custom agent skills, so teams can add prompts, review patterns, and decision checks that match how they work.</p>
+          <h3>Host-in-the-loop control</h3>
+          <p>The host can confirm, edit, dismiss, or escalate what the AI finds, so the record reflects team intent instead of raw model output.</p>
         </article>
         <article>
-          <h3>Shares cleanly</h3>
-          <p>The host can share the meeting board in Zoom or open a shareable page for screen sharing and review.</p>
+          <h3>Shared artifact</h3>
+          <p>The host can share the meeting board in Zoom or open a browser dashboard when the group needs a visible working surface.</p>
         </article>
         <article>
-          <h3>Drafts the recap</h3>
-          <p>After the conversation, the host can switch to recap review, exclude noisy items, promote useful prompts, and copy a concise meeting brief.</p>
+          <h3>Reviewed brief</h3>
+          <p>After the conversation, the host can exclude noisy items, promote useful prompts, and copy a concise brief grounded in transcript evidence.</p>
         </article>
         <article>
-          <h3>Publishes to GitHub</h3>
+          <h3>GitHub handoff</h3>
           <p>Connect a repository during setup and Room Clarity will surface related issues on the live board, propose GitHub issues for each confirmed decision and action, and upload the meeting transcript as a pull request — all confirmed by the host before anything is written.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="home-section positioning-section">
+      <div class="section-copy">
+        <p class="home-kicker">Beyond AI notes</p>
+        <h2>Most meeting tools summarize later. Room Clarity helps the room decide now.</h2>
+      </div>
+      <div class="positioning-grid">
+        <article>
+          <span>AI notetakers</span>
+          <h3>Record, transcribe, summarize.</h3>
+          <p>Room Clarity facilitates the live decision while everyone is still present.</p>
+        </article>
+        <article>
+          <span>Native assistants</span>
+          <h3>Convenient meeting recaps.</h3>
+          <p>Room Clarity adds a purpose-built decision board with risks, assumptions, and host confirmation.</p>
+        </article>
+        <article>
+          <span>Task extractors</span>
+          <h3>Pull out follow-ups.</h3>
+          <p>Room Clarity connects actions to the decision, rationale, evidence, and unresolved objections.</p>
+        </article>
+        <article>
+          <span>Sales meeting tools</span>
+          <h3>Push notes into the CRM.</h3>
+          <p>Room Clarity is built for product and engineering teams that need decisions to become durable work.</p>
         </article>
       </div>
     </section>
