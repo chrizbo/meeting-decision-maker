@@ -213,7 +213,7 @@ const runwayCases = {
 
 const runwayStub = configuredRunwayData();
 
-const demoVtt = "WEBVTT\n\nNOTE\nSynthetic transcript fixture for Meeting Decision Maker prototype. No real meeting content.\n\n00:00:02.000 --> 00:00:08.000\nMaya Patel: Let's use this session to decide whether the first prototype should focus on a live meeting board or a post-meeting summary.\n\n00:00:08.500 --> 00:00:15.000\nJordan Lee: I think the live board is the better first bet because it lets us see decisions forming while the conversation is still happening.\n\n00:00:15.500 --> 00:00:22.000\nMaya Patel: The summary is easier to build, though. We could upload a transcript, extract decisions, and avoid the timing problem for now.\n\n00:00:22.500 --> 00:00:31.000\nJordan Lee: True, but if we do that first, we may learn a lot about summarization and not much about whether the shared page changes the meeting behavior.\n\n00:00:31.500 --> 00:00:39.000\nMaya Patel: So the product decision is whether the MVP optimizes for implementation speed or for testing the live facilitation experience.\n\n00:00:39.500 --> 00:00:47.000\nJordan Lee: Exactly. My assumption is that the live facilitation experience is the differentiated part. The decision log is useful, but less novel.\n\n00:00:47.500 --> 00:00:56.000\nMaya Patel: What has to be true for that to work is that a host can actually pay attention to the page while also running the meeting.\n\n00:00:56.500 --> 00:01:04.000\nJordan Lee: That is the biggest risk. Maybe the host needs a very low-friction queue: decisions, risks, and agent hands, nothing else.\n\n00:01:04.500 --> 00:01:13.000\nMaya Patel: Another assumption is that people will tolerate the page being screen-shared. It could feel useful, or it could feel like visual noise.\n\n00:01:13.500 --> 00:01:21.000\nJordan Lee: We can test that with mock transcript playback. If the page gets distracting, we simplify before we touch Zoom RTMS.\n\n00:01:21.500 --> 00:01:31.000\nMaya Patel: If we imagine the live board failing, I think it fails because the agent suggestions arrive too late or are too generic to influence the discussion.\n\n00:01:31.500 --> 00:01:39.000\nJordan Lee: Good point. The warning sign would be the host repeatedly ignoring suggestions or saying the team already covered them.\n\n00:01:39.500 --> 00:01:48.000\nMaya Patel: Then the mitigation is to tune the agents around fewer, higher-quality interventions. We should start with three agents, not a whole library.\n\n00:01:48.500 --> 00:01:57.000\nJordan Lee: Assumptions Challenge, Pre-Mortem, and Argument Dissection feel like the right first three because they map to decisions, plans, and claims.\n\n00:01:57.500 --> 00:02:07.000\nMaya Patel: The argument for the live board is that it creates an observable meeting artifact. What evidence do we have that people want that during the meeting, not after?\n\n00:02:07.500 --> 00:02:15.000\nJordan Lee: Mostly intuition and prior feedback. We should not pretend we know yet. The prototype should test whether it helps the host intervene.\n\n00:02:15.500 --> 00:02:24.000\nMaya Patel: Then let's make the decision lightweight: build the human-shared live board first, support VTT and TXT fixtures, and replay transcripts on a timer.\n\n00:02:24.500 --> 00:02:33.000\nJordan Lee: Agreed. We will keep the post-meeting dashboard, but the first product question is whether live decision support changes the conversation.\n\n00:02:33.500 --> 00:02:42.000\nMaya Patel: Let's capture that as the decision. MVP is a timed mock-transcript live board, shared by the host, with three queued red-team agents.\n\n00:02:42.500 --> 00:02:48.000\nJordan Lee: And the next action is to build the playback loop and agent queue before we worry about Zoom-native integration.\n\n00:02:49.000 --> 00:02:58.000\nMaya Patel: Decision: the transcript rail should be hideable during screen share, because sometimes the board needs to be the main artifact.\n\n00:02:58.500 --> 00:03:07.000\nJordan Lee: Agreed. The assumption is that hosts will want both modes: transcript visible while reviewing evidence, hidden when facilitating the group.\n\n00:03:07.500 --> 00:03:16.000\nMaya Patel: The risk is that hiding the transcript could make the board feel less grounded if people cannot see why a decision appeared.\n\n00:03:16.500 --> 00:03:25.000\nJordan Lee: Then the mitigation is to keep evidence timestamps on each card, even when the transcript panel is hidden.\n\n00:03:25.500 --> 00:03:35.000\nMaya Patel: Decision: clicking any decision, risk, action, or agent issue should open a facilitation modal with suggested next steps.\n\n00:03:35.500 --> 00:03:45.000\nJordan Lee: The argument for that is that the host should not just see an alert; they need help knowing what to say next.\n\n00:03:45.500 --> 00:03:54.000\nMaya Patel: What evidence do we have that hosts will use a modal live rather than just ignore it?\n\n00:03:54.500 --> 00:04:04.000\nJordan Lee: We do not know yet. The prototype should tell us whether the modal is helpful or too much interaction during a meeting.\n\n00:04:04.500 --> 00:04:14.000\nMaya Patel: Decision: risks and actions should be removable with a small x when the host thinks the capture is wrong or not useful.\n\n00:04:14.500 --> 00:04:23.000\nJordan Lee: That creates a failure mode too. If it is too easy to remove things, a host might erase useful dissent too quickly.\n\n00:04:23.500 --> 00:04:32.000\nMaya Patel: The warning sign is if the host removes agent issues before the team has a chance to consider them.\n\n00:04:32.500 --> 00:04:42.000\nJordan Lee: Action: we should eventually track dismissed items so the meeting record can show what was removed and by whom.\n\n00:04:42.500 --> 00:04:52.000\nMaya Patel: Decision: the shared dashboard URL can be open-by-link for the prototype, but it must be hard to guess.\n\n00:04:52.500 --> 00:05:02.000\nJordan Lee: Longer term, the dashboard should support account access through Google or Zoom login before we use this with sensitive meetings.\n\n00:05:02.500 --> 00:05:12.000\nMaya Patel: Decision: keep the full transcript with the meeting record for now, because the evidence matters while we are learning the product shape.\n\n00:05:12.500 --> 00:05:23.000\nJordan Lee: The assumption is that prototype users are comfortable with that retention because they control the uploaded transcript fixtures.\n\n00:05:23.500 --> 00:05:34.000\nMaya Patel: If that assumption is wrong, the product needs retention controls earlier than we planned.\n\n00:05:34.500 --> 00:05:44.000\nJordan Lee: Action: add retention settings to the production-readiness list, but do not block the static prototype on that.\n";
+const demoVtt = "WEBVTT\n\nNOTE\nSynthetic transcript fixture for Room Clarity demo. No real meeting content.\n\n00:00:02.000 --> 00:00:08.000\nMaya Patel: Let's work through the open issues in agentics-beyond-code and make some decisions on direction today.\n\n00:00:08.500 --> 00:00:16.000\nJordan Lee: There are five open issues. The core question is issue two — the shared live board with transcript playback — do we build that first?\n\n00:00:16.500 --> 00:00:24.000\nMaya Patel: That is the decision. Live facilitation board first, or post-meeting summary first? Both are in scope, but we can only build one to start.\n\n00:00:24.500 --> 00:00:33.000\nJordan Lee: My position is the live board. Issue one — researching live facilitation patterns — is the question the prototype will answer. We build to learn.\n\n00:00:33.500 --> 00:00:42.000\nMaya Patel: The summary path is lower risk. We could upload a transcript, extract decisions, and defer the timing problem until we have validated demand.\n\n00:00:42.500 --> 00:00:52.000\nJordan Lee: But then we'd spend a sprint learning about summarization and nothing about whether a shared live board changes the meeting dynamic. That's the core bet.\n\n00:00:52.500 --> 00:01:02.000\nMaya Patel: What has to be true for the live board to work is that a host can actually pay attention to the board while also running the meeting.\n\n00:01:02.500 --> 00:01:11.000\nJordan Lee: That's the open assumption in issue two. And the only way to test it is to have something running. The prototype is the research for issue one.\n\n00:01:11.500 --> 00:01:21.000\nMaya Patel: Decision: build the live board prototype first. Issue two is the priority this sprint. The live facilitation experience is the differentiated bet.\n\n00:01:21.500 --> 00:01:31.000\nJordan Lee: The action is to build the playback loop with VTT fixtures so we can replay transcripts and test the board behavior without a live Zoom session.\n\n00:01:31.500 --> 00:01:41.000\nMaya Patel: If we imagine that failing, the risk is that agent suggestions arrive too late or too generic. The host ignores them and the board becomes noise.\n\n00:01:41.500 --> 00:01:51.000\nJordan Lee: The warning sign is the host dismissing everything. The mitigation is starting with three focused agents. Assumptions Challenge, Pre-Mortem, and Argument Dissection.\n\n00:01:51.500 --> 00:02:01.000\nMaya Patel: Next: issue four, decision card modal and host guidance UX. What does the modal show when a host clicks a decision or agent issue?\n\n00:02:01.500 --> 00:02:11.000\nJordan Lee: It needs to give the host something useful to say next. Not just a summary of what was captured — actual conversation prompts and suggested next steps.\n\n00:02:11.500 --> 00:02:20.000\nMaya Patel: The open question is whether hosts will open a modal at all during a live meeting. The interaction cost during facilitation might be too high.\n\n00:02:20.500 --> 00:02:30.000\nJordan Lee: Decision: clicking a decision or agent issue opens a facilitation modal with suggested conversation prompts. We test whether hosts actually use it.\n\n00:02:30.500 --> 00:02:40.000\nMaya Patel: The risk is that opening a modal takes cognitive bandwidth away from running the room. That's the main failure mode for the modal guidance UX.\n\n00:02:40.500 --> 00:02:50.000\nJordan Lee: Issue five — dashboard access control and link sharing. The URL needs to be hard to guess even while the board is open-by-link.\n\n00:02:50.500 --> 00:03:00.000\nMaya Patel: Decision: use a cryptographically random slug. Open by link for the prototype, but unguessable. That unblocks us without requiring account login yet.\n\n00:03:00.500 --> 00:03:10.000\nJordan Lee: The assumption in issue five is that prototype users accept that tradeoff. Longer term we need Zoom or Google login before this is used in sensitive meetings.\n\n00:03:10.500 --> 00:03:20.000\nMaya Patel: The board should also be screen-shareable without the transcript visible. Sometimes the board is the artifact, not the live feed.\n\n00:03:20.500 --> 00:03:30.000\nJordan Lee: Decision: the transcript rail should be hideable during screen share. Keep evidence timestamps on each card so the board stays grounded when the feed is hidden.\n\n00:03:30.500 --> 00:03:40.000\nMaya Patel: Now issue three — defining the transcript retention and access policy. This needs to be settled before we go to production with live Zoom audio.\n\n00:03:40.500 --> 00:03:50.000\nJordan Lee: For the prototype, the assumption is that users uploading their own fixture transcripts are comfortable with retention. But live Zoom audio changes the obligation.\n\n00:03:50.500 --> 00:04:00.000\nMaya Patel: Decision: keep the full transcript with the meeting record for the prototype, but add a retention specification to the production-readiness list.\n\n00:04:00.500 --> 00:04:10.000\nJordan Lee: Action: update issue three to include a deletion endpoint and retention spec as explicit requirements before the production milestone.\n\n00:04:10.500 --> 00:04:20.000\nMaya Patel: The risk is that prototype users share transcripts and later want them removed before we have a deletion path. We should build that early.\n\n00:04:20.500 --> 00:04:30.000\nJordan Lee: The cost of building a deletion endpoint now is low compared to the cost of losing early users over a trust issue. Scope it into issue three.\n\n00:04:30.500 --> 00:04:40.000\nMaya Patel: Last item — risks and actions on the board should be removable, but we need to track what gets removed so the brief shows the full picture.\n\n00:04:40.500 --> 00:04:50.000\nJordan Lee: The failure mode is a host removing useful dissent or open questions before the team has a chance to consider them. The audit trail prevents silent erasure.\n\n00:04:50.500 --> 00:05:00.000\nMaya Patel: Action: track dismissed items in the meeting record so the brief can surface what agents flagged and what the host decided to exclude.\n\n00:05:00.500 --> 00:05:10.000\nJordan Lee: That rounds out today. Live board first, modal guidance, unguessable dashboard link, retention spec for issue three, and an audit trail for dismissed items.\n\n00:05:10.500 --> 00:05:20.000\nMaya Patel: Good. Jordan owns the live board prototype. I'll update the issues with today's decisions and share the brief with the team after this.\n";
 
 const state = {
   cues: [],
@@ -248,7 +248,15 @@ const state = {
   briefMarkdown: '',
   briefLoading: false,
   briefError: '',
-  briefRequestKey: ''
+  briefRequestKey: '',
+  githubToken: localStorage.getItem('githubToken') || '',
+  githubConfig: tryParseJson(localStorage.getItem('githubConfig')),
+  githubRelatedIssues: {},
+  githubItemLinks: {},
+  githubProposals: [],
+  githubTranscriptUpload: false,
+  githubPublishing: false,
+  githubPublishResult: null
 };
 
 const els = {
@@ -322,8 +330,18 @@ const els = {
   modalPromoteOpenQuestion: document.querySelector('#modalPromoteOpenQuestion'),
   briefPanel: document.querySelector('#briefPanel'),
   briefContent: document.querySelector('#briefContent'),
-  copyBriefButton: document.querySelector('#copyBriefButton')
+  copyBriefButton: document.querySelector('#copyBriefButton'),
+  runwayGithubContent: document.querySelector('#runwayGithubContent'),
+  githubBriefSection: document.querySelector('#githubBriefSection'),
+  githubBriefStatus: document.querySelector('#githubBriefStatus'),
+  githubBriefContent: document.querySelector('#githubBriefContent'),
+  modalGithubSection: document.querySelector('#modalGithubSection'),
+  modalGithubIssues: document.querySelector('#modalGithubIssues')
 };
+
+function tryParseJson(value) {
+  try { return value ? JSON.parse(value) : null; } catch (e) { return null; }
+}
 
 let rtmsPollTimer = null;
 let rtmsStarted = false;
@@ -1004,6 +1022,12 @@ function resetState(keepTranscript) {
   state.playing = false;
   state.lastTick = 0;
   state.reviewMode = false;
+  state.githubRelatedIssues = {};
+  state.githubItemLinks = {};
+  state.githubProposals = [];
+  state.githubTranscriptUpload = false;
+  state.githubPublishing = false;
+  state.githubPublishResult = null;
   document.body.classList.remove('review-mode-active');
   els.briefPanel.hidden = true;
   resetRunway();
@@ -1095,6 +1119,7 @@ function renderRunway() {
   els.runwayNorm.textContent = data.participationNorm;
   els.runwayOpeningPrompt.textContent = data.openingPrompt;
   renderRunwayTimer();
+  renderRunwayGithub();
 }
 
 function runwayDefinitionRow(row) {
@@ -1790,6 +1815,7 @@ function openDetailModal(type, id) {
     els.modalAcceptDecision.disabled = item.confirmedByHost === true;
     els.modalRejectDecision.disabled = item.status === 'rejected';
   }
+  renderModalGithubSection(type, id);
   els.modal.classList.add('open');
   els.modal.setAttribute('aria-hidden', 'false');
 }
@@ -1878,6 +1904,236 @@ function toggleExcludeFromBrief(type, id) {
   state.briefRequestKey = '';
   state.boardDirty = true;
   renderAll();
+}
+
+// --- GITHUB DEMO FIXTURES ---
+
+const demoGithubRepo = { owner: 'chrizbo', repo: 'agentics-beyond-code', folder: 'meetings', repoUrl: 'https://github.com/chrizbo/agentics-beyond-code' };
+
+const demoGithubIssues = [
+  { number: 1, title: 'Research live facilitation patterns for decision support', url: 'https://github.com/chrizbo/agentics-beyond-code/issues/1', state: 'open' },
+  { number: 2, title: 'Prototype shared live board with transcript playback', url: 'https://github.com/chrizbo/agentics-beyond-code/issues/2', state: 'open' },
+  { number: 3, title: 'Define transcript retention and access policy', url: 'https://github.com/chrizbo/agentics-beyond-code/issues/3', state: 'open' },
+  { number: 4, title: 'Decision card modal and host guidance UX', url: 'https://github.com/chrizbo/agentics-beyond-code/issues/4', state: 'closed' },
+  { number: 5, title: 'Dashboard access control and link sharing', url: 'https://github.com/chrizbo/agentics-beyond-code/issues/5', state: 'open' }
+];
+
+function demoGithubIssuesForItem(text) {
+  const lower = String(text).toLowerCase();
+  if (/live board|facilitation|playback/.test(lower)) return [demoGithubIssues[0], demoGithubIssues[1]];
+  if (/transcript|retain|retention|storage/.test(lower)) return [demoGithubIssues[2]];
+  if (/modal|guidance|click|open/.test(lower)) return [demoGithubIssues[3]];
+  if (/dashboard|url|link|access|unguessable/.test(lower)) return [demoGithubIssues[4]];
+  return demoGithubIssues.slice(0, 2);
+}
+
+// --- GITHUB ---
+
+function parseGithubRepoUrl(url) {
+  if (!url) return null;
+  const match = String(url).match(/github\.com\/([^/]+)\/([^/\s?#]+)/);
+  if (!match) return null;
+  return { owner: match[1], repo: match[2].replace(/\.git$/, '') };
+}
+
+function detectRepoFromContext() {
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  const text = [meeting.topic, meeting.agenda || ''].join(' ');
+  const match = text.match(/https?:\/\/github\.com\/[^/\s]+\/[^/\s]+/);
+  return match ? match[0] : null;
+}
+
+function saveGithubConfig(config) {
+  state.githubConfig = config;
+  if (config) {
+    localStorage.setItem('githubConfig', JSON.stringify(config));
+  } else {
+    localStorage.removeItem('githubConfig');
+  }
+}
+
+function githubRequest(method, path, body, params) {
+  if (state.demoMode) return Promise.resolve({});
+  return fetch('/api/github/proxy', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: state.githubToken, method, path, body, params })
+  }).then(function(r) { return r.json(); });
+}
+
+function connectGitHub() {
+  const popup = window.open('/api/github/oauth/start', 'github-oauth', 'width=620,height=700,scrollbars=yes,resizable=yes');
+  if (!popup) {
+    alert('Please allow popups for this site to connect GitHub.');
+    return;
+  }
+  function handleMessage(event) {
+    if (!event.data || typeof event.data !== 'object') return;
+    if (event.data.type === 'github_token') {
+      state.githubToken = event.data.token || '';
+      localStorage.setItem('githubToken', state.githubToken);
+      window.removeEventListener('message', handleMessage);
+      renderAll();
+    } else if (event.data.type === 'github_error') {
+      window.removeEventListener('message', handleMessage);
+    }
+  }
+  window.addEventListener('message', handleMessage);
+}
+
+function disconnectGitHub() {
+  state.githubToken = '';
+  state.githubRelatedIssues = {};
+  state.githubItemLinks = {};
+  localStorage.removeItem('githubToken');
+  renderAll();
+}
+
+function isGithubConnected() {
+  return Boolean(state.githubToken);
+}
+
+function isGithubConfigured() {
+  return isGithubConnected() && Boolean(state.githubConfig && state.githubConfig.owner && state.githubConfig.repo);
+}
+
+function renderRunwayGithub() {
+  if (!els.runwayGithubContent) return;
+  const connected = isGithubConnected();
+  const config = state.githubConfig;
+  const detectedUrl = !config ? detectRepoFromContext() : null;
+
+  let html = '';
+
+  if (!connected) {
+    html += '<p class="github-runway-hint">Connect GitHub to surface related issues during the meeting and publish artifacts to a repo after.</p>';
+    html += '<button class="github-connect-btn" type="button" id="githubConnectBtn">Connect GitHub</button>';
+  } else {
+    html += '<p class="github-connected-label">Connected</p>';
+    html += '<div class="github-repo-form">';
+    html += '<label for="githubRepoInput">Repository URL</label>';
+    html += '<input id="githubRepoInput" type="url" placeholder="https://github.com/owner/repo" value="' + escapeHtml((config && config.repoUrl) || detectedUrl || '') + '" autocomplete="off">';
+    html += '<label for="githubFolderInput">Transcript folder</label>';
+    html += '<input id="githubFolderInput" type="text" placeholder="meetings/" value="' + escapeHtml((config && config.folder) || 'meetings') + '" autocomplete="off">';
+    html += '<button class="github-save-btn" type="button" id="githubSaveConfigBtn">Save</button>';
+    html += '</div>';
+    if (config && config.owner) {
+      html += '<p class="github-repo-bound">Bound to <strong>' + escapeHtml(config.owner + '/' + config.repo) + '</strong></p>';
+    }
+    html += '<button class="github-disconnect-btn" type="button" id="githubDisconnectBtn">Disconnect</button>';
+  }
+
+  els.runwayGithubContent.innerHTML = html;
+
+  const connectBtn = document.querySelector('#githubConnectBtn');
+  if (connectBtn) connectBtn.addEventListener('click', connectGitHub);
+
+  const disconnectBtn = document.querySelector('#githubDisconnectBtn');
+  if (disconnectBtn) disconnectBtn.addEventListener('click', disconnectGitHub);
+
+  const saveBtn = document.querySelector('#githubSaveConfigBtn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', function() {
+      const repoInput = document.querySelector('#githubRepoInput');
+      const folderInput = document.querySelector('#githubFolderInput');
+      const parsed = parseGithubRepoUrl(repoInput ? repoInput.value : '');
+      if (!parsed) {
+        alert('Enter a valid GitHub repository URL like https://github.com/owner/repo');
+        return;
+      }
+      saveGithubConfig({
+        repoUrl: repoInput ? repoInput.value.trim() : '',
+        owner: parsed.owner,
+        repo: parsed.repo,
+        folder: (folderInput ? folderInput.value.trim().replace(/\/$/, '') : '') || 'meetings'
+      });
+      renderAll();
+    });
+  }
+}
+
+async function loadRelatedGithubIssues(itemId, text) {
+  if (!isGithubConfigured()) return;
+  if (state.githubRelatedIssues[itemId]) return;
+  state.githubRelatedIssues[itemId] = { loading: true, issues: [] };
+  if (state.demoMode) {
+    await new Promise(function(r) { setTimeout(r, 700); });
+    state.githubRelatedIssues[itemId] = { loading: false, issues: demoGithubIssuesForItem(text) };
+    state.boardDirty = true;
+    renderAll();
+    return;
+  }
+  const { owner, repo } = state.githubConfig;
+  const q = text.slice(0, 60) + ' repo:' + owner + '/' + repo;
+  try {
+    const result = await githubRequest('GET', '/search/issues', null, { q, per_page: '5' });
+    state.githubRelatedIssues[itemId] = {
+      loading: false,
+      issues: (result.items || []).map(function(i) {
+        return { number: i.number, title: i.title, url: i.html_url, state: i.state };
+      })
+    };
+    state.boardDirty = true;
+    renderAll();
+  } catch (e) {
+    state.githubRelatedIssues[itemId] = { loading: false, issues: [] };
+  }
+}
+
+function linkItemToGithubIssue(itemId, issueNumber) {
+  state.githubItemLinks[itemId] = Number(issueNumber);
+  state.boardDirty = true;
+  renderAll();
+}
+
+function unlinkItemFromGithubIssue(itemId) {
+  delete state.githubItemLinks[itemId];
+  state.boardDirty = true;
+  renderAll();
+}
+
+function renderModalGithubSection(type, id) {
+  if (!els.modalGithubSection || !els.modalGithubIssues) return;
+  const showGithub = isGithubConfigured() && (type === 'decision' || type === 'action' || type === 'risk');
+  els.modalGithubSection.hidden = !showGithub;
+  if (!showGithub) return;
+
+  const related = state.githubRelatedIssues[id];
+  const linkedNumber = state.githubItemLinks[id];
+
+  if (!related) {
+    const item = findBoardItem(type, id);
+    if (item) loadRelatedGithubIssues(id, (item.title || '') + ' ' + (item.detail || item.summary || ''));
+    els.modalGithubIssues.innerHTML = '<p class="github-issues-loading">Searching related issues…</p>';
+    return;
+  }
+
+  if (related.loading) {
+    els.modalGithubIssues.innerHTML = '<p class="github-issues-loading">Searching related issues…</p>';
+    return;
+  }
+
+  let html = '';
+  if (linkedNumber) {
+    html += '<p class="github-linked-issue">Linked to <strong>#' + linkedNumber + '</strong> — <button class="github-unlink-btn" type="button" data-item-id="' + escapeHtml(id) + '">Unlink</button></p>';
+  }
+  if (related.issues.length === 0) {
+    html += '<p class="github-no-issues">No related issues found in ' + escapeHtml(state.githubConfig.owner + '/' + state.githubConfig.repo) + '.</p>';
+  } else {
+    html += '<ul class="github-issues-list">';
+    related.issues.forEach(function(issue) {
+      const isLinked = linkedNumber === issue.number;
+      html += '<li class="github-issue-item' + (isLinked ? ' linked' : '') + '">';
+      html += '<span class="github-issue-state ' + escapeHtml(issue.state) + '">' + escapeHtml(issue.state) + '</span>';
+      html += '<a href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer">#' + issue.number + ' ' + escapeHtml(issue.title) + '</a>';
+      if (!isLinked) {
+        html += '<button class="github-link-btn" type="button" data-item-id="' + escapeHtml(id) + '" data-issue-number="' + issue.number + '">Link</button>';
+      }
+      html += '</li>';
+    });
+    html += '</ul>';
+  }
+  els.modalGithubIssues.innerHTML = html;
 }
 
 // --- BRIEF ---
@@ -2085,6 +2341,7 @@ function renderBriefPanel() {
   if (state.briefLoading) {
     els.copyBriefButton.disabled = true;
     els.briefContent.innerHTML = '<div class="brief-loading"><span></span><p>Generating meeting brief from included items...</p></div>';
+    renderBriefGithub();
     return;
   }
   els.copyBriefButton.disabled = false;
@@ -2092,6 +2349,7 @@ function renderBriefPanel() {
   const markdown = state.briefMarkdown || fallback;
   els.briefContent.innerHTML = (state.briefError ? '<p class="brief-error">' + escapeHtml(state.briefError) + '</p>' : '') +
     (markdown ? markdownToBriefHtml(markdown) : '<p class="brief-empty">No items included. Use the board below to accept decisions, promote agent issues, or re-include anything that should appear here.</p>');
+  renderBriefGithub();
 }
 
 async function requestBriefAnalysis(items, key) {
@@ -2127,6 +2385,340 @@ async function requestBriefAnalysis(items, key) {
 
 function exportBriefAsMarkdown() {
   return state.briefMarkdown || fallbackBriefMarkdown(briefItems());
+}
+
+// --- GITHUB BRIEF ---
+
+function linkedIssueTitle(itemId, issueNumber) {
+  const related = state.githubRelatedIssues[itemId];
+  if (!related || !related.issues) return null;
+  const found = related.issues.find(function(i) { return i.number === issueNumber; });
+  return found ? found.title : null;
+}
+
+function buildGithubProposals() {
+  if (!isGithubConfigured()) return [];
+  const proposals = [];
+  const items = briefItems();
+
+  sortByEvidence(items.decisions).forEach(function(decision) {
+    if (decision.status !== 'accepted') return;
+    const linkedIssue = state.githubItemLinks[decision.id];
+    if (linkedIssue) {
+      const issueTitle = linkedIssueTitle(decision.id, linkedIssue);
+      proposals.push({
+        id: decision.id,
+        include: true,
+        type: 'comment',
+        label: 'Comment on #' + linkedIssue + (issueTitle ? ': ' + issueTitle : ''),
+        issueNumber: linkedIssue,
+        title: decision.title,
+        body: buildIssueCommentBody('decision', decision)
+      });
+    } else {
+      proposals.push({
+        id: decision.id,
+        include: true,
+        type: 'issue',
+        label: 'New issue: ' + decision.title,
+        title: '[Decision] ' + decision.title,
+        body: buildIssueBody('decision', decision)
+      });
+    }
+  });
+
+  sortByEvidence(items.actions).forEach(function(action) {
+    const linkedIssue = state.githubItemLinks[action.id];
+    if (linkedIssue) {
+      const issueTitle = linkedIssueTitle(action.id, linkedIssue);
+      proposals.push({
+        id: action.id,
+        include: true,
+        type: 'comment',
+        label: 'Comment on #' + linkedIssue + (issueTitle ? ': ' + issueTitle : ''),
+        issueNumber: linkedIssue,
+        title: action.title,
+        body: buildIssueCommentBody('action', action)
+      });
+    } else {
+      proposals.push({
+        id: action.id,
+        include: true,
+        type: 'issue',
+        label: 'New issue: ' + action.title,
+        title: '[Action] ' + action.title,
+        body: buildIssueBody('action', action)
+      });
+    }
+  });
+
+  return proposals;
+}
+
+function buildIssueBody(type, item) {
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  const lines = [
+    '## ' + (type === 'decision' ? 'Decision' : 'Action') + ': ' + item.title,
+    '',
+    item.detail || item.summary || '',
+    '',
+    '---',
+    '**Meeting:** ' + meeting.topic,
+    '**Evidence:** ' + (item.evidence || 'No timestamp'),
+    '',
+    '*Captured by Room Clarity*'
+  ];
+  return lines.join('\n').trim();
+}
+
+function buildIssueCommentBody(type, item) {
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  const lines = [
+    '### Meeting update — ' + (type === 'decision' ? 'Decision' : 'Action'),
+    '',
+    '**' + item.title + '**',
+    '',
+    item.detail || item.summary || '',
+    '',
+    '**Meeting:** ' + meeting.topic,
+    '**Evidence:** ' + (item.evidence || 'No timestamp'),
+    '',
+    '*Posted by Room Clarity*'
+  ];
+  return lines.join('\n').trim();
+}
+
+function buildTranscriptFileContent() {
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  const date = new Date().toISOString().slice(0, 10);
+  const lines = [
+    '# ' + meeting.topic,
+    '',
+    'Date: ' + date,
+    'Attendees: ' + ((meeting.attendees || []).join(', ') || 'Not specified'),
+    '',
+    '## Transcript',
+    ''
+  ];
+  state.cues.forEach(function(cue) {
+    lines.push('**' + formatTime(cue.start) + ' · ' + cue.speaker + '**');
+    lines.push(cue.text);
+    lines.push('');
+  });
+  return lines.join('\n').trim();
+}
+
+function transcriptFilePath() {
+  const config = state.githubConfig;
+  const folder = (config && config.folder) || 'meetings';
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  const date = new Date().toISOString().slice(0, 10);
+  const slug = (meeting.topic || 'meeting')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+  return folder + '/' + date + '-' + slug + '.md';
+}
+
+function renderBriefGithub() {
+  if (!els.githubBriefSection || !els.githubBriefContent) return;
+  const configured = isGithubConfigured();
+  els.githubBriefSection.hidden = !configured;
+  if (!configured) return;
+
+  const { owner, repo } = state.githubConfig;
+
+  if (state.githubPublishing) {
+    els.githubBriefStatus.textContent = 'Publishing…';
+    els.githubBriefContent.innerHTML = '<p class="github-brief-publishing">Publishing to GitHub…</p>';
+    return;
+  }
+
+  if (state.githubPublishResult) {
+    const result = state.githubPublishResult;
+    if (result.error) {
+      els.githubBriefStatus.textContent = 'Failed';
+      els.githubBriefContent.innerHTML = '<p class="github-brief-error">' + escapeHtml(result.error) + '</p>' +
+        '<button class="github-publish-btn" type="button" id="githubRetryBtn">Retry</button>';
+    } else {
+      els.githubBriefStatus.textContent = 'Published';
+      let html = '<ul class="github-publish-results">';
+      (result.issues || []).forEach(function(item) {
+        html += '<li><a href="' + escapeHtml(item.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(item.label) + '</a></li>';
+      });
+      if (result.pr) {
+        html += '<li><a href="' + escapeHtml(result.pr.url) + '" target="_blank" rel="noopener noreferrer">Transcript PR: ' + escapeHtml(result.pr.title) + '</a></li>';
+      }
+      html += '</ul>';
+      html += '<button class="github-publish-btn secondary" type="button" id="githubResetBtn">Publish again</button>';
+      els.githubBriefContent.innerHTML = html;
+    }
+    wireGithubBriefButtons();
+    return;
+  }
+
+  if (state.demoMode && Object.keys(state.githubItemLinks).length === 0) {
+    const retentionDecision = state.decisions.find(function(d) {
+      return d.status === 'accepted' && /transcript|retain/i.test(d.title);
+    });
+    if (retentionDecision) {
+      state.githubItemLinks[retentionDecision.id] = 3;
+      if (!state.githubRelatedIssues[retentionDecision.id]) {
+        state.githubRelatedIssues[retentionDecision.id] = { loading: false, issues: [demoGithubIssues[2]] };
+      }
+    }
+  }
+
+  const proposals = buildGithubProposals();
+  state.githubProposals = proposals;
+
+  els.githubBriefStatus.textContent = owner + '/' + repo;
+  const hasCues = state.cues.length > 0;
+
+  let html = '';
+  if (proposals.length === 0 && !hasCues) {
+    html = '<p class="github-brief-empty">Accept decisions or actions on the board to create GitHub proposals.</p>';
+  } else {
+    if (proposals.length > 0) {
+      html += '<ul class="github-proposal-list">';
+      proposals.forEach(function(proposal, index) {
+        html += '<li class="github-proposal-item">';
+        html += '<label><input type="checkbox" class="github-proposal-check" data-index="' + index + '"' + (proposal.include ? ' checked' : '') + '>';
+        html += '<span class="github-proposal-type ' + proposal.type + '">' + (proposal.type === 'issue' ? 'Issue' : 'Comment') + '</span>';
+        html += escapeHtml(proposal.label) + '</label>';
+        const previewLabel = proposal.type === 'comment' ? 'Preview comment' : 'Preview issue body';
+        html += '<details class="proposal-preview"><summary>' + previewLabel + '</summary>';
+        html += '<pre class="proposal-body-text">' + escapeHtml(proposal.body) + '</pre></details>';
+        html += '</li>';
+      });
+      html += '</ul>';
+    }
+    if (hasCues) {
+      html += '<label class="github-transcript-toggle">';
+      html += '<input type="checkbox" id="githubTranscriptToggle"' + (state.githubTranscriptUpload ? ' checked' : '') + '>';
+      html += 'Upload transcript as PR to <code>' + escapeHtml(transcriptFilePath()) + '</code>';
+      html += '</label>';
+    }
+    const anySelected = proposals.some(function(p) { return p.include; }) || state.githubTranscriptUpload;
+    html += '<button class="github-publish-btn" type="button" id="githubPublishBtn"' + (anySelected ? '' : ' disabled') + '>Publish to GitHub</button>';
+  }
+
+  els.githubBriefContent.innerHTML = html;
+  wireGithubBriefButtons();
+}
+
+function wireGithubBriefButtons() {
+  const publishBtn = document.querySelector('#githubPublishBtn');
+  if (publishBtn) publishBtn.addEventListener('click', publishToGithub);
+
+  const retryBtn = document.querySelector('#githubRetryBtn');
+  if (retryBtn) retryBtn.addEventListener('click', function() {
+    state.githubPublishResult = null;
+    renderAll();
+  });
+
+  const resetBtn = document.querySelector('#githubResetBtn');
+  if (resetBtn) resetBtn.addEventListener('click', function() {
+    state.githubPublishResult = null;
+    renderAll();
+  });
+
+  const transcriptToggle = document.querySelector('#githubTranscriptToggle');
+  if (transcriptToggle) {
+    transcriptToggle.addEventListener('change', function() {
+      state.githubTranscriptUpload = transcriptToggle.checked;
+      const publishBtn2 = document.querySelector('#githubPublishBtn');
+      if (publishBtn2) {
+        const anySelected = state.githubProposals.some(function(p) { return p.include; }) || state.githubTranscriptUpload;
+        publishBtn2.disabled = !anySelected;
+      }
+    });
+  }
+
+  document.querySelectorAll('.github-proposal-check').forEach(function(checkbox) {
+    checkbox.addEventListener('change', function() {
+      const index = Number(checkbox.dataset.index);
+      if (state.githubProposals[index]) {
+        state.githubProposals[index].include = checkbox.checked;
+      }
+      const publishBtn2 = document.querySelector('#githubPublishBtn');
+      if (publishBtn2) {
+        const anySelected2 = state.githubProposals.some(function(p) { return p.include; }) || state.githubTranscriptUpload;
+        publishBtn2.disabled = !anySelected2;
+      }
+    });
+  });
+}
+
+async function publishToGithub() {
+  if (!isGithubConfigured() || state.githubPublishing) return;
+  if (state.demoMode) return;
+  state.githubPublishing = true;
+  state.boardDirty = true;
+  renderAll();
+
+  const { owner, repo } = state.githubConfig;
+  const results = { issues: [], pr: null, error: null };
+
+  try {
+    const included = state.githubProposals.filter(function(p) { return p.include; });
+    for (const proposal of included) {
+      if (proposal.type === 'issue') {
+        const created = await githubRequest('POST', '/repos/' + owner + '/' + repo + '/issues', {
+          title: proposal.title,
+          body: proposal.body
+        });
+        results.issues.push({ label: '#' + created.number + ' ' + proposal.title, url: created.html_url });
+      } else if (proposal.type === 'comment' && proposal.issueNumber) {
+        const comment = await githubRequest('POST', '/repos/' + owner + '/' + repo + '/issues/' + proposal.issueNumber + '/comments', {
+          body: proposal.body
+        });
+        results.issues.push({ label: 'Comment on #' + proposal.issueNumber, url: comment.html_url });
+      }
+    }
+
+    if (state.githubTranscriptUpload) {
+      const filePath = transcriptFilePath();
+      const content = btoa(unescape(encodeURIComponent(buildTranscriptFileContent())));
+      const meeting = state.meetingContext || fakeZoomMeeting;
+
+      let baseSha = null;
+      try {
+        const refsResult = await githubRequest('GET', '/repos/' + owner + '/' + repo + '/git/refs/heads/main');
+        baseSha = refsResult.object && refsResult.object.sha;
+      } catch (e) { /* branch may not exist */ }
+
+      const branchName = 'room-clarity/' + new Date().toISOString().slice(0, 10) + '-transcript';
+      if (baseSha) {
+        await githubRequest('POST', '/repos/' + owner + '/' + repo + '/git/refs', {
+          ref: 'refs/heads/' + branchName,
+          sha: baseSha
+        });
+      }
+
+      await githubRequest('PUT', '/repos/' + owner + '/' + repo + '/contents/' + filePath, {
+        message: 'Add meeting transcript: ' + meeting.topic,
+        content,
+        branch: branchName
+      });
+
+      const pr = await githubRequest('POST', '/repos/' + owner + '/' + repo + '/pulls', {
+        title: 'Meeting transcript: ' + meeting.topic,
+        body: 'Transcript from ' + meeting.topic + ' uploaded by Room Clarity.',
+        head: branchName,
+        base: 'main'
+      });
+      results.pr = { title: pr.title, url: pr.html_url };
+    }
+  } catch (error) {
+    results.error = 'GitHub publish failed. Check your token and repo permissions.';
+  }
+
+  state.githubPublishing = false;
+  state.githubPublishResult = results;
+  state.boardDirty = true;
+  renderAll();
 }
 
 function handleOpenClick(event) {
@@ -2311,6 +2903,19 @@ els.copyBriefButton.addEventListener('click', function() {
   });
 });
 
+els.modalGithubIssues.addEventListener('click', function(event) {
+  const linkBtn = event.target.closest('.github-link-btn');
+  if (linkBtn) {
+    linkItemToGithubIssue(linkBtn.dataset.itemId, linkBtn.dataset.issueNumber);
+    if (state.openModalItem) renderModalGithubSection(state.openModalItem.type, state.openModalItem.id);
+  }
+  const unlinkBtn = event.target.closest('.github-unlink-btn');
+  if (unlinkBtn) {
+    unlinkItemFromGithubIssue(unlinkBtn.dataset.itemId);
+    if (state.openModalItem) renderModalGithubSection(state.openModalItem.type, state.openModalItem.id);
+  }
+});
+
 els.modalClose.addEventListener('click', closeDetailModal);
 els.modal.addEventListener('click', function(event) {
   if (event.target === els.modal) closeDetailModal();
@@ -2338,6 +2943,8 @@ async function initializeApp() {
   if (!document.body.classList.contains('zoom-app-surface') && (!sessionId || sessionId === 'demo-session')) {
     state.demoMode = true;
     document.body.classList.add('demo-mode');
+    state.githubToken = 'demo-github-token';
+    state.githubConfig = Object.assign({}, demoGithubRepo);
     loadTranscript(demoVtt, 'product-decision-demo.vtt');
     loadRunwayFromAgenda(fakeZoomMeeting);
   } else {

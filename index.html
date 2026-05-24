@@ -143,6 +143,10 @@
               <h4>Decision Frame</h4>
               <dl id="runwayDecisionFrame"></dl>
             </article>
+            <article class="runway-block github-runway-block" id="runwayGithubBlock">
+              <h4>GitHub</h4>
+              <div id="runwayGithubContent"></div>
+            </article>
           </div>
         </section>
 
@@ -153,6 +157,13 @@
           </div>
           <p class="brief-note">Exclude or dismiss items from decisions, risks, assumptions/open questions, or the agent queue to update this generated brief.</p>
           <div id="briefContent" class="brief-content"></div>
+          <details id="githubBriefSection" class="github-brief-section" hidden>
+            <summary class="github-brief-summary">
+              <h4 class="github-brief-heading">Publish to GitHub</h4>
+              <span id="githubBriefStatus" class="github-brief-status"></span>
+            </summary>
+            <div id="githubBriefContent"></div>
+          </details>
         </section>
 
         <div class="decision-strip" id="decisionStrip">
@@ -228,6 +239,10 @@
             <button id="modalDismiss" type="button">Dismiss Issue</button>
             <button id="modalPromoteRisk" type="button">Promote to Risk</button>
             <button id="modalPromoteOpenQuestion" type="button">Promote to Open Question</button>
+          </div>
+          <div id="modalGithubSection" class="modal-github-section" hidden>
+            <h3>Related GitHub Issues</h3>
+            <div id="modalGithubIssues"></div>
           </div>
         </div>
       </section>

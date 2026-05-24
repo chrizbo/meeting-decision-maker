@@ -24,6 +24,7 @@
 | `docs/google-cloud-run-hosting.md` | Deploying, adding secrets, Firestore, domain setup |
 | `docs/llm-integration-notes.md` | Changing the analysis prompt, adding models, eval workflow |
 | `docs/zoom-app-installation.md` | Zoom App manifest, OAuth, marketplace submission |
+| `docs/github-integration.md` | GitHub OAuth App setup, proxy routes, MCP server direction |
 | `docs/security-launch-plan.md` | Before touching auth, webhooks, or session tokens |
 | `docs/product-principles.md` | Before adding features — what this product is and isn't |
 
@@ -54,12 +55,14 @@ Sessions are in-memory by default. Add `SESSION_STORE=firestore` only when you h
 | `OPENAI_MODEL` | Override OpenAI model |
 | `LLM_PROVIDER` | `openai` to use OpenAI instead of Gemini |
 | `ZOOM_WEBHOOK_SECRET_TOKEN` | Verifies signed Zoom webhook events |
-| `ZOOM_CLIENT_ID` / `ZOOM_CLIENT_SECRET` / `ZOOM_REDIRECT_URI` | OAuth |
+| `ZOOM_CLIENT_ID` / `ZOOM_CLIENT_SECRET` / `ZOOM_REDIRECT_URI` | Zoom OAuth |
 | `ZM_RTMS_CLIENT` / `ZM_RTMS_SECRET` | RTMS SDK credentials |
 | `ROOM_CLARITY_ADMIN_TOKEN` | Protects `/api/rtms/sessions` list route |
 | `SESSION_STORE` | `firestore` for durable sessions; default is in-memory |
 | `FIRESTORE_SESSIONS_COLLECTION` | Firestore collection name for sessions |
 | `RTMS_POLL_INTERVAL_MS` | How often the client polls for RTMS state (ms) |
+| `GITHUB_CLIENT_ID` | GitHub OAuth App client ID (enables GitHub integration) |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret (keep in Secret Manager) |
 
 ## API routes
 
@@ -74,6 +77,9 @@ Sessions are in-memory by default. Add `SESSION_STORE=firestore` only when you h
 | GET | `/api/rtms/sessions` | List in-memory RTMS sessions (requires `x-admin-token`) |
 | GET | `/api/rtms/sessions/:id` | Full RTMS session state including transcript (requires dashboard token) |
 | POST | `/api/zoom/rtms-webhook` | Receive signed Zoom RTMS webhook events |
+| GET | `/api/github/oauth/start` | Redirect to GitHub OAuth authorize page |
+| GET | `/api/github/oauth/callback` | Exchange GitHub code for token; render popup-closing page |
+| POST | `/api/github/proxy` | Proxy authenticated GitHub REST API calls (rate-limited, path-allowlisted) |
 
 ## Deploy
 
@@ -83,7 +89,7 @@ gcloud run deploy meeting-decision-maker-web \
   --region us-central1 \
   --allow-unauthenticated \
   --set-env-vars=PUBLIC_BASE_URL=https://roomclarity.com \
-  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest,ROOM_CLARITY_ADMIN_TOKEN=room-clarity-admin-token:latest
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest,ROOM_CLARITY_ADMIN_TOKEN=room-clarity-admin-token:latest,GITHUB_CLIENT_ID=github-client-id:latest,GITHUB_CLIENT_SECRET=github-client-secret:latest
 ```
 
 Always use `--update-secrets` with the full set so a redeploy doesn't silently remove previously attached secrets.

@@ -22,6 +22,7 @@ Start with a human-shared web page using mock transcript playback, then use the 
 - `docs/future-specs/meeting-series-linking.md`: future meeting-series linking and carry-forward context workflow
 - `docs/future-specs/meeting-runway.md`: future start board for orienting the first minutes of a meeting
 - `docs/future-specs/meeting-library.md`: future Meeting Library concept for accessible meetings, briefs, and series
+- `docs/future-specs/subscription-billing.md`: future subscription, usage-limit, and billing system spec
 - `skills/`: portable red-team agent skills and meeting-tool configs
 - `sample-transcripts/`: synthetic transcript fixtures for prototyping
 - `fixtures/`: mock structured LLM outputs loaded by the static app

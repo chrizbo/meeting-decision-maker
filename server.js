@@ -18,6 +18,8 @@ const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY ||
 const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
 const openaiApiKey = process.env.OPENAI_API_KEY || '';
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-5.4';
+const githubClientId = process.env.GITHUB_CLIENT_ID || '';
+const githubClientSecret = process.env.GITHUB_CLIENT_SECRET || '';
 const openaiReasoningEffort = process.env.OPENAI_REASONING_EFFORT || 'low';
 const llmProvider = normalizeProvider(process.env.LLM_PROVIDER || 'gemini');
 const publicBaseUrl = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
@@ -1523,6 +1525,31 @@ async function exchangeZoomOAuthCode(code) {
   return body;
 }
 
+function isAllowedGithubPath(path) {
+  if (typeof path !== 'string') return false;
+  const allowed = [
+    /^\/repos\/[^/]+\/[^/]+$/,
+    /^\/repos\/[^/]+\/[^/]+\/issues$/,
+    /^\/repos\/[^/]+\/[^/]+\/issues\/\d+\/comments$/,
+    /^\/repos\/[^/]+\/[^/]+\/contents\/.+$/,
+    /^\/repos\/[^/]+\/[^/]+\/pulls$/,
+    /^\/repos\/[^/]+\/[^/]+\/git\/refs$/,
+    /^\/repos\/[^/]+\/[^/]+\/git\/refs\/.+$/,
+    /^\/search\/issues$/
+  ];
+  return allowed.some(function(pattern) { return pattern.test(path); });
+}
+
+function renderGithubOAuthPage(res, success, token) {
+  const origin = publicBaseUrl || 'null';
+  if (success && token) {
+    const safeToken = JSON.stringify(String(token));
+    sendHtml(res, 200, '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>GitHub connected</title></head><body><p>Connected to GitHub. This window will close automatically.</p><script>try{if(window.opener)window.opener.postMessage({type:\'github_token\',token:' + safeToken + '},' + JSON.stringify(origin) + ');}catch(e){}window.close();</script></body></html>');
+  } else {
+    sendHtml(res, 400, '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>GitHub auth failed</title></head><body><p>GitHub authorization failed. Please close this window and try again.</p><script>try{if(window.opener)window.opener.postMessage({type:\'github_error\'},' + JSON.stringify(origin) + ');}catch(e){}setTimeout(function(){window.close();},3000);</script></body></html>');
+  }
+}
+
 function renderOAuthPage(req, res, status, title, message) {
   const appHref = escapeHtml(appUrl(req, '/'));
   sendHtml(res, status, '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' + escapeHtml(title) + ' | Room Clarity</title><link rel="icon" type="image/png" href="/meeting-decision-maker-icon.png"><link rel="apple-touch-icon" href="/meeting-decision-maker-icon.png"><link rel="stylesheet" href="/styles.css"></head><body class="oauth-page"><div class="oauth-shell"><header class="oauth-nav" aria-label="Room Clarity"><a class="oauth-brand" href="' + appHref + '"><img src="/meeting-decision-maker-icon.png" alt="" aria-hidden="true"><span>Room Clarity</span></a></header><main class="oauth-content"><section class="oauth-card" aria-labelledby="pageTitle"><img class="oauth-mark" src="/meeting-decision-maker-icon.png" alt="" aria-hidden="true"><p class="home-kicker">Zoom authorization</p><h1 id="pageTitle">' + escapeHtml(title) + '</h1><p>' + escapeHtml(message) + '</p><div class="oauth-actions"><a class="home-button primary" href="' + appHref + '">Open Room Clarity</a><a class="home-button" href="/support.html">Support</a></div></section></main></div></body></html>');
@@ -1625,6 +1652,95 @@ async function handleApi(req, res, pathname) {
     } catch (error) {
       sendJson(res, error.status || 500, { error: publicErrorMessage(error, 'Brief analysis failed') });
     }
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/github/oauth/start') {
+    if (!githubClientId) {
+      sendJson(res, 503, { error: 'GitHub OAuth is not configured. Set GITHUB_CLIENT_ID.' });
+      return;
+    }
+    const params = new URLSearchParams({
+      client_id: githubClientId,
+      scope: 'repo',
+      state: randomBytes(16).toString('hex')
+    });
+    res.writeHead(302, withSecurityHeaders({ location: 'https://github.com/login/oauth/authorize?' + params }));
+    res.end();
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/github/oauth/callback') {
+    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const code = url.searchParams.get('code');
+    const githubError = url.searchParams.get('error');
+    if (githubError || !code) {
+      renderGithubOAuthPage(res, false, null);
+      return;
+    }
+    try {
+      const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'accept': 'application/json' },
+        body: JSON.stringify({ client_id: githubClientId, client_secret: githubClientSecret, code })
+      });
+      const tokenBody = await tokenResponse.json().catch(function() { return {}; });
+      if (!tokenBody.access_token) throw new Error('No access token returned');
+      renderGithubOAuthPage(res, true, tokenBody.access_token);
+    } catch (error) {
+      renderGithubOAuthPage(res, false, null);
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/github/proxy') {
+    const limit = checkRateLimit(req, 'github-proxy', { limit: 30, windowMs: 60_000 });
+    if (!limit.allowed) {
+      sendRateLimited(res, limit);
+      return;
+    }
+    let input = {};
+    try {
+      input = await readBody(req);
+    } catch (error) {
+      sendJson(res, 400, { error: 'Invalid request body' });
+      return;
+    }
+    const { token, method, path: githubPath, body: githubBody } = input;
+    if (!token || typeof token !== 'string' || token.length > 200) {
+      sendJson(res, 401, { error: 'GitHub token required' });
+      return;
+    }
+    if (!isAllowedGithubPath(githubPath)) {
+      sendJson(res, 400, { error: 'GitHub API path not allowed' });
+      return;
+    }
+    const allowedMethods = new Set(['GET', 'POST', 'PATCH', 'PUT']);
+    const upperMethod = String(method || 'GET').toUpperCase();
+    if (!allowedMethods.has(upperMethod)) {
+      sendJson(res, 400, { error: 'GitHub API method not allowed' });
+      return;
+    }
+    const githubUrl = 'https://api.github.com' + githubPath;
+    const fetchOptions = {
+      method: upperMethod,
+      headers: {
+        'authorization': 'Bearer ' + token,
+        'accept': 'application/vnd.github+json',
+        'content-type': 'application/json',
+        'x-github-api-version': '2022-11-28',
+        'user-agent': 'RoomClarity/1.0'
+      }
+    };
+    if (githubBody && upperMethod !== 'GET') {
+      fetchOptions.body = JSON.stringify(githubBody);
+    }
+    const githubSearchUrl = upperMethod === 'GET' && input.params
+      ? githubUrl + '?' + new URLSearchParams(input.params).toString()
+      : githubUrl;
+    const githubResponse = await fetch(githubSearchUrl, fetchOptions);
+    const githubResponseBody = await githubResponse.json().catch(function() { return {}; });
+    sendJson(res, githubResponse.status, githubResponseBody);
     return;
   }
 

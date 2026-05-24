@@ -28,7 +28,7 @@
       <div class="home-hero-content">
         <p class="home-kicker">For meeting hosts and facilitators</p>
         <h1>Room<br>Clarity</h1>
-        <p>Room Clarity helps teams leave meetings with clearer decisions, visible risks, concrete next steps, and a reviewed recap. It runs inside Zoom, listens for decision moments, gives the host a shared board while the meeting is happening, then turns confirmed items into a meeting brief.</p>
+        <p>Room Clarity helps teams leave meetings with clearer decisions, visible risks, concrete next steps, and a reviewed brief. It runs inside Zoom, listens for decision moments, gives the host a shared board while the meeting is happening, then turns confirmed items into a meeting brief — and publishes issues and a transcript to GitHub.</p>
         <div class="home-actions">
           <a class="home-button primary" href="https://marketplace.zoom.us/">Install from Zoom Marketplace</a>
           <a class="home-button" href="/app">Try the demo board</a>
@@ -50,8 +50,12 @@
             <dd>A live meeting board the host can open, screen-share, and review into a brief.</dd>
           </div>
           <div>
+            <dt>Publishes</dt>
+            <dd>Creates GitHub issues and comments from confirmed decisions and actions, and uploads the transcript as a pull request.</dd>
+          </div>
+          <div>
             <dt>Extends</dt>
-            <dd>Designed to support custom agent skills for the decisions and risks specific to your team.</dd>
+            <dd>Designed to support custom agent skills and integrations for the decisions and risks specific to your team.</dd>
           </div>
         </dl>
       </aside>
@@ -83,6 +87,10 @@
           <h3>Drafts the recap</h3>
           <p>After the conversation, the host can switch to recap review, exclude noisy items, promote useful prompts, and copy a concise meeting brief.</p>
         </article>
+        <article>
+          <h3>Publishes to GitHub</h3>
+          <p>Connect a repository during setup and Room Clarity will surface related issues on the live board, propose GitHub issues for each confirmed decision and action, and upload the meeting transcript as a pull request — all confirmed by the host before anything is written.</p>
+        </article>
       </div>
     </section>
 
@@ -105,8 +113,12 @@
           Use the app surface directly or open the dashboard in a browser and screen-share it when the group needs a shared artifact.
         </li>
         <li>
+          <strong>Connect GitHub (optional).</strong>
+          In the Meeting Runway step, connect your GitHub account and bind a repository. Room Clarity will search for related issues during the meeting and propose issues and a transcript pull request in the brief step.
+        </li>
+        <li>
           <strong>Review before relying on outputs.</strong>
-          Generated decisions and prompts are assistance only. The host should confirm records, exclude anything noisy, and copy the brief only after review.
+          Generated decisions, prompts, and GitHub proposals are assistance only. The host should confirm records, exclude anything noisy, and approve each GitHub write before it happens.
         </li>
       </ol>
       <div class="home-actions install-actions">
