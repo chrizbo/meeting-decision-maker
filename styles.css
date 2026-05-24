@@ -537,6 +537,13 @@ body.legal-page {
   font-weight: 680;
 }
 
+.annual-price {
+  margin: -6px 0 14px;
+  color: var(--green);
+  font-size: 1rem;
+  font-weight: 760;
+}
+
 .pricing-card p:not(.plan-label),
 .pricing-card li,
 .usage-grid li,
