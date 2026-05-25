@@ -55,6 +55,15 @@ const securityHeaders = {
   'referrer-policy': 'strict-origin-when-cross-origin'
 };
 
+function requestHost(req) {
+  const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
+  return forwardedHost || req.headers.host || 'localhost';
+}
+
+function requestProto(req) {
+  return String(req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
+}
+
 function withSecurityHeaders(headers = {}) {
   return { ...securityHeaders, ...headers };
 }
@@ -96,9 +105,29 @@ function publicErrorMessage(_error, fallback) {
 
 function appUrl(req, path) {
   if (publicBaseUrl) return `${publicBaseUrl}${path}`;
-  const proto = req.headers['x-forwarded-proto'] || 'http';
-  const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
+  const proto = requestProto(req);
+  const host = requestHost(req);
   return `${proto}://${host}${path}`;
+}
+
+function canonicalRedirectUrl(req) {
+  if (!publicBaseUrl) return null;
+  const canonical = new URL(publicBaseUrl);
+  const host = requestHost(req).toLowerCase();
+  const hostname = host.split(':')[0];
+  const proto = requestProto(req);
+  const shouldRedirect = hostname === `www.${canonical.hostname}` || proto === 'http';
+  if (!shouldRedirect) return null;
+
+  const target = new URL(req.url || '/', publicBaseUrl);
+  target.protocol = canonical.protocol;
+  target.host = canonical.host;
+  return target.toString();
+}
+
+function sendRedirect(res, location, status = 301) {
+  res.writeHead(status, withSecurityHeaders({ location }));
+  res.end();
 }
 
 function clientIp(req) {
@@ -1872,6 +1901,11 @@ async function handleApi(req, res, pathname) {
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const redirectUrl = canonicalRedirectUrl(req);
+    if (redirectUrl) {
+      sendRedirect(res, redirectUrl);
+      return;
+    }
     if (url.pathname.startsWith('/api/') || url.pathname === '/healthz') {
       await handleApi(req, res, url.pathname);
       return;
