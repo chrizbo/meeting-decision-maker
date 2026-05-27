@@ -1049,7 +1049,6 @@ function resetState(keepTranscript) {
   els.meetingStatus.textContent = keepTranscript === false
     ? meeting.topic + ' · transcript loaded'
     : meeting.topic + ' · reset';
-  seedAgendaDecisionCandidates(state.runwayData);
 }
 
 function resetRunway() {
