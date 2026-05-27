@@ -1,0 +1,33 @@
+id: facilitator
+name: Facilitator
+skill_path: ./SKILL.md
+source_method: Meeting process facilitation
+purpose: Keep meetings aligned to agenda, timebox, desired outcomes, and closeout needs.
+triggers:
+  - meeting_started
+  - agenda_timebox_warning
+  - meeting_time_warning
+  - off_topic_detected
+  - closeout_needed
+engagement:
+  mode: queue_only
+  can_follow_up_when_topic_active: true
+  max_words_live: 45
+priority_rules:
+  high:
+    - Meeting is near the scheduled end and decision, owner, or next action is still missing.
+    - Discussion has drifted from the agenda while an expected decision remains unresolved.
+  medium:
+    - Current agenda timebox is expiring or exceeded.
+    - Topic is closing without clear output.
+  low:
+    - Start or transition prompt would improve clarity but is not blocking progress.
+output_fields:
+  - agent
+  - priority
+  - trigger
+  - agenda_item
+  - time_context
+  - evidence
+  - intervention
+  - suggested_action

@@ -259,7 +259,7 @@ function analysisEnabled(provider = llmProvider) {
 
 function cleanAnalysisItem(item) {
   const allowedTypes = new Set(['decision', 'risk', 'action', 'agent_issue']);
-  const allowedAgents = new Set(['Assumptions Challenge', 'Pre-Mortem', 'Argument Dissection']);
+  const allowedAgents = new Set(['Assumptions Challenge', 'Pre-Mortem', 'Argument Dissection', 'Facilitator']);
   const allowedPriorities = new Set(['low', 'medium', 'high']);
   const allowedStatuses = new Set(['forming', 'pending', 'accepted', 'rejected']);
   const type = allowedTypes.has(item.type) ? item.type : '';
@@ -539,7 +539,7 @@ function buildAnalysisPrompt(input, skillSet) {
   return [
     'You are the analysis worker for Meeting Decision Maker.',
     'Use the loaded meeting skills to analyze one live transcript cue.',
-    'Return only JSON with this shape: {"items":[{"type":"decision|risk|action|agent_issue","updateMode":"create|update","targetId":"existing item id when updating","title":"short title","summary":"short board-ready summary","status":"forming|pending|accepted|rejected","agent":"Assumptions Challenge|Pre-Mortem|Argument Dissection","priority":"low|medium|high"}]}.',
+    'Return only JSON with this shape: {"items":[{"type":"decision|risk|action|agent_issue","updateMode":"create|update","targetId":"existing item id when updating","title":"short title","summary":"short board-ready summary","status":"forming|pending|accepted|rejected","agent":"Assumptions Challenge|Pre-Mortem|Argument Dissection|Facilitator","priority":"low|medium|high"}]}.',
     'Rules: emit no more than 2 items; prefer no item over weak speculation; preserve uncertainty; do not invent owners or agreement; for agent_issue items include agent and priority.',
     'Operational priority: extract durable meeting artifacts first. Do not let agent_issue selectivity suppress real decisions, risks, or actions.',
     'Decision status rules: use "forming" when a real decision topic, tradeoff, option set, or decision question is being discussed but the group has not committed. A forming decision with disagreement or missing evidence must say there is no consensus yet in the summary. Use "pending" when there is a concrete proposed decision ready for host confirmation. Use "accepted" only when the transcript contains explicit agreement or decision language. Never move an accepted decision back to forming or pending unless the transcript explicitly corrects the record.',
@@ -548,7 +548,7 @@ function buildAnalysisPrompt(input, skillSet) {
     'Do not create separate decision items for each side of the same tradeoff. Keep one forming decision topic and update it as the conversation evolves. Do not let a broad parent decision absorb later distinct implementation decisions. Do not emit a risk just because the cue names uncertainty; emit a risk only when there is a plausible negative outcome, dependency, blocker, mitigation, warning sign, cognitive/social bias, or option-value loss. Do not emit an item on every cue.',
     'Risk rules: if a cue names a concrete downside, failure path, blocker, stakeholder concern, mitigation, warning sign, or option-value loss, emit or update a risk even if an agent_issue would also be useful. Risk cards are durable artifacts; agent_issue cards are live facilitation nudges.',
     'Agent issue rules: throttle only agent_issue items. Do not emit an agent_issue simply because a skill could comment. Emit one only when the host could use it immediately to improve the decision discourse, expose a central assumption, name a major failure path, or challenge weak evidence. If the same concern repeats, update the existing open agent_issue instead of creating another.',
-    'Agent trigger rules: when the cue says "what has to be true", "my assumption is", or names an important untested assumption, consider an Assumptions Challenge issue. When the cue says "if we imagine this failing", "fails because", "warning sign", or names a serious failure path, consider a Pre-Mortem issue. When the cue asks "what evidence do we have", distinguishes intuition from evidence, or challenges rationale quality, consider an Argument Dissection issue. Emit at most one agent_issue for a cue.',
+    'Agent trigger rules: when the cue says "what has to be true", "my assumption is", or names an important untested assumption, consider an Assumptions Challenge issue. When the cue says "if we imagine this failing", "fails because", "warning sign", or names a serious failure path, consider a Pre-Mortem issue. When the cue asks "what evidence do we have", distinguishes intuition from evidence, or challenges rationale quality, consider an Argument Dissection issue. When the cue suggests agenda drift, a timebox is expiring, or the room needs opening/closing process help, consider a Facilitator issue. Emit at most one agent_issue for a cue.',
     'Action rules: emit an action when the transcript explicitly says "Action:", "next action", "I will", "can you", or names concrete follow-up work after the meeting. The labels "Action:" and "next action" override the general caution about future product ideas. Do not emit actions for general future product ideas, mitigations, or things the current prototype might eventually need unless the cue frames them as a next action or explicit follow-up.',
     '',
     '# Skill instructions',
@@ -622,7 +622,7 @@ function buildOpenAIRequest(input, skillSet, model) {
                   title: { type: 'string' },
                   summary: { type: 'string' },
                   status: { type: 'string', enum: ['forming', 'pending', 'accepted', 'rejected'] },
-                  agent: { type: 'string', enum: ['', 'Assumptions Challenge', 'Pre-Mortem', 'Argument Dissection'] },
+                  agent: { type: 'string', enum: ['', 'Assumptions Challenge', 'Pre-Mortem', 'Argument Dissection', 'Facilitator'] },
                   priority: { type: 'string', enum: ['', 'low', 'medium', 'high'] }
                 },
                 required: ['type', 'updateMode', 'targetId', 'title', 'summary', 'status', 'agent', 'priority']
@@ -1569,6 +1569,12 @@ function isAllowedGithubPath(path) {
   return allowed.some(function(pattern) { return pattern.test(path); });
 }
 
+function isAllowedGithubGraphql(query) {
+  if (typeof query !== 'string' || query.length > 5000) return false;
+  return /\bquery\s+RoomClarityDiscussionCategories\b/.test(query) ||
+    /\bmutation\s+RoomClarityCreateDiscussion\b/.test(query);
+}
+
 function renderGithubOAuthPage(res, success, token) {
   const origin = publicBaseUrl || 'null';
   if (success && token) {
@@ -1768,6 +1774,43 @@ async function handleApi(req, res, pathname) {
       ? githubUrl + '?' + new URLSearchParams(input.params).toString()
       : githubUrl;
     const githubResponse = await fetch(githubSearchUrl, fetchOptions);
+    const githubResponseBody = await githubResponse.json().catch(function() { return {}; });
+    sendJson(res, githubResponse.status, githubResponseBody);
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/github/graphql') {
+    const limit = checkRateLimit(req, 'github-graphql', { limit: 20, windowMs: 60_000 });
+    if (!limit.allowed) {
+      sendRateLimited(res, limit);
+      return;
+    }
+    let input = {};
+    try {
+      input = await readBody(req);
+    } catch (error) {
+      sendJson(res, 400, { error: 'Invalid request body' });
+      return;
+    }
+    const { token, query, variables } = input;
+    if (!token || typeof token !== 'string' || token.length > 200) {
+      sendJson(res, 401, { error: 'GitHub token required' });
+      return;
+    }
+    if (!isAllowedGithubGraphql(query)) {
+      sendJson(res, 400, { error: 'GitHub GraphQL operation not allowed' });
+      return;
+    }
+    const githubResponse = await fetch('https://api.github.com/graphql', {
+      method: 'POST',
+      headers: {
+        'authorization': 'Bearer ' + token,
+        'accept': 'application/vnd.github+json',
+        'content-type': 'application/json',
+        'user-agent': 'RoomClarity/1.0'
+      },
+      body: JSON.stringify({ query, variables: variables || {} })
+    });
     const githubResponseBody = await githubResponse.json().catch(function() { return {}; });
     sendJson(res, githubResponse.status, githubResponseBody);
     return;

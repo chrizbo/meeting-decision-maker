@@ -21,6 +21,7 @@ Start with a human-shared web page using mock transcript playback, then use the 
 - `docs/future-specs/recap-drafting.md`: recap drafting and brief preview workflow, including the first local slice
 - `docs/future-specs/meeting-series-linking.md`: future meeting-series linking and carry-forward context workflow
 - `docs/future-specs/meeting-runway.md`: future start board for orienting the first minutes of a meeting
+- `docs/future-specs/agent-accessible-meeting-context.md`: future personal-agent and MCP access model for meeting context
 - `docs/future-specs/meeting-library.md`: future Meeting Library concept for accessible meetings, briefs, and series
 - `docs/future-specs/subscription-billing.md`: future subscription, usage-limit, and billing system spec
 - `docs/future-specs/user-management-and-dashboards.md`: future auth, account, usage dashboard, and internal admin tooling spec

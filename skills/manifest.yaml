@@ -16,6 +16,10 @@ skills:
     path: ./argument-dissection
     agent_config: ./argument-dissection/agent.yaml
     skill_file: ./argument-dissection/SKILL.md
+  - id: facilitator
+    path: ./facilitator
+    agent_config: ./facilitator/agent.yaml
+    skill_file: ./facilitator/SKILL.md
 
 extractors:
   - id: identify-decisions

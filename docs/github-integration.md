@@ -89,6 +89,7 @@ During the **brief/recap** step, the GitHub section shows:
 - Proposed new issues (one per accepted decision or action without a linked issue).
 - Proposed comments on linked existing issues.
 - A toggle to upload the transcript as a PR to the configured folder.
+- An option to post the reviewed meeting brief as a GitHub Discussion in the target repo, with a category selector when Discussions are enabled.
 
 The host checks or unchecks each proposal, then clicks **Publish to GitHub**.
 
@@ -99,6 +100,7 @@ The host checks or unchecks each proposal, then clicks **Publish to GitHub**.
 | GET | `/api/github/oauth/start` | Redirect to GitHub OAuth authorize page |
 | GET | `/api/github/oauth/callback` | Exchange code for token; render popup-closing page |
 | POST | `/api/github/proxy` | Proxy authenticated GitHub REST API calls |
+| POST | `/api/github/graphql` | Proxy allowlisted GitHub GraphQL operations for discussion categories and discussion creation |
 
 The proxy accepts `{ token, method, path, body, params }` and forwards to `https://api.github.com`. Allowed paths:
 
@@ -109,6 +111,8 @@ The proxy accepts `{ token, method, path, body, params }` and forwards to `https
 - `POST /repos/{owner}/{repo}/pulls` — create a pull request
 - `GET/POST /repos/{owner}/{repo}/git/refs` — branch management
 - `GET /search/issues` — search issues for related-issue matching
+
+The GraphQL proxy only accepts the `RoomClarityDiscussionCategories` query and the `RoomClarityCreateDiscussion` mutation. It is used because GitHub Discussions are exposed through GraphQL rather than the REST issue/comment endpoints.
 
 ## Environment Variables
 

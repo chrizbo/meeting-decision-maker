@@ -1,0 +1,4 @@
+interface:
+  display_name: "Facilitator"
+  short_description: "Keep the meeting aligned to agenda, time, and closeout."
+  default_prompt: "Use this skill to generate concise host-readable facilitation prompts for timekeeping, agenda drift, transitions, opening activities, and closing activities."

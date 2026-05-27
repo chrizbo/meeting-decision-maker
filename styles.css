@@ -933,6 +933,33 @@ h2 {
   font-weight: 700;
 }
 
+.meeting-time-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.meeting-time-summary span,
+.meeting-time-summary strong {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-strong);
+  font-weight: 720;
+}
+
+.meeting-time-summary strong {
+  color: var(--ink);
+}
+
 .progress-track {
   height: 4px;
   background: #ebe8df;
@@ -1470,6 +1497,7 @@ select {
 }
 
 .status-pill.forming { background: var(--blue-soft); color: var(--blue); }
+.status-pill.potential { background: #f0eee7; color: #6d6258; }
 .status-pill.pending { background: var(--gold-soft); color: var(--gold); }
 .status-pill.accepted { background: var(--green-soft); color: var(--green); }
 .status-pill.rejected { background: var(--rust-soft); color: var(--rust); }
@@ -2525,6 +2553,52 @@ details[open].proposal-preview > summary::before {
   background: var(--surface);
   border-radius: 3px;
   padding: 0 3px;
+}
+
+.github-discussion-post {
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.github-discussion-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.github-discussion-toggle:has(input:disabled) {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.github-discussion-category {
+  display: block;
+  margin: 8px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+#githubDiscussionCategorySelect {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 8px;
+  margin-bottom: 8px;
+}
+
+.github-discussion-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .github-publish-btn {

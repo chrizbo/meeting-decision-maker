@@ -122,6 +122,7 @@
           "properties": {
             "status": {
               "enum": [
+                "potential",
                 "forming",
                 "pending",
                 "accepted"
@@ -129,6 +130,7 @@
             },
             "suggestedStatus": {
               "enum": [
+                "potential",
                 "forming",
                 "pending",
                 "accepted",
@@ -153,12 +155,13 @@
         "id": {
           "type": "string"
         },
-        "agent": {
-          "enum": [
-            "Assumptions Challenge",
-            "Pre-Mortem",
-            "Argument Dissection"
-          ]
+            "agent": {
+              "enum": [
+                "Assumptions Challenge",
+                "Pre-Mortem",
+                "Argument Dissection",
+                "Facilitator"
+              ]
         },
         "status": {
           "enum": [

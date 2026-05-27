@@ -4,6 +4,7 @@ const fakeZoomMeeting = {
   host: 'Maya Patel',
   attendees: ['Maya Patel', 'Jordan Lee'],
   dashboardSlug: '/m/7QK4-MVP',
+  durationMinutes: 30,
   agenda: 'Team sync: pick our first build direction\n\nWe need to decide between a live facilitation board and a post-meeting decision summary as our first prototype. Both paths have merit but we can only build one first.\n\nTentative agenda:\n- Review the tradeoffs (Jordan, ~15 min)\n- Name the top risks and open assumptions on each path\n- Make the call — Maya owns the decision\n\nPlease come prepared with your top assumption about which path will teach us more.\n\nGoal: leave with one clear direction and one assigned next step.'
 };
 
@@ -255,6 +256,9 @@ const state = {
   githubItemLinks: {},
   githubProposals: [],
   githubTranscriptUpload: false,
+  githubDiscussionPost: false,
+  githubDiscussionCategories: null,
+  githubDiscussionCategoryId: localStorage.getItem('githubDiscussionCategoryId') || '',
   githubPublishing: false,
   githubPublishResult: null
 };
@@ -278,6 +282,7 @@ const els = {
   board: document.querySelector('.board'),
   meetingName: document.querySelector('#meetingName'),
   meetingAttendees: document.querySelector('#meetingAttendees'),
+  meetingTimeSummary: document.querySelector('#meetingTimeSummary'),
   boardTitle: document.querySelector('#boardTitle'),
   stepper: document.querySelector('#meetingStepper'),
   stepRunway: document.querySelector('#stepRunway'),
@@ -370,6 +375,7 @@ function applyMeetingContext(meeting) {
   els.meetingName.textContent = meeting.meetingId ? 'Zoom meeting ' + meeting.meetingId : 'Meeting session';
   if (els.meetingAttendees) els.meetingAttendees.textContent = meeting.attendees.join(', ');
   els.meetingStatus.textContent = meeting.topic + ' · host ' + meeting.host;
+  renderMeetingTimeSummary();
 }
 
 function currentDashboardUrl() {
@@ -629,7 +635,8 @@ async function loadRunwayFromAgenda(meeting) {
     const data = await response.json();
     if (data.runway && data.runway.agendaItems && data.runway.agendaItems.length) {
       state.runwayData = data.runway;
-      renderRunway();
+      seedAgendaDecisionCandidates(state.runwayData);
+      renderAll();
     }
   } catch (error) {
     console.info('Meeting Decision Maker runway analysis unavailable', error && error.message);
@@ -1026,6 +1033,8 @@ function resetState(keepTranscript) {
   state.githubItemLinks = {};
   state.githubProposals = [];
   state.githubTranscriptUpload = false;
+  state.githubDiscussionPost = false;
+  state.githubDiscussionCategories = null;
   state.githubPublishing = false;
   state.githubPublishResult = null;
   document.body.classList.remove('review-mode-active');
@@ -1035,6 +1044,7 @@ function resetState(keepTranscript) {
   els.meetingStatus.textContent = keepTranscript === false
     ? meeting.topic + ' · transcript loaded'
     : meeting.topic + ' · reset';
+  seedAgendaDecisionCandidates(state.runwayData);
 }
 
 function resetRunway() {
@@ -1178,6 +1188,7 @@ function renderTranscript() {
 function renderAll() {
   els.clock.textContent = formatTime(state.currentTime);
   els.progressBar.style.width = Math.min((state.currentTime / state.duration) * 100, 100) + '%';
+  renderMeetingTimeSummary();
   renderRunway();
   renderStepper();
   renderCueHighlight();
@@ -1189,6 +1200,53 @@ function renderAll() {
     if (state.reviewMode) renderBriefPanel();
     state.boardDirty = false;
   }
+}
+
+function renderMeetingTimeSummary() {
+  if (!els.meetingTimeSummary) return;
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  const durationMinutes = Number(meeting.durationMinutes) || agendaDurationMinutes(state.runwayData) || Math.ceil((state.duration || 0) / 60) || 30;
+  const elapsedMinutes = Math.min(durationMinutes, Math.floor((state.currentTime || 0) / 60));
+  const remainingMinutes = Math.max(0, durationMinutes - elapsedMinutes);
+  const agendaItem = currentAgendaItem();
+  const agendaText = agendaItem
+    ? 'Current: ' + agendaItem.title + agendaTimeRemainingLabel(agendaItem)
+    : 'Agenda not timeboxed';
+  els.meetingTimeSummary.innerHTML =
+    '<span>' + durationMinutes + ' min meeting</span>' +
+    '<span>' + elapsedMinutes + ' elapsed</span>' +
+    '<span>' + remainingMinutes + ' left</span>' +
+    '<strong>' + escapeHtml(agendaText) + '</strong>';
+}
+
+function agendaDurationMinutes(runwayData) {
+  const items = runwayData && Array.isArray(runwayData.agendaItems) ? runwayData.agendaItems : [];
+  const total = items.reduce(function(sum, item) {
+    return sum + (Number(item.timeBudget) || 0);
+  }, 0);
+  return total || 0;
+}
+
+function currentAgendaItem() {
+  const items = state.runwayData && Array.isArray(state.runwayData.agendaItems) ? state.runwayData.agendaItems : [];
+  if (!items.length) return null;
+  const elapsed = Math.floor((state.currentTime || 0) / 60);
+  let cursor = 0;
+  for (const item of items) {
+    const budget = Number(item.timeBudget) || 0;
+    if (!budget) continue;
+    if (elapsed < cursor + budget) {
+      return Object.assign({ elapsedInItem: Math.max(0, elapsed - cursor), timeBudget: budget }, item);
+    }
+    cursor += budget;
+  }
+  return items.find(function(item) { return Number(item.timeBudget) > 0; }) || items[0];
+}
+
+function agendaTimeRemainingLabel(item) {
+  if (!item || !Number(item.timeBudget)) return '';
+  const remaining = Math.max(0, Number(item.timeBudget) - Number(item.elapsedInItem || 0));
+  return ' · ' + remaining + ' min left';
 }
 
 function renderCueHighlight() {
@@ -1225,6 +1283,60 @@ function renderDecisions() {
       '<p class="agent-evidence">' + escapeHtml(evidenceSpeaker(item.evidence)) + '</p>' +
       '</article>';
   }).join('');
+}
+
+function seedAgendaDecisionCandidates(runwayData) {
+  const candidates = agendaDecisionCandidates(runwayData);
+  if (!candidates.length) return;
+  let added = false;
+  candidates.reverse().forEach(function(candidate) {
+    const key = 'agenda-decision:' + candidate.title;
+    if (state.decisions.some(function(item) { return item.key === key || item.title === candidate.title; })) return;
+    state.decisions.unshift({
+      id: makeId('decision'),
+      key: key,
+      status: 'potential',
+      suggestedStatus: 'potential',
+      confirmedByHost: false,
+      source: 'agenda',
+      agendaItemTitle: candidate.agendaItemTitle,
+      title: candidate.title,
+      detail: candidate.detail,
+      evidence: 'Agenda seed',
+      transcriptReference: 'Agenda item: ' + candidate.agendaItemTitle + '\nDesired outcome: ' + candidate.detail,
+      conversation: 'This decision was inferred from the agenda. Ask whether this is actually something the room needs to decide today.',
+      steps: ['Confirm whether this belongs on today\'s decision list.', 'Name the options or owner if it does.', 'Dismiss it if the agenda no longer needs this decision.']
+    });
+    added = true;
+  });
+  if (added) state.boardDirty = true;
+}
+
+function agendaDecisionCandidates(runwayData) {
+  const items = runwayData && Array.isArray(runwayData.agendaItems) ? runwayData.agendaItems : [];
+  return items.map(function(item) {
+    const title = String(item.title || '').trim();
+    const outcome = String(item.desiredOutcome || '').trim();
+    const titleText = title.toLowerCase();
+    const outcomeText = outcome.toLowerCase();
+    const titleHasDecisionVerb = /\b(agree|assign|choose|commit|confirm|decide|decision|make the call|pick|resolve|select)\b/.test(titleText);
+    const outcomeHasDecisionVerb = /\b(agree|assign|choose|commit|confirm|decide|decision|make the call|pick|resolve|select)\b/.test(outcomeText);
+    if (!titleHasDecisionVerb && (!outcomeHasDecisionVerb || /\bbefore we choose\b/.test(outcomeText))) return null;
+    return {
+      title: agendaDecisionTitle(title, outcome),
+      agendaItemTitle: title || 'Agenda item',
+      detail: outcome || 'Agenda suggests this item may need a decision before the meeting ends.'
+    };
+  }).filter(Boolean).slice(0, 4);
+}
+
+function agendaDecisionTitle(title, outcome) {
+  const text = (outcome || title || 'Potential decision').replace(/\.$/, '');
+  if (/\b(agree|assign|choose|commit|confirm|decide|make the call|pick|resolve|select)\b/i.test(title)) return title;
+  if (/\b(one direction chosen|choose a direction|chosen)\b/i.test(text)) return 'Choose first prototype direction';
+  if (/\b(assign|owner|next step)\b/i.test(text)) return 'Confirm owner and next action';
+  if (/\b(agree|confirm|clarify)\b/i.test(text)) return title || text;
+  return text.length > 72 ? text.slice(0, 69).trim() + '...' : text;
 }
 
 function renderStacks() {
@@ -1333,6 +1445,7 @@ function processCues() {
   state.cues.forEach(function(cue) {
     if (state.currentTime >= cue.start && !state.playedCueIds.has(cue.id)) {
       state.playedCueIds.add(cue.id);
+      maybeAddFacilitator(cue, formatTime(cue.start) + ' · ' + cue.speaker);
       analyzeCue(cue);
     }
   });
@@ -1407,7 +1520,16 @@ function transcriptWindowForCue(cue) {
 }
 
 function meetingStateForAnalysis() {
+  const meeting = state.meetingContext || fakeZoomMeeting;
   return {
+    meeting: {
+      topic: meeting.topic,
+      durationMinutes: Number(meeting.durationMinutes) || agendaDurationMinutes(state.runwayData) || 30,
+      elapsedMinutes: Math.floor((state.currentTime || 0) / 60),
+      remainingMinutes: Math.max(0, (Number(meeting.durationMinutes) || agendaDurationMinutes(state.runwayData) || 30) - Math.floor((state.currentTime || 0) / 60))
+    },
+    currentAgendaItem: currentAgendaItem(),
+    agendaItems: state.runwayData && Array.isArray(state.runwayData.agendaItems) ? state.runwayData.agendaItems : [],
     decisions: state.decisions.slice(0, 8).map(function(item) {
       return {
         id: item.id,
@@ -1622,6 +1744,61 @@ function maybeAddAgent(cue, evidence) {
   }
 }
 
+function maybeAddFacilitator(cue, evidence) {
+  const text = cue.text.toLowerCase();
+  const agendaItem = currentAgendaItem();
+  const agendaLabel = agendaItem ? agendaItem.title : 'the agenda';
+  const elapsedMinutes = Math.floor((state.currentTime || 0) / 60);
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  const durationMinutes = Number(meeting.durationMinutes) || agendaDurationMinutes(state.runwayData) || 30;
+  const remainingMinutes = Math.max(0, durationMinutes - elapsedMinutes);
+  const unresolvedAgendaDecision = state.decisions.some(function(item) {
+    return item.status === 'potential' || item.status === 'forming' || item.status === 'pending';
+  });
+
+  if (state.playedCueIds.size <= 1) {
+    addFacilitatorAgent('start_activity', 'low', 'Start by naming what would make this meeting worth ending early, then use the agenda as the path to that outcome.', evidence, agendaLabel);
+  }
+
+  if (remainingMinutes <= Math.max(3, Math.ceil(durationMinutes * 0.2)) && unresolvedAgendaDecision) {
+    addFacilitatorAgent('finish_activity', 'high', 'There is limited time left; confirm the decision wording, owner, and next action before opening a new thread.', evidence, agendaLabel);
+  }
+
+  if (agendaItem && Number(agendaItem.timeBudget) && Number(agendaItem.elapsedInItem) >= Number(agendaItem.timeBudget)) {
+    addFacilitatorAgent('transition_warning', 'medium', 'This agenda item has used its timebox; choose whether to keep going, move on, or park the unresolved piece.', evidence, agendaLabel);
+  }
+
+  if (agendaItem && looksOffTopic(text, agendaItem)) {
+    addFacilitatorAgent('off_topic_warning', 'medium', 'This thread looks outside the current agenda item; park it or connect it to the decision the room needs today.', evidence, agendaLabel);
+  }
+}
+
+function addFacilitatorAgent(trigger, priority, intervention, evidence, agendaLabel) {
+  const openDuplicate = state.agents.some(function(item) {
+    return item.agent === 'Facilitator' && item.trigger === trigger && item.status === 'open';
+  });
+  if (openDuplicate) return;
+  addAgent({
+    agent: 'Facilitator',
+    priority: priority,
+    trigger: trigger,
+    agendaItem: agendaLabel,
+    intervention: intervention,
+    evidence: evidence,
+    createdCueId: trigger + ':' + evidence
+  });
+}
+
+function looksOffTopic(text, agendaItem) {
+  if (!text || !agendaItem) return false;
+  if (/\b(next|issue|access control|retention|transcript rail|modal|dashboard link|audit trail)\b/.test(text)) {
+    const agendaText = normalizeMatchText([agendaItem.title, agendaItem.desiredOutcome].join(' '));
+    const cueText = normalizeMatchText(text);
+    return textOverlapScore(cueText, agendaText) < 0.18;
+  }
+  return false;
+}
+
 function inferRiskTitle(text) {
   if (text.includes('host can actually pay attention')) return 'Host attention risk';
   if (text.includes('screen-shared') || text.includes('visual noise')) return 'Screen-share distraction risk';
@@ -1664,6 +1841,21 @@ function addDecision(status, title, detail, evidence, options) {
   const decisionStatus = suggestedStatus === 'accepted' ? 'accepted' : suggestedStatus;
   const key = 'decision:' + title;
   if (state.decisions.some(function(item) { return item.key === key; })) return;
+  const agendaCandidate = findRelatedPotentialDecision(title, detail);
+  if (agendaCandidate) {
+    agendaCandidate.key = key;
+    agendaCandidate.status = decisionStatus;
+    agendaCandidate.suggestedStatus = suggestedStatus;
+    agendaCandidate.source = 'transcript';
+    agendaCandidate.title = title;
+    agendaCandidate.detail = detail;
+    agendaCandidate.evidence = evidence;
+    agendaCandidate.transcriptReference = buildTranscriptReference(evidence, options && options.transcriptText ? options.transcriptText : detail);
+    agendaCandidate.conversation = decisionConversation(suggestedStatus);
+    agendaCandidate.steps = decisionSteps(suggestedStatus);
+    state.boardDirty = true;
+    return;
+  }
   state.boardDirty = true;
   state.decisions.unshift({
     id: makeId('decision'),
@@ -1681,11 +1873,14 @@ function addDecision(status, title, detail, evidence, options) {
 }
 
 function normalizeDecisionStatus(status) {
-  if (['forming', 'pending', 'accepted', 'rejected'].includes(status)) return status;
+  if (['potential', 'forming', 'pending', 'accepted', 'rejected'].includes(status)) return status;
   return 'forming';
 }
 
 function decisionConversation(status) {
+  if (status === 'potential') {
+    return 'This decision was inferred from the agenda. Ask whether it is actually something the room needs to decide today.';
+  }
   if (status === 'forming') {
     return 'Name the decision that appears to be forming and ask what options, tradeoffs, or missing evidence the group needs before it becomes a commitment.';
   }
@@ -1696,6 +1891,9 @@ function decisionConversation(status) {
 }
 
 function decisionSteps(status) {
+  if (status === 'potential') {
+    return ['Confirm whether this is a real decision for today.', 'Name the owner and options if it is.', 'Dismiss it if this is only background context.'];
+  }
   if (status === 'forming') {
     return ['Clarify the decision question.', 'Name the options still in play.', 'Ask what evidence or objection would change the direction.'];
   }
@@ -1703,6 +1901,30 @@ function decisionSteps(status) {
     return ['Confirm the exact commitment.', 'Capture owner or review point.', 'Log unresolved assumptions as risks if needed.'];
   }
   return ['Confirm the exact commitment.', 'Ask for blocking objections or missing evidence.', 'Accept or reject the decision from this modal.'];
+}
+
+function findRelatedPotentialDecision(title, detail) {
+  const candidateText = normalizeMatchText(title + ' ' + detail);
+  if (!candidateText) return null;
+  return state.decisions.find(function(item) {
+    if (item.status !== 'potential') return false;
+    const itemText = normalizeMatchText(item.title + ' ' + item.detail + ' ' + (item.agendaItemTitle || ''));
+    return textOverlapScore(candidateText, itemText) >= 0.34;
+  });
+}
+
+function normalizeMatchText(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function textOverlapScore(left, right) {
+  const stop = new Set(['and', 'the', 'this', 'that', 'with', 'from', 'before', 'after', 'today', 'meeting']);
+  const leftWords = new Set(left.split(' ').filter(function(word) { return word.length > 3 && !stop.has(word); }));
+  const rightWords = new Set(right.split(' ').filter(function(word) { return word.length > 3 && !stop.has(word); }));
+  if (!leftWords.size || !rightWords.size) return 0;
+  let matches = 0;
+  leftWords.forEach(function(word) { if (rightWords.has(word)) matches += 1; });
+  return matches / Math.min(leftWords.size, rightWords.size);
 }
 
 function addRisk(title, detail, evidence, transcriptText) {
@@ -1755,6 +1977,7 @@ function agentTopics(agentName) {
   if (agentName === 'Assumptions Challenge') return ['assumption', 'what has to be true', 'evidence', 'confidence', 'if that assumption is wrong', 'we do not know'];
   if (agentName === 'Pre-Mortem') return ['failure', 'fails', 'risk', 'warning sign', 'mitigation', 'contingency'];
   if (agentName === 'Argument Dissection') return ['argument', 'evidence', 'intuition', 'feedback', 'rationale', 'alternative'];
+  if (agentName === 'Facilitator') return ['agenda', 'time', 'park', 'owner', 'next action', 'decision', 'wrap', 'close'];
   return [];
 }
 
@@ -1780,6 +2003,7 @@ function agentConversation(agentName) {
   if (agentName === 'Assumptions Challenge') return 'Ask the team to say what must be true for this decision to work and what evidence would increase confidence.';
   if (agentName === 'Pre-Mortem') return 'Invite the group to imagine the decision failed and name the most likely path to that failure.';
   if (agentName === 'Argument Dissection') return 'Separate the claim, evidence, and conclusion before the team relies on this rationale.';
+  if (agentName === 'Facilitator') return 'Use this as a host process prompt: protect the agenda, timebox, and closing output without shutting down useful discussion.';
   return 'Ask whether this point should be discussed now, captured for later, or dismissed.';
 }
 
@@ -1787,6 +2011,7 @@ function agentSteps(agentName) {
   if (agentName === 'Assumptions Challenge') return ['Identify the assumption underneath the decision.', 'Ask what evidence supports it.', 'Decide whether to test, mitigate, or accept the uncertainty.'];
   if (agentName === 'Pre-Mortem') return ['Name the failure scenario.', 'Identify the cause that would make it happen.', 'Capture one mitigation and one warning sign.'];
   if (agentName === 'Argument Dissection') return ['Restate the argument in one sentence.', 'Ask what evidence is missing or ambiguous.', 'Consider one alternative explanation before deciding.'];
+  if (agentName === 'Facilitator') return ['Choose whether to interrupt now or let the thread finish.', 'If useful, read the prompt in your own words.', 'Mark discussed once the room has decided to continue, transition, park, or close.'];
   return ['Decide whether to discuss now.', 'Capture the follow-up owner.', 'Mark the item discussed or dismiss it.'];
 }
 
@@ -1961,6 +2186,15 @@ function githubRequest(method, path, body, params) {
   }).then(function(r) { return r.json(); });
 }
 
+function githubGraphql(query, variables) {
+  if (state.demoMode) return Promise.resolve({});
+  return fetch('/api/github/graphql', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: state.githubToken, query, variables })
+  }).then(function(r) { return r.json(); });
+}
+
 function connectGitHub() {
   const popup = window.open('/api/github/oauth/start', 'github-oauth', 'width=620,height=700,scrollbars=yes,resizable=yes');
   if (!popup) {
@@ -1985,7 +2219,10 @@ function disconnectGitHub() {
   state.githubToken = '';
   state.githubRelatedIssues = {};
   state.githubItemLinks = {};
+  state.githubDiscussionCategories = null;
+  state.githubDiscussionCategoryId = '';
   localStorage.removeItem('githubToken');
+  localStorage.removeItem('githubDiscussionCategoryId');
   renderAll();
 }
 
@@ -2521,6 +2758,85 @@ function transcriptFilePath() {
   return folder + '/' + date + '-' + slug + '.md';
 }
 
+function discussionTitle() {
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  const date = new Date().toISOString().slice(0, 10);
+  return 'Meeting brief: ' + meeting.topic + ' (' + date + ')';
+}
+
+function discussionBody() {
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  const lines = [
+    exportBriefAsMarkdown(),
+    '',
+    '---',
+    '*Posted by Room Clarity from the reviewed meeting brief for ' + meeting.topic + '.*'
+  ];
+  return lines.join('\n').trim();
+}
+
+function loadGithubDiscussionCategories() {
+  if (!isGithubConfigured() || state.githubDiscussionCategories) return;
+  if (state.demoMode) {
+    state.githubDiscussionCategories = {
+      loading: false,
+      repositoryId: 'demo-repository',
+      categories: [
+        { id: 'demo-announcements', name: 'Announcements' },
+        { id: 'demo-general', name: 'General' }
+      ],
+      error: ''
+    };
+    if (!state.githubDiscussionCategoryId) state.githubDiscussionCategoryId = 'demo-general';
+    return;
+  }
+
+  const { owner, repo } = state.githubConfig;
+  state.githubDiscussionCategories = { loading: true, repositoryId: '', categories: [], error: '' };
+  const query = [
+    'query RoomClarityDiscussionCategories($owner: String!, $repo: String!) {',
+    '  repository(owner: $owner, name: $repo) {',
+    '    id',
+    '    discussionCategories(first: 20) {',
+    '      nodes { id name }',
+    '    }',
+    '  }',
+    '}'
+  ].join('\n');
+  githubGraphql(query, { owner, repo }).then(function(result) {
+    const repository = result.data && result.data.repository;
+    const categories = repository && repository.discussionCategories && repository.discussionCategories.nodes;
+    state.githubDiscussionCategories = {
+      loading: false,
+      repositoryId: repository ? repository.id : '',
+      categories: Array.isArray(categories) ? categories.filter(Boolean) : [],
+      error: result.errors ? 'GitHub Discussions are unavailable for this repo or token.' : ''
+    };
+    if (!state.githubDiscussionCategoryId && state.githubDiscussionCategories.categories.length) {
+      state.githubDiscussionCategoryId = state.githubDiscussionCategories.categories[0].id;
+    }
+    state.boardDirty = true;
+    renderAll();
+  }).catch(function() {
+    state.githubDiscussionCategories = {
+      loading: false,
+      repositoryId: '',
+      categories: [],
+      error: 'Could not load discussion categories.'
+    };
+    state.boardDirty = true;
+    renderAll();
+  });
+}
+
+function selectedDiscussionCategory() {
+  const info = state.githubDiscussionCategories;
+  if (!info || !info.categories) return null;
+  return info.categories.find(function(category) {
+    return category.id === state.githubDiscussionCategoryId;
+  }) || info.categories[0] || null;
+}
+
 function renderBriefGithub() {
   if (!els.githubBriefSection || !els.githubBriefContent) return;
   const configured = isGithubConfigured();
@@ -2528,6 +2844,7 @@ function renderBriefGithub() {
   if (!configured) return;
 
   const { owner, repo } = state.githubConfig;
+  loadGithubDiscussionCategories();
 
   if (state.githubPublishing) {
     els.githubBriefStatus.textContent = 'Publishing…';
@@ -2549,6 +2866,9 @@ function renderBriefGithub() {
       });
       if (result.pr) {
         html += '<li><a href="' + escapeHtml(result.pr.url) + '" target="_blank" rel="noopener noreferrer">Transcript PR: ' + escapeHtml(result.pr.title) + '</a></li>';
+      }
+      if (result.discussion) {
+        html += '<li><a href="' + escapeHtml(result.discussion.url) + '" target="_blank" rel="noopener noreferrer">Discussion: ' + escapeHtml(result.discussion.title) + '</a></li>';
       }
       html += '</ul>';
       html += '<button class="github-publish-btn secondary" type="button" id="githubResetBtn">Publish again</button>';
@@ -2575,9 +2895,12 @@ function renderBriefGithub() {
 
   els.githubBriefStatus.textContent = owner + '/' + repo;
   const hasCues = state.cues.length > 0;
+  const discussionInfo = state.githubDiscussionCategories;
+  const discussionReady = discussionInfo && !discussionInfo.loading && discussionInfo.repositoryId && discussionInfo.categories.length > 0;
+  const discussionBlocked = discussionInfo && !discussionInfo.loading && (!discussionInfo.repositoryId || discussionInfo.error || discussionInfo.categories.length === 0);
 
   let html = '';
-  if (proposals.length === 0 && !hasCues) {
+  if (proposals.length === 0 && !hasCues && !exportBriefAsMarkdown()) {
     html = '<p class="github-brief-empty">Accept decisions or actions on the board to create GitHub proposals.</p>';
   } else {
     if (proposals.length > 0) {
@@ -2600,7 +2923,27 @@ function renderBriefGithub() {
       html += 'Upload transcript as PR to <code>' + escapeHtml(transcriptFilePath()) + '</code>';
       html += '</label>';
     }
-    const anySelected = proposals.some(function(p) { return p.include; }) || state.githubTranscriptUpload;
+    html += '<div class="github-discussion-post">';
+    html += '<label class="github-discussion-toggle">';
+    html += '<input type="checkbox" id="githubDiscussionToggle"' + (state.githubDiscussionPost ? ' checked' : '') + (discussionReady ? '' : ' disabled') + '>';
+    html += 'Post reviewed brief as a GitHub Discussion';
+    html += '</label>';
+    if (discussionInfo && discussionInfo.loading) {
+      html += '<p class="github-discussion-note">Loading discussion categories...</p>';
+    } else if (discussionReady) {
+      html += '<label class="github-discussion-category" for="githubDiscussionCategorySelect">Category</label>';
+      html += '<select id="githubDiscussionCategorySelect">';
+      discussionInfo.categories.forEach(function(category) {
+        html += '<option value="' + escapeHtml(category.id) + '"' + (category.id === state.githubDiscussionCategoryId ? ' selected' : '') + '>' + escapeHtml(category.name) + '</option>';
+      });
+      html += '</select>';
+      html += '<details class="proposal-preview"><summary>Preview discussion body</summary>';
+      html += '<pre class="proposal-body-text">' + escapeHtml(discussionBody()) + '</pre></details>';
+    } else if (discussionBlocked) {
+      html += '<p class="github-discussion-note">Discussions are not available for this repo, or this token cannot read discussion categories.</p>';
+    }
+    html += '</div>';
+    const anySelected = proposals.some(function(p) { return p.include; }) || state.githubTranscriptUpload || (state.githubDiscussionPost && discussionReady);
     html += '<button class="github-publish-btn" type="button" id="githubPublishBtn"' + (anySelected ? '' : ' disabled') + '>Publish to GitHub</button>';
   }
 
@@ -2609,6 +2952,19 @@ function renderBriefGithub() {
 }
 
 function wireGithubBriefButtons() {
+  function updatePublishButton() {
+    const publishBtn = document.querySelector('#githubPublishBtn');
+    if (!publishBtn) return;
+    const discussionReady = state.githubDiscussionCategories &&
+      !state.githubDiscussionCategories.loading &&
+      state.githubDiscussionCategories.repositoryId &&
+      state.githubDiscussionCategories.categories.length > 0;
+    const anySelected = state.githubProposals.some(function(p) { return p.include; }) ||
+      state.githubTranscriptUpload ||
+      (state.githubDiscussionPost && discussionReady);
+    publishBtn.disabled = !anySelected;
+  }
+
   const publishBtn = document.querySelector('#githubPublishBtn');
   if (publishBtn) publishBtn.addEventListener('click', publishToGithub);
 
@@ -2628,11 +2984,24 @@ function wireGithubBriefButtons() {
   if (transcriptToggle) {
     transcriptToggle.addEventListener('change', function() {
       state.githubTranscriptUpload = transcriptToggle.checked;
-      const publishBtn2 = document.querySelector('#githubPublishBtn');
-      if (publishBtn2) {
-        const anySelected = state.githubProposals.some(function(p) { return p.include; }) || state.githubTranscriptUpload;
-        publishBtn2.disabled = !anySelected;
-      }
+      updatePublishButton();
+    });
+  }
+
+  const discussionToggle = document.querySelector('#githubDiscussionToggle');
+  if (discussionToggle) {
+    discussionToggle.addEventListener('change', function() {
+      state.githubDiscussionPost = discussionToggle.checked;
+      updatePublishButton();
+    });
+  }
+
+  const discussionCategorySelect = document.querySelector('#githubDiscussionCategorySelect');
+  if (discussionCategorySelect) {
+    discussionCategorySelect.addEventListener('change', function() {
+      state.githubDiscussionCategoryId = discussionCategorySelect.value;
+      localStorage.setItem('githubDiscussionCategoryId', state.githubDiscussionCategoryId);
+      updatePublishButton();
     });
   }
 
@@ -2642,11 +3011,7 @@ function wireGithubBriefButtons() {
       if (state.githubProposals[index]) {
         state.githubProposals[index].include = checkbox.checked;
       }
-      const publishBtn2 = document.querySelector('#githubPublishBtn');
-      if (publishBtn2) {
-        const anySelected2 = state.githubProposals.some(function(p) { return p.include; }) || state.githubTranscriptUpload;
-        publishBtn2.disabled = !anySelected2;
-      }
+      updatePublishButton();
     });
   });
 }
@@ -2659,7 +3024,7 @@ async function publishToGithub() {
   renderAll();
 
   const { owner, repo } = state.githubConfig;
-  const results = { issues: [], pr: null, error: null };
+  const results = { issues: [], pr: null, discussion: null, error: null };
 
   try {
     const included = state.githubProposals.filter(function(p) { return p.include; });
@@ -2710,6 +3075,32 @@ async function publishToGithub() {
         base: 'main'
       });
       results.pr = { title: pr.title, url: pr.html_url };
+    }
+
+    if (state.githubDiscussionPost) {
+      const discussionInfo = state.githubDiscussionCategories;
+      const category = selectedDiscussionCategory();
+      if (!discussionInfo || !discussionInfo.repositoryId || !category) {
+        throw new Error('No GitHub Discussion category selected');
+      }
+      const mutation = [
+        'mutation RoomClarityCreateDiscussion($repositoryId: ID!, $categoryId: ID!, $title: String!, $body: String!) {',
+        '  createDiscussion(input: { repositoryId: $repositoryId, categoryId: $categoryId, title: $title, body: $body }) {',
+        '    discussion { title url }',
+        '  }',
+        '}'
+      ].join('\n');
+      const result = await githubGraphql(mutation, {
+        repositoryId: discussionInfo.repositoryId,
+        categoryId: category.id,
+        title: discussionTitle(),
+        body: discussionBody()
+      });
+      if (result.errors || !result.data || !result.data.createDiscussion) {
+        throw new Error('GitHub discussion creation failed');
+      }
+      const discussion = result.data.createDiscussion.discussion;
+      results.discussion = { title: discussion.title, url: discussion.url };
     }
   } catch (error) {
     results.error = 'GitHub publish failed. Check your token and repo permissions.';
@@ -2935,6 +3326,7 @@ els.filters.forEach(function(button) {
 
 async function initializeApp() {
   applyMeetingContext(fakeZoomMeeting);
+  seedAgendaDecisionCandidates(state.runwayData);
   await loadDashboardSession();
   await maybeInitializeZoomApp();
   await loadAnalysisConfig();
