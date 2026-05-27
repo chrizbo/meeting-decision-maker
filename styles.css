@@ -933,33 +933,6 @@ h2 {
   font-weight: 700;
 }
 
-.meeting-time-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.25;
-}
-
-.meeting-time-summary span,
-.meeting-time-summary strong {
-  min-height: 24px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface-strong);
-  font-weight: 720;
-}
-
-.meeting-time-summary strong {
-  color: var(--ink);
-}
-
 .progress-track {
   height: 4px;
   background: #ebe8df;
@@ -1111,6 +1084,7 @@ select {
   padding: 12px 0 14px;
   border-top: 1px solid var(--line);
   margin-top: 2px;
+  --meeting-progress: 0;
 }
 
 .step-btn {
@@ -1149,12 +1123,24 @@ select {
   color: var(--ink);
 }
 
+.step-time-label {
+  display: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 720;
+}
+
 .step-connector {
   flex: 1;
   height: 2px;
   background: var(--line);
   min-width: 10px;
   transition: background 0.15s;
+}
+
+[data-connects="meeting-recap"] {
+  background:
+    linear-gradient(90deg, var(--green) calc(var(--meeting-progress) * 100%), var(--line) 0);
 }
 
 /* Active step */
@@ -1177,6 +1163,11 @@ select {
 .meeting-stepper[data-step="runway"] #stepRunway .step-label,
 .meeting-stepper[data-step="meeting"] #stepMeeting .step-label,
 .meeting-stepper[data-step="recap"] #stepRecap .step-label {
+  display: inline;
+}
+
+.meeting-stepper[data-step="meeting"] #stepMeeting .step-time-label,
+.meeting-stepper[data-step="recap"] #stepMeeting .step-time-label {
   display: inline;
 }
 

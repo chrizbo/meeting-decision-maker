@@ -19,7 +19,8 @@ Meeting Runway is a temporary start board shown for the first 1-2 minutes of a m
 
 - The runway is for meeting orientation, not long-form agenda editing.
 - The live board should still capture decisions, risks, actions, and agent issues while the runway is visible.
-- The runway should reduce meeting-start ambiguity without becoming the facilitator.
+- Agenda-derived decision candidates are useful, but they should be labeled `Potential` until transcript evidence or host action confirms they are real meeting decisions.
+- The runway should reduce meeting-start ambiguity while the facilitator agent handles live process prompts such as timing, transitions, off-topic drift, and closeout.
 - The host should be able to skip it immediately or reopen it later from the meeting info header.
 - Silence during the opening should not be treated as agreement.
 
@@ -99,6 +100,14 @@ agenda_item
 - desired_outcome optional
 - source: zoom | calendar | prior_brief | host | inferred
 ```
+
+Agenda items can also seed potential decision cards when the wording implies a choice, approval, commitment, owner assignment, or concrete next step. These cards should remain visually distinct from transcript-derived decisions and should cite the agenda as their source. If the live transcript later introduces the same decision using different wording, the board should merge the potential card into the transcript-derived decision instead of preserving both.
+
+Examples:
+
+- Agenda seed: "Choose a direction and assign the first action."
+- Live transcript: "Decide whether the first prototype should focus on a live meeting board or a post-meeting summary."
+- Board behavior: one forming decision card, not a separate potential card plus a forming card.
 
 ### Decision Frame
 
@@ -184,6 +193,8 @@ Possible later settings:
 - Manual only.
 
 Do not create special "captured during runway" markers. The runway is a display mode, not a separate artifact category.
+
+Meeting time should be visible as part of the meeting phase flow rather than as a separate header widget. The current local slice integrates scheduled meeting progress into the `Runway -> Meeting -> Brief` stepper. The active meeting phase can expose compact elapsed/total timing and use the connector toward `Brief` as a progress affordance, while detailed agenda timing can live in hover/ARIA text or future facilitator prompts.
 
 ## Launch Timing
 

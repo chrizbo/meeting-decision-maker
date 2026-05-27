@@ -71,8 +71,10 @@ Then visit `http://localhost:8080`.
 The local board includes a three-step flow:
 
 1. `Runway`: a short start-board with purpose, agenda, decision frame, and opening prompt.
-2. `Meeting`: the live capture board for decisions, risks, actions, transcript cues, and agent prompts.
+2. `Meeting`: the live capture board for potential and transcript-derived decisions, risks, actions, transcript cues, and agent prompts.
 3. `Recap`: review mode with item-level exclude/re-include controls and a generated meeting brief that can be copied as Markdown.
+
+Agenda items can seed `Potential` decision cards when the agenda implies a choice, commitment, owner assignment, or next step. When the transcript later names the same decision in different words, the board should merge the potential item into the live decision instead of showing duplicate cards. The meeting stepper carries the scheduled meeting progress so timing remains part of the flow without adding a separate timer row to the board header.
 
 ## Cloud Run Service
 

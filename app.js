@@ -282,7 +282,7 @@ const els = {
   board: document.querySelector('.board'),
   meetingName: document.querySelector('#meetingName'),
   meetingAttendees: document.querySelector('#meetingAttendees'),
-  meetingTimeSummary: document.querySelector('#meetingTimeSummary'),
+  meetingProgressLabel: document.querySelector('#meetingProgressLabel'),
   boardTitle: document.querySelector('#boardTitle'),
   stepper: document.querySelector('#meetingStepper'),
   stepRunway: document.querySelector('#stepRunway'),
@@ -375,7 +375,7 @@ function applyMeetingContext(meeting) {
   els.meetingName.textContent = meeting.meetingId ? 'Zoom meeting ' + meeting.meetingId : 'Meeting session';
   if (els.meetingAttendees) els.meetingAttendees.textContent = meeting.attendees.join(', ');
   els.meetingStatus.textContent = meeting.topic + ' · host ' + meeting.host;
-  renderMeetingTimeSummary();
+  renderMeetingProgress();
 }
 
 function currentDashboardUrl() {
@@ -1188,7 +1188,7 @@ function renderTranscript() {
 function renderAll() {
   els.clock.textContent = formatTime(state.currentTime);
   els.progressBar.style.width = Math.min((state.currentTime / state.duration) * 100, 100) + '%';
-  renderMeetingTimeSummary();
+  renderMeetingProgress();
   renderRunway();
   renderStepper();
   renderCueHighlight();
@@ -1202,21 +1202,20 @@ function renderAll() {
   }
 }
 
-function renderMeetingTimeSummary() {
-  if (!els.meetingTimeSummary) return;
+function renderMeetingProgress() {
+  if (!els.stepper || !els.meetingProgressLabel) return;
   const meeting = state.meetingContext || fakeZoomMeeting;
   const durationMinutes = Number(meeting.durationMinutes) || agendaDurationMinutes(state.runwayData) || Math.ceil((state.duration || 0) / 60) || 30;
-  const elapsedMinutes = Math.min(durationMinutes, Math.floor((state.currentTime || 0) / 60));
+  const elapsedSeconds = Math.max(0, state.currentTime || 0);
+  const elapsedMinutes = Math.min(durationMinutes, Math.floor(elapsedSeconds / 60));
   const remainingMinutes = Math.max(0, durationMinutes - elapsedMinutes);
   const agendaItem = currentAgendaItem();
-  const agendaText = agendaItem
-    ? 'Current: ' + agendaItem.title + agendaTimeRemainingLabel(agendaItem)
-    : 'Agenda not timeboxed';
-  els.meetingTimeSummary.innerHTML =
-    '<span>' + durationMinutes + ' min meeting</span>' +
-    '<span>' + elapsedMinutes + ' elapsed</span>' +
-    '<span>' + remainingMinutes + ' left</span>' +
-    '<strong>' + escapeHtml(agendaText) + '</strong>';
+  const progress = durationMinutes ? Math.min(Math.max(elapsedSeconds / (durationMinutes * 60), 0), 1) : 0;
+  const agendaText = agendaItem ? agendaItem.title + agendaTimeRemainingLabel(agendaItem) : 'Agenda not timeboxed';
+  els.stepper.style.setProperty('--meeting-progress', String(progress));
+  els.meetingProgressLabel.textContent = elapsedMinutes + '/' + durationMinutes + ' min';
+  els.stepMeeting.setAttribute('title', remainingMinutes + ' min left. ' + agendaText);
+  els.stepMeeting.setAttribute('aria-label', 'Meeting phase, ' + elapsedMinutes + ' of ' + durationMinutes + ' minutes elapsed. ' + agendaText);
 }
 
 function agendaDurationMinutes(runwayData) {
@@ -1909,7 +1908,7 @@ function findRelatedPotentialDecision(title, detail) {
   return state.decisions.find(function(item) {
     if (item.status !== 'potential') return false;
     const itemText = normalizeMatchText(item.title + ' ' + item.detail + ' ' + (item.agendaItemTitle || ''));
-    return textOverlapScore(candidateText, itemText) >= 0.34;
+    return potentialDecisionMatch(candidateText, itemText);
   });
 }
 
@@ -1925,6 +1924,18 @@ function textOverlapScore(left, right) {
   let matches = 0;
   leftWords.forEach(function(word) { if (rightWords.has(word)) matches += 1; });
   return matches / Math.min(leftWords.size, rightWords.size);
+}
+
+function potentialDecisionMatch(candidateText, itemText) {
+  if (textOverlapScore(candidateText, itemText) >= 0.34) return true;
+  const prototypeChoice = /\bprototype\b/.test(candidateText) &&
+    /\b(live|post|summary|recap|direction|focus|first)\b/.test(candidateText) &&
+    /\bprototype\b/.test(itemText) &&
+    /\b(choose|direction|first|focus)\b/.test(itemText);
+  if (prototypeChoice) return true;
+  const ownerActionChoice = /\b(owner|action|next step)\b/.test(candidateText) &&
+    /\b(owner|action|next step)\b/.test(itemText);
+  return ownerActionChoice;
 }
 
 function addRisk(title, detail, evidence, transcriptText) {
