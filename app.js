@@ -245,6 +245,7 @@ const state = {
   runwayRemaining: configuredRunwayDuration(),
   runwayLastTick: 0,
   demoMode: false,
+  demoTranscript: false,
   reviewMode: false,
   briefMarkdown: '',
   briefLoading: false,
@@ -858,9 +859,13 @@ function parseTxt(raw) {
 
 function loadTranscript(raw, filename) {
   const sourceName = filename || 'product-decision-demo.vtt';
+  state.demoTranscript = sourceName === 'product-decision-demo.vtt';
   const isVtt = sourceName.toLowerCase().endsWith('.vtt') || raw.trimStart().startsWith('WEBVTT');
   state.cues = isVtt ? parseVtt(raw) : parseTxt(raw);
   state.duration = Math.max.apply(null, state.cues.map(function(cue) { return cue.end; }).concat([1]));
+  if (!state.demoTranscript) {
+    state.runwayData = { agendaItems: [] };
+  }
   resetState(false);
   renderTranscript();
   renderAll();
@@ -1465,36 +1470,38 @@ function analyzeCue(cue) {
     return;
   }
 
-  if (text.includes('product decision') || text.includes('decision is whether')) {
-    addDecision('forming', 'MVP focus', 'Choose between implementation speed and testing the live facilitation experience.', evidence);
-  }
-  if (text.includes("let's make the decision") || text.includes('agreed') || text.includes('capture that as the decision')) {
-    addDecision('accepted', 'Build the live board first', 'Use a human-shared page with timed mock transcript playback before Zoom-native integration.', evidence);
-  }
-  if (text.includes('decision: the transcript rail should be hideable')) {
-    addDecision('accepted', 'Make transcript optional', 'Allow the host to hide or show the transcript rail during screen share.', evidence);
-  }
-  if (text.includes('decision: clicking any decision')) {
-    addDecision('accepted', 'Open guidance modals', 'Clicking decisions, risks, actions, and agent issues should open facilitation guidance.', evidence);
-  }
-  if (text.includes('decision: risks and actions should be removable')) {
-    addDecision('accepted', 'Allow cleanup of captures', 'Risks and actions can be removed when the host decides they are not useful.', evidence);
-  }
-  if (text.includes('decision: the shared dashboard url')) {
-    addDecision('accepted', 'Use unguessable shared links', 'Prototype dashboards are open-by-link but should not be easy to guess.', evidence);
-  }
-  if (text.includes('decision: keep the full transcript')) {
-    addDecision('accepted', 'Retain full transcript', 'Keep the full transcript attached to the meeting record during the prototype.', evidence);
-  }
-  if (text.includes('next action') || text.includes('action:')) {
-    const actionTitle = text.includes('retention settings') ? 'Add retention settings later' : 'Build playback and queue';
-    const actionDetail = text.includes('retention settings')
-      ? 'Add retention settings to production readiness without blocking the static prototype.'
-      : 'Implement the transcript playback loop and agent queue before Zoom integration.';
-    addAction(actionTitle, actionDetail, evidence);
-  }
-  if (text.includes('risk') || text.includes('fails') || text.includes('distracting') || text.includes('too late') || text.includes('failure mode')) {
-    addRisk(inferRiskTitle(text), inferRiskSummary(text, cue.text), evidence, cue.text);
+  if (state.demoTranscript) {
+    if (text.includes('product decision') || text.includes('decision is whether')) {
+      addDecision('forming', 'MVP focus', 'Choose between implementation speed and testing the live facilitation experience.', evidence);
+    }
+    if (text.includes("let's make the decision") || text.includes('agreed') || text.includes('capture that as the decision')) {
+      addDecision('accepted', 'Build the live board first', 'Use a human-shared page with timed mock transcript playback before Zoom-native integration.', evidence);
+    }
+    if (text.includes('decision: the transcript rail should be hideable')) {
+      addDecision('accepted', 'Make transcript optional', 'Allow the host to hide or show the transcript rail during screen share.', evidence);
+    }
+    if (text.includes('decision: clicking any decision')) {
+      addDecision('accepted', 'Open guidance modals', 'Clicking decisions, risks, actions, and agent issues should open facilitation guidance.', evidence);
+    }
+    if (text.includes('decision: risks and actions should be removable')) {
+      addDecision('accepted', 'Allow cleanup of captures', 'Risks and actions can be removed when the host decides they are not useful.', evidence);
+    }
+    if (text.includes('decision: the shared dashboard url')) {
+      addDecision('accepted', 'Use unguessable shared links', 'Prototype dashboards are open-by-link but should not be easy to guess.', evidence);
+    }
+    if (text.includes('decision: keep the full transcript')) {
+      addDecision('accepted', 'Retain full transcript', 'Keep the full transcript attached to the meeting record during the prototype.', evidence);
+    }
+    if (text.includes('next action') || text.includes('action:')) {
+      const actionTitle = text.includes('retention settings') ? 'Add retention settings later' : 'Build playback and queue';
+      const actionDetail = text.includes('retention settings')
+        ? 'Add retention settings to production readiness without blocking the static prototype.'
+        : 'Implement the transcript playback loop and agent queue before Zoom integration.';
+      addAction(actionTitle, actionDetail, evidence);
+    }
+    if (text.includes('risk') || text.includes('fails') || text.includes('distracting') || text.includes('too late') || text.includes('failure mode')) {
+      addRisk(inferRiskTitle(text), inferRiskSummary(text, cue.text), evidence, cue.text);
+    }
   }
 
   detectAgentDiscussion(cue, evidence);
