@@ -402,6 +402,33 @@ function currentDashboardToken() {
   return new URLSearchParams(window.location.search).get('t') || '';
 }
 
+function isSharedDashboardView() {
+  return Boolean(currentDashboardSessionId());
+}
+
+function isEndedMeetingStatus(status) {
+  return /ended|stopped/i.test(String(status || ''));
+}
+
+function applySharedDashboardPhase(session) {
+  if (!isSharedDashboardView()) return;
+
+  if (session && isEndedMeetingStatus(session.status)) {
+    if (state.runwayVisible) hideRunway();
+    if (!state.reviewMode) setReviewMode(true);
+    return;
+  }
+
+  if (state.cues.length > 0 || (session && session.transcript && session.transcript.length > 0)) {
+    if (state.reviewMode) setReviewMode(false);
+    if (state.runwayVisible) hideRunway();
+    return;
+  }
+
+  if (state.reviewMode) setReviewMode(false);
+  if (!state.runwayVisible) showRunway();
+}
+
 async function loadDashboardSession() {
   const sessionId = currentDashboardSessionId();
   if (!sessionId || sessionId === 'demo-session') return null;
@@ -970,6 +997,7 @@ function applyRtmsSessionState(session) {
   });
   state.currentTime = Math.max(state.currentTime || 0, state.duration);
   state.boardDirty = true;
+  applySharedDashboardPhase(session);
   renderTranscript();
   renderAll();
   clearStreamError();
@@ -2335,6 +2363,7 @@ async function loadRelatedGithubIssues(itemId, text) {
     await new Promise(function(r) { setTimeout(r, 700); });
     state.githubRelatedIssues[itemId] = { loading: false, issues: demoGithubIssuesForItem(text) };
     state.boardDirty = true;
+    refreshOpenGithubModal(itemId);
     renderAll();
     return;
   }
@@ -2349,10 +2378,17 @@ async function loadRelatedGithubIssues(itemId, text) {
       })
     };
     state.boardDirty = true;
+    refreshOpenGithubModal(itemId);
     renderAll();
   } catch (e) {
     state.githubRelatedIssues[itemId] = { loading: false, issues: [] };
+    refreshOpenGithubModal(itemId);
   }
+}
+
+function refreshOpenGithubModal(itemId) {
+  if (!state.openModalItem || state.openModalItem.id !== itemId) return;
+  renderModalGithubSection(state.openModalItem.type, state.openModalItem.id);
 }
 
 function linkItemToGithubIssue(itemId, issueNumber) {
@@ -3427,6 +3463,7 @@ async function initializeApp() {
   }
   applyMeetingContext(state.meetingContext || fakeZoomMeeting);
   // Ensure runway content and board are rendered even when loadTranscript is skipped (Zoom App mode)
+  applySharedDashboardPhase();
   renderAll();
   // Start the runway countdown regardless of whether a transcript was loaded
   startRunwayTimer();
