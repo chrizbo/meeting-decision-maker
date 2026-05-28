@@ -2968,15 +2968,6 @@ function renderBriefGithub() {
     html += '</label>';
     if (discussionInfo && discussionInfo.loading) {
       html += '<p class="github-discussion-note">Loading discussion categories...</p>';
-    } else if (discussionReady) {
-      html += '<label class="github-discussion-category" for="githubDiscussionCategorySelect">Category</label>';
-      html += '<select id="githubDiscussionCategorySelect">';
-      discussionInfo.categories.forEach(function(category) {
-        html += '<option value="' + escapeHtml(category.id) + '"' + (category.id === state.githubDiscussionCategoryId ? ' selected' : '') + '>' + escapeHtml(category.name) + '</option>';
-      });
-      html += '</select>';
-      html += '<details class="proposal-preview"><summary>Preview discussion body</summary>';
-      html += '<pre class="proposal-body-text">' + escapeHtml(discussionBody()) + '</pre></details>';
     } else if (discussionBlocked) {
       html += '<p class="github-discussion-note">Discussions are not available for this repo, or this token cannot read discussion categories.</p>';
     }
@@ -3030,15 +3021,6 @@ function wireGithubBriefButtons() {
   if (discussionToggle) {
     discussionToggle.addEventListener('change', function() {
       state.githubDiscussionPost = discussionToggle.checked;
-      updatePublishButton();
-    });
-  }
-
-  const discussionCategorySelect = document.querySelector('#githubDiscussionCategorySelect');
-  if (discussionCategorySelect) {
-    discussionCategorySelect.addEventListener('change', function() {
-      state.githubDiscussionCategoryId = discussionCategorySelect.value;
-      localStorage.setItem('githubDiscussionCategoryId', state.githubDiscussionCategoryId);
       updatePublishButton();
     });
   }
