@@ -1036,6 +1036,11 @@ select {
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 14px;
+  min-width: 0;
+}
+
+.board-header-top > div:first-child {
+  min-width: 0;
 }
 
 .meeting-context {
@@ -1055,12 +1060,16 @@ select {
   display: flex;
   justify-content: flex-end;
   flex-shrink: 0;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .dashboard-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
+  max-width: 100%;
 }
 
 .dashboard-actions button {
@@ -1849,11 +1858,17 @@ button:disabled {
     padding: 14px;
   }
 
+  .board-header-top {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .meeting-link {
     width: 100%;
   }
 
   .dashboard-actions {
+    width: 100%;
     justify-content: flex-start;
   }
 
