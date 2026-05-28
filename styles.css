@@ -1761,6 +1761,7 @@ body.zoom-app-surface {
   height: auto;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
 }
 
 .zoom-app-surface .board,
@@ -1906,6 +1907,7 @@ body.zoom-app-surface {
     height: auto;
     display: flex;
     flex-direction: column;
+    align-items: stretch;
   }
 
   .board {
