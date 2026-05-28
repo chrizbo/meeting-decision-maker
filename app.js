@@ -479,6 +479,10 @@ function clearStreamError() {
   document.querySelector('.app-shell').classList.remove('stream-error-visible');
 }
 
+function setOpenDashboardVisible(visible) {
+  if (els.openDashboardButton) els.openDashboardButton.hidden = !visible;
+}
+
 function isBrowserUnsupportedZoomError(error) {
   return zoomErrorMessage(error).toLowerCase().includes('zoom apps sdk is not supported by this browser');
 }
@@ -712,6 +716,7 @@ async function maybeInitializeZoomApp() {
   }
 
   document.body.classList.add('zoom-app-surface');
+  setOpenDashboardVisible(true);
   setTranscriptVisible(false);
   setRtmsButton('checking APIs');
 
