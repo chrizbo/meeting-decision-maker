@@ -1062,9 +1062,14 @@ function sessionForResponse(input, dashboardToken = '') {
     zoomMeetingId: input.zoomMeetingId || null,
     zoomMeetingUuid: input.zoomMeetingUuid || null,
     platform: input.platform || 'web',
+    recordMode: normalizeRecordMode(input.recordMode),
     createdAt: input.createdAt,
     updatedAt: input.updatedAt
   };
+}
+
+function normalizeRecordMode(value) {
+  return value === 'off' ? 'off' : 'on';
 }
 
 function createPublicSessionId() {
@@ -1109,6 +1114,11 @@ async function saveSession(session) {
   return session;
 }
 
+async function updateSession(session) {
+  session.updatedAt = new Date().toISOString();
+  return saveSession(session);
+}
+
 async function getSession(id) {
   if (!firestore) return sessions.get(id) || null;
   const snapshot = await firestore.collection(sessionsCollection).doc(id).get();
@@ -1138,6 +1148,38 @@ async function getSessionByAccessId(id) {
     .limit(1)
     .get();
   return uuidSnapshot.empty ? null : uuidSnapshot.docs[0].data();
+}
+
+async function findSessionForRtmsState(state) {
+  const candidates = [
+    state && state.id,
+    state && state.meetingUuid,
+    state && state.sessionId,
+    state && state.streamId
+  ].filter(Boolean);
+  for (const id of candidates) {
+    const session = await getSessionByAccessId(id);
+    if (session) return session;
+  }
+  return null;
+}
+
+function syncRtmsStatesForSession(session) {
+  if (!session) return;
+  for (const state of rtmsSessionStates.values()) {
+    const matches = [
+      state.id,
+      state.meetingUuid,
+      state.sessionId,
+      state.streamId
+    ].filter(Boolean).some(function(id) {
+      return id === session.id || id === session.publicSessionId || id === session.zoomMeetingId || id === session.zoomMeetingUuid;
+    });
+    if (matches) {
+      state.recordMode = normalizeRecordMode(session.recordMode);
+      state.updatedAt = new Date().toISOString();
+    }
+  }
 }
 
 async function hasRtmsDashboardAccess(req, state, requestedId) {
@@ -1184,6 +1226,7 @@ async function createSession(input = {}) {
     zoomMeetingId: input.zoomMeetingId || null,
     zoomMeetingUuid: input.meetingUuid || null,
     platform: input.platform || 'web',
+    recordMode: normalizeRecordMode(input.recordMode),
     createdAt,
     updatedAt: createdAt
   };
@@ -1207,6 +1250,8 @@ function getRtmsState(payload = {}) {
       streamId: payload.rtms_stream_id || null,
       transcript: [],
       analyses: [],
+      recordMode: 'on',
+      offRecordCueCount: 0,
       status: 'created',
       statusReason: null,
       firstTranscriptTimestampUnit: null,
@@ -1294,8 +1339,20 @@ function transcriptWindowForServerCue(state, cue) {
 
 async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata = {}) {
   const state = getRtmsState(payload);
+  const session = await findSessionForRtmsState(state);
+  if (session) state.recordMode = normalizeRecordMode(session.recordMode);
   const text = normalizeTranscriptText(buffer, size);
   if (!text) return { ignored: true, reason: 'empty transcript' };
+  if (state.recordMode === 'off') {
+    state.offRecordCueCount = (state.offRecordCueCount || 0) + 1;
+    state.updatedAt = new Date().toISOString();
+    return {
+      ignored: true,
+      reason: 'off_the_record',
+      sessionId: state.id,
+      offRecordCueCount: state.offRecordCueCount
+    };
+  }
 
   const rawTs = timestamp != null ? timestamp : (metadata.startTs != null ? metadata.startTs : payload.event_ts);
   const cueIndex = state.transcript.length;
@@ -1627,6 +1684,30 @@ async function handleApi(req, res, pathname) {
   if (req.method === 'POST' && pathname === '/api/sessions') {
     const input = await readBody(req);
     sendJson(res, 201, await createSession(input));
+    return;
+  }
+
+  const recordModeMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/record-mode$/);
+  if (req.method === 'POST' && recordModeMatch) {
+    const limit = checkRateLimit(req, 'record-mode-update', { limit: 30, windowMs: 60_000 });
+    if (!limit.allowed) {
+      sendRateLimited(res, limit);
+      return;
+    }
+    const session = await getSessionByAccessId(decodeURIComponent(recordModeMatch[1]));
+    if (!session) {
+      sendJson(res, 404, { error: 'Session not found' });
+      return;
+    }
+    if (!hasValidDashboardToken(req, session)) {
+      sendJson(res, 403, { error: 'Invalid or missing dashboard token' });
+      return;
+    }
+    const input = await readBody(req);
+    session.recordMode = normalizeRecordMode(input.recordMode);
+    await updateSession(session);
+    syncRtmsStatesForSession(session);
+    sendJson(res, 200, { recordMode: session.recordMode, updatedAt: session.updatedAt });
     return;
   }
 

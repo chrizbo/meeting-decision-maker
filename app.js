@@ -234,6 +234,8 @@ const state = {
   speed: 1,
   filter: 'all',
   transcriptVisible: true,
+  recordMode: 'on',
+  recordModeUpdating: false,
   boardDirty: true,
   openModalItem: null,
   zoomSession: null,
@@ -267,6 +269,7 @@ const state = {
 const els = {
   menuButton: document.querySelector('#menuButton'),
   controlsMenu: document.querySelector('#controlsMenu'),
+  recordModeButton: document.querySelector('#recordModeButton'),
   playButton: document.querySelector('#playButton'),
   resetButton: document.querySelector('#resetButton'),
   transcriptHeaderToggle: document.querySelector('#transcriptHeaderToggle'),
@@ -426,6 +429,8 @@ async function loadDashboardSession() {
       dashboardSlug: session.dashboardUrl || absoluteDashboardPath(session.dashboardPath)
     };
     state.zoomSession = session;
+    state.recordMode = normalizeRecordMode(session.recordMode);
+    renderRecordMode();
     applyMeetingContext(meeting);
     els.meetingStatus.textContent = meeting.topic + ' · shared dashboard';
     return session;
@@ -767,6 +772,8 @@ async function maybeInitializeZoomApp() {
     if (participants.length) meeting.attendees = participants;
 
     const session = await createMeetingSession(meeting);
+    state.recordMode = normalizeRecordMode(session.recordMode);
+    renderRecordMode();
     meeting.dashboardSlug = session.dashboardUrl || absoluteDashboardPath(session.dashboardPath);
     state.zoomSession = session;
     applyMeetingContext(meeting);
@@ -871,8 +878,14 @@ function loadTranscript(raw, filename) {
   renderAll();
 }
 
+function normalizeRecordMode(value) {
+  return value === 'off' ? 'off' : 'on';
+}
+
 function applyRtmsSessionState(session) {
   if (!session || !Array.isArray(session.transcript)) return;
+  state.recordMode = normalizeRecordMode(session.recordMode);
+  renderRecordMode();
   const previousDuration = state.duration || 0;
   const previousCueCount = state.cues.length;
   const nextCues = [];
@@ -955,7 +968,9 @@ function applyRtmsSessionState(session) {
   renderTranscript();
   renderAll();
   clearStreamError();
-  els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + ' · live transcript ' + state.cues.length + ' cues';
+  els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + (state.recordMode === 'off'
+    ? ' · off the record'
+    : ' · live transcript ' + state.cues.length + ' cues');
 
   // Start a wall-clock tick so the timer keeps running between polls
   const hasNewTranscript = state.cues.length > previousCueCount || state.duration > previousDuration;
@@ -1448,6 +1463,7 @@ function processCues() {
   state.cues.forEach(function(cue) {
     if (state.currentTime >= cue.start && !state.playedCueIds.has(cue.id)) {
       state.playedCueIds.add(cue.id);
+      if (state.recordMode === 'off') return;
       maybeAddFacilitator(cue, formatTime(cue.start) + ' · ' + cue.speaker);
       analyzeCue(cue);
     }
@@ -3152,9 +3168,71 @@ function setControlsMenu(open) {
   els.menuButton.setAttribute('aria-expanded', String(open));
 }
 
+function renderRecordMode() {
+  if (!els.recordModeButton) return;
+  const offRecord = state.recordMode === 'off';
+  const label = els.recordModeButton.querySelector('.record-mode-label');
+  const status = els.recordModeButton.querySelector('.record-mode-status');
+  if (label) label.textContent = offRecord ? 'Off the record' : 'On the record';
+  if (status) status.textContent = offRecord ? 'Transcript paused' : 'Transcript active';
+  els.recordModeButton.setAttribute('aria-pressed', String(offRecord));
+  els.recordModeButton.disabled = state.recordModeUpdating;
+}
+
+function recordModeSessionId() {
+  return currentDashboardSessionId() || (state.zoomSession && state.zoomSession.publicSessionId) || (state.zoomSession && state.zoomSession.id) || '';
+}
+
+async function setRecordMode(nextMode) {
+  const previousMode = state.recordMode;
+  state.recordMode = normalizeRecordMode(nextMode);
+  state.recordModeUpdating = true;
+  renderRecordMode();
+
+  const sessionId = recordModeSessionId();
+  const token = currentDashboardToken() || (state.zoomSession && state.zoomSession.dashboardToken) || '';
+  if (!sessionId) {
+    state.recordModeUpdating = false;
+    renderRecordMode();
+    els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + (state.recordMode === 'off'
+      ? ' · off the record'
+      : ' · on the record');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/sessions/' + encodeURIComponent(sessionId) + '/record-mode', {
+      method: 'POST',
+      headers: Object.assign(
+        { 'content-type': 'application/json' },
+        token ? { 'x-dashboard-token': token } : {}
+      ),
+      body: JSON.stringify({ recordMode: state.recordMode })
+    });
+    if (!response.ok) throw new Error('record mode update failed');
+    const result = await response.json();
+    state.recordMode = normalizeRecordMode(result.recordMode);
+    if (state.zoomSession) state.zoomSession.recordMode = state.recordMode;
+    els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + (state.recordMode === 'off'
+      ? ' · off the record'
+      : ' · on the record');
+  } catch (error) {
+    state.recordMode = previousMode;
+    els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + ' · record toggle unavailable';
+  } finally {
+    state.recordModeUpdating = false;
+    renderRecordMode();
+  }
+}
+
 els.menuButton.addEventListener('click', function(event) {
   event.stopPropagation();
   setControlsMenu(els.controlsMenu.hidden);
+});
+
+els.recordModeButton.addEventListener('click', function(event) {
+  event.stopPropagation();
+  setRecordMode(state.recordMode === 'off' ? 'on' : 'off');
 });
 
 els.playButton.addEventListener('click', function() {

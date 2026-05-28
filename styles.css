@@ -753,6 +753,35 @@ h1 {
   justify-content: center;
 }
 
+.controls-menu .record-mode-button {
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
+.record-mode-label,
+.record-mode-status {
+  display: block;
+}
+
+.record-mode-label {
+  font-weight: 720;
+}
+
+.record-mode-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.record-mode-button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--rust) 42%, var(--line));
+  color: var(--rust);
+}
+
+.record-mode-button[aria-pressed="true"] .record-mode-status {
+  color: color-mix(in srgb, var(--rust) 72%, var(--muted));
+}
+
 .file-control input {
   position: absolute;
   inline-size: 1px;
