@@ -446,7 +446,7 @@ function findRelatedDecision(decisions, item) {
   return decisions.find(function(decision) {
     const existing = [decision.title, decision.summary].filter(Boolean).join(' ');
     if (hasDistinctDecisionObject(candidate, existing)) return false;
-    return topicSimilarity(candidate, existing) >= 0.62;
+    return sameDecisionObject(candidate, existing) || topicSimilarity(candidate, existing) >= 0.74;
   }) || null;
 }
 
@@ -463,8 +463,8 @@ function hasDistinctDecisionObject(candidate, existing) {
   const candidateNouns = decisionObjectWords(candidate);
   const existingNouns = decisionObjectWords(existing);
   if (!candidateNouns.size || !existingNouns.size) return false;
-  const overlap = [...candidateNouns].some(function(word) { return existingNouns.has(word); });
-  if (overlap) return false;
+  const overlapCount = [...candidateNouns].filter(function(word) { return existingNouns.has(word); }).length;
+  if (overlapCount >= 2 || (overlapCount === 1 && Math.min(candidateNouns.size, existingNouns.size) <= 2)) return false;
   const candidateText = String(candidate || '').toLowerCase();
   const existingText = String(existing || '').toLowerCase();
   return /\b(decision|decide|choose|choosing|accepted|forming|pending)\b/.test(candidateText + ' ' + existingText);
@@ -473,10 +473,20 @@ function hasDistinctDecisionObject(candidate, existing) {
 function decisionObjectWords(text) {
   const generic = new Set([
     'accepted', 'agreement', 'candidate', 'choose', 'choosing', 'commitment', 'decide',
-    'decision', 'direction', 'discourse', 'forming', 'option', 'pending', 'proposal',
-    'question', 'scope', 'tradeoff'
+    'decision', 'direction', 'discourse', 'forming', 'group', 'meeting', 'option',
+    'pending', 'people', 'proposal', 'question', 'scope', 'team', 'tradeoff', 'user',
+    'users'
   ]);
   return new Set(topicWords(text).filter(function(word) { return !generic.has(word); }));
+}
+
+function sameDecisionObject(candidate, existing) {
+  const candidateNouns = decisionObjectWords(candidate);
+  const existingNouns = decisionObjectWords(existing);
+  if (!candidateNouns.size || !existingNouns.size) return false;
+  const overlapCount = [...candidateNouns].filter(function(word) { return existingNouns.has(word); }).length;
+  const smallerSize = Math.min(candidateNouns.size, existingNouns.size);
+  return overlapCount >= 2 && overlapCount / smallerSize >= 0.5;
 }
 
 function isWeakPreferenceDecision(item, cue, state) {
@@ -509,9 +519,10 @@ function topicSimilarity(left, right) {
 
 function topicWords(text) {
   const stopWords = new Set([
-    'about', 'after', 'against', 'because', 'between', 'could', 'decision', 'decide',
-    'first', 'focus', 'from', 'have', 'into', 'meeting', 'should', 'that', 'their',
-    'there', 'this', 'whether', 'while', 'with', 'would'
+    'about', 'after', 'against', 'also', 'and', 'are', 'because', 'between', 'can',
+    'could', 'decision', 'decide', 'for', 'first', 'focus', 'from', 'has', 'have',
+    'into', 'meeting', 'need', 'not', 'our', 'should', 'that', 'the', 'their',
+    'there', 'they', 'this', 'trace', 'whether', 'while', 'who', 'with', 'would'
   ]);
   return String(text || '')
     .toLowerCase()
