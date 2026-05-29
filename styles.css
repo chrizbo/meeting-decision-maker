@@ -2014,7 +2014,7 @@ body.zoom-app-surface {
   display: none;
   align-items: center;
   justify-content: center;
-  padding: 28px;
+  padding: clamp(12px, 4vw, 28px);
   background: rgba(35, 37, 36, 0.42);
   z-index: 20;
 }
@@ -2026,6 +2026,7 @@ body.zoom-app-surface {
 .modal {
   position: relative;
   width: min(680px, 100%);
+  min-width: 0;
   max-height: min(720px, calc(100vh - 56px));
   overflow: auto;
   border: 1px solid var(--line);
@@ -2044,6 +2045,7 @@ body.zoom-app-surface {
 .modal h2 {
   margin-right: 34px;
   font-size: 24px;
+  overflow-wrap: anywhere;
 }
 
 .modal-summary {
@@ -2051,12 +2053,14 @@ body.zoom-app-surface {
   color: #47514d;
   font-size: 15px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .modal-body {
   margin-top: 20px;
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .modal-body h3 {
@@ -2069,11 +2073,13 @@ body.zoom-app-surface {
   color: #47514d;
   font-size: 14px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .modal-body ul {
   margin: 0;
   padding-left: 19px;
+  min-width: 0;
 }
 
 .modal-transcript {
@@ -2083,6 +2089,8 @@ body.zoom-app-surface {
   background: #f7f5ee;
   color: #3f4743;
   white-space: pre-line;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .agent-auto-note {
@@ -2102,10 +2110,12 @@ body.zoom-app-surface {
 
 .modal-agent-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
+  min-width: 0;
 }
 
 .modal-agent-actions[hidden] {
@@ -2116,6 +2126,22 @@ body.zoom-app-surface {
   border-color: var(--green);
   background: var(--green);
   color: white;
+}
+
+@media (max-width: 480px) {
+  .modal {
+    padding: 18px;
+  }
+
+  .modal h2 {
+    font-size: 22px;
+  }
+
+  .modal-agent-actions button {
+    flex: 1 1 140px;
+    min-width: 0;
+    white-space: normal;
+  }
 }
 
 /* --- Review mode & brief --- */
