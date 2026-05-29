@@ -1001,6 +1001,17 @@ function applyRtmsSessionState(session) {
   renderTranscript();
   renderAll();
   clearStreamError();
+  if (!state.cues.length && /stopped|interrupted|start_failed|concurrency/i.test(String(session.status || ''))) {
+    showStreamError(
+      'Live transcript stream stopped.',
+      'Zoom opened the stream, but no transcript text reached Room Clarity before it stopped.',
+      [
+        session.status ? 'Stream status: ' + session.status + '.' : '',
+        session.statusReason ? 'Reason: ' + session.statusReason + '.' : '',
+        'Try Retry stream after Zoom live captions/transcription are enabled and someone speaks in the meeting.'
+      ].filter(Boolean).join(' ')
+    );
+  }
   els.meetingStatus.textContent = (state.meetingContext || fakeZoomMeeting).topic + (state.recordMode === 'off'
     ? ' · off the record'
     : ' · live transcript ' + state.cues.length + ' cues');
@@ -1049,13 +1060,13 @@ async function loadRtmsSessionState(id) {
 
 function startRtmsPolling() {
   const meeting = state.meetingContext || {};
-  const candidates = [
+  const candidates = Array.from(new Set([
     meeting.meetingUuid,
     meeting.meetingId,
     state.zoomSession && state.zoomSession.zoomMeetingUuid,
     state.zoomSession && state.zoomSession.zoomMeetingId,
     currentDashboardSessionId()
-  ].filter(Boolean);
+  ].filter(Boolean)));
   if (!candidates.length || rtmsPollTimer) return;
 
   async function poll() {

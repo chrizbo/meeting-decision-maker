@@ -1568,6 +1568,9 @@ async function handleRtmsWebhookEvent(event) {
   if (event.event === 'endpoint.url_validation') {
     return handleZoomUrlValidation(event) || { ok: false, reason: 'missing validation token or secret' };
   }
+  if (event.event && event.event !== 'meeting.transcript_completed') {
+    console.log('RTMS webhook event:', event.event, 'key:', rtmsKey(payload), 'media_type:', payload.media_type || 'n/a', 'stream_id:', payload.rtms_stream_id || 'n/a', 'reason:', payload.reason || payload.error_message || payload.message || 'n/a');
+  }
   if (event.event === 'meeting.rtms_started' || event.event === 'webinar.rtms_started' || event.event === 'session.rtms_started') {
     return startRtmsClient(payload);
   }
