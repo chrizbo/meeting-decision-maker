@@ -1150,6 +1150,39 @@ async function getSessionByAccessId(id) {
   return uuidSnapshot.empty ? null : uuidSnapshot.docs[0].data();
 }
 
+async function getSessionsByAccessId(id) {
+  if (!id) return [];
+  const direct = await getSession(id);
+  if (direct) return [direct];
+
+  if (!firestore) {
+    return Array.from(sessions.values()).filter(function(session) {
+      return session.publicSessionId === id || session.zoomMeetingId === id || session.zoomMeetingUuid === id;
+    });
+  }
+
+  const [meetingIdSnapshot, uuidSnapshot] = await Promise.all([
+    firestore.collection(sessionsCollection)
+      .where('zoomMeetingId', '==', id)
+      .get(),
+    firestore.collection(sessionsCollection)
+      .where('zoomMeetingUuid', '==', id)
+      .get()
+  ]);
+  const results = [];
+  const seen = new Set();
+  function addSnapshot(snapshot) {
+    snapshot.docs.forEach(function(doc) {
+      if (seen.has(doc.id)) return;
+      seen.add(doc.id);
+      results.push(doc.data());
+    });
+  }
+  addSnapshot(meetingIdSnapshot);
+  addSnapshot(uuidSnapshot);
+  return results;
+}
+
 async function findSessionForRtmsState(state) {
   const candidates = [
     state && state.id,
@@ -1192,8 +1225,10 @@ async function hasRtmsDashboardAccess(req, state, requestedId) {
   ].filter(Boolean);
 
   for (const id of candidates) {
-    const session = await getSessionByAccessId(id);
-    if (session && hasValidDashboardToken(req, session)) return true;
+    const matchingSessions = await getSessionsByAccessId(id);
+    if (matchingSessions.some(function(session) {
+      return hasValidDashboardToken(req, session);
+    })) return true;
   }
   return false;
 }
