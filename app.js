@@ -2898,7 +2898,7 @@ function renderModalJiraSection(type, id) {
 
   if (!related) {
     const item = findBoardItem(type, id);
-    if (item) loadRelatedJiraIssues(id, item.title || '');
+    if (item) loadRelatedJiraIssues(id, (item.title || '') + ' ' + (item.detail || item.summary || ''));
     els.modalJiraIssues.innerHTML = '<p class="github-issues-loading">Searching related Jira issues…</p>';
     return;
   }
@@ -3219,25 +3219,89 @@ function escapeText(str) {
 // ── Jira publish ─────────────────────────────────────────────────────────────
 
 function buildJiraProposals() {
-  // Group linked items by issue key
-  const byIssue = {};
+  if (!isJiraConfigured()) return [];
   const items = briefItems();
+  const proposals = [];
+
+  // Linked items → one consolidated comment proposal per Jira issue
+  const byIssue = {};
   const allItems = [
     ...items.decisions.map(function(d) { return { type: 'decision', item: d }; }),
     ...items.actions.map(function(a) { return { type: 'action', item: a }; }),
     ...items.risks.map(function(r) { return { type: 'risk', item: r }; })
   ];
-
   allItems.forEach(function(entry) {
     const key = state.jiraItemLinks[entry.item.id];
     if (!key) return;
     if (!byIssue[key]) byIssue[key] = [];
     byIssue[key].push(entry);
   });
-
-  return Object.keys(byIssue).map(function(issueKey) {
-    return { issueKey, linkedItems: byIssue[issueKey], include: true };
+  Object.keys(byIssue).forEach(function(issueKey) {
+    const linkedItems = byIssue[issueKey];
+    proposals.push({
+      type: 'comment',
+      issueKey,
+      linkedItems,
+      include: true,
+      label: issueKey + ' — ' + linkedItems.length + ' item' + (linkedItems.length === 1 ? '' : 's')
+    });
   });
+
+  // Unlinked accepted decisions and actions → new Jira issue proposals
+  items.decisions.forEach(function(d) {
+    if (state.jiraItemLinks[d.id]) return;
+    proposals.push({ type: 'issue', itemType: 'decision', item: d, include: true, label: 'New issue: ' + d.title });
+  });
+  items.actions.forEach(function(a) {
+    if (state.jiraItemLinks[a.id]) return;
+    proposals.push({ type: 'issue', itemType: 'action', item: a, include: true, label: 'New issue: ' + a.title });
+  });
+
+  return proposals;
+}
+
+function buildJiraProposalPreview(proposal) {
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  const date = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  if (proposal.type === 'comment') {
+    const lines = ['Meeting update — ' + (meeting.topic || 'Meeting'), date, ''];
+    const decisions = proposal.linkedItems.filter(function(i) { return i.type === 'decision'; });
+    const actions = proposal.linkedItems.filter(function(i) { return i.type === 'action'; });
+    const risks = proposal.linkedItems.filter(function(i) { return i.type === 'risk'; });
+    if (decisions.length) { lines.push('Decisions'); decisions.forEach(function(i) { lines.push('• ' + i.item.title + (i.item.detail ? ' — ' + i.item.detail : '')); }); lines.push(''); }
+    if (actions.length) { lines.push('Actions'); actions.forEach(function(i) { lines.push('• ' + i.item.title + (i.item.detail ? ' — ' + i.item.detail : '')); }); lines.push(''); }
+    if (risks.length) { lines.push('Risks'); risks.forEach(function(i) { lines.push('• ' + i.item.title + (i.item.detail ? ' — ' + i.item.detail : '')); }); lines.push(''); }
+    lines.push('Posted by Room Clarity · room-clarity');
+    return lines.join('\n').trim();
+  }
+  if (proposal.type === 'issue') {
+    const tag = proposal.itemType === 'decision' ? '[Decision]' : '[Action]';
+    const lines = [
+      tag + ' ' + proposal.item.title,
+      '',
+      proposal.item.detail || proposal.item.summary || '',
+      '',
+      'Meeting: ' + (meeting.topic || 'Meeting'),
+      'Evidence: ' + (proposal.item.evidence || 'No timestamp'),
+      '',
+      'Created by Room Clarity · room-clarity'
+    ];
+    return lines.join('\n').trim();
+  }
+  return '';
+}
+
+function buildJiraNewIssueAdf(itemType, item, dashboardUrl) {
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  const content = [];
+  if (item.detail || item.summary) content.push(adfParagraph([adfText(item.detail || item.summary)]));
+  content.push(adfHr());
+  content.push(adfParagraph([
+    adfText('Meeting: ' + (meeting.topic || 'Meeting') + (item.evidence ? ' · ' + item.evidence : '') + ' · Posted by '),
+    dashboardUrl ? adfLink('Room Clarity', dashboardUrl) : adfText('Room Clarity'),
+    adfText(' · room-clarity')
+  ]));
+  return adfDoc(content);
 }
 
 function renderBriefJira() {
@@ -3268,6 +3332,9 @@ function renderBriefJira() {
       (result.comments || []).forEach(function(c) {
         html += '<li><a href="' + escapeHtml(c.url) + '" target="_blank" rel="noopener noreferrer">Comment on ' + escapeHtml(c.issueKey) + '</a></li>';
       });
+      (result.issues || []).forEach(function(i) {
+        html += '<li><a href="' + escapeHtml(i.url) + '" target="_blank" rel="noopener noreferrer">Created ' + escapeHtml(i.key) + '</a></li>';
+      });
       if (result.confluencePage) {
         html += '<li><a href="' + escapeHtml(result.confluencePage.url) + '" target="_blank" rel="noopener noreferrer">Decision Log updated in Confluence</a></li>';
       }
@@ -3286,7 +3353,7 @@ function renderBriefJira() {
   els.jiraBriefStatus.textContent = projectLabel;
 
   if (proposals.length === 0 && !confluenceSpaceKey) {
-    els.jiraBriefContent.innerHTML = '<p class="github-brief-empty">Link decisions or actions to ' + escapeHtml(projectLabel) + ' issues in the board to propose updates here.</p>';
+    els.jiraBriefContent.innerHTML = '<p class="github-brief-empty">Accept decisions or actions on the board to create Jira proposals.</p>';
     return;
   }
 
@@ -3295,11 +3362,13 @@ function renderBriefJira() {
   if (proposals.length > 0) {
     html += '<ul class="github-proposal-list">';
     proposals.forEach(function(proposal, index) {
-      const label = proposal.issueKey + ' — ' + proposal.linkedItems.length + ' item' + (proposal.linkedItems.length === 1 ? '' : 's');
       html += '<li class="github-proposal-item">';
       html += '<label><input type="checkbox" class="jira-proposal-check" data-index="' + index + '"' + (proposal.include ? ' checked' : '') + '>';
-      html += '<span class="github-proposal-type comment">Comment</span>';
-      html += escapeHtml(label) + '</label>';
+      html += '<span class="github-proposal-type ' + proposal.type + '">' + (proposal.type === 'issue' ? 'Issue' : 'Comment') + '</span>';
+      html += escapeHtml(proposal.label) + '</label>';
+      const previewLabel = proposal.type === 'comment' ? 'Preview comment' : 'Preview issue body';
+      html += '<details class="proposal-preview"><summary>' + previewLabel + '</summary>';
+      html += '<pre class="proposal-body-text">' + escapeHtml(buildJiraProposalPreview(proposal)) + '</pre></details>';
       html += '</li>';
     });
     html += '</ul>';
@@ -3370,22 +3439,45 @@ async function publishToJira() {
   renderBriefJira();
 
   const dashboardUrl = window.location.href;
-  const result = { comments: [], confluencePage: null, error: null };
+  const result = { comments: [], issues: [], confluencePage: null, error: null };
+  const siteBase = 'https://' + (state.atlassianSite || '').replace(/^https?:\/\//, '');
 
   try {
-    // 1. Post comments on linked Jira issues
     const includedProposals = state.jiraProposals.filter(function(p) { return p.include; });
     for (const proposal of includedProposals) {
-      const adf = buildJiraCommentAdf(proposal.issueKey, proposal.linkedItems, dashboardUrl);
-      const commentResult = await jiraRequest('POST', '/rest/api/3/issue/' + proposal.issueKey + '/comment', { body: adf });
-      if (commentResult && commentResult.id) {
-        const issueUrl = 'https://' + (state.atlassianSite || '').replace(/^https?:\/\//, '') + '/browse/' + proposal.issueKey;
-        result.comments.push({ issueKey: proposal.issueKey, url: issueUrl });
-        // Post remote link back to Room Clarity dashboard
-        await jiraRequest('POST', '/rest/api/3/issue/' + proposal.issueKey + '/remotelink', {
-          globalId: 'room-clarity-' + dashboardUrl,
-          object: { url: dashboardUrl, title: 'Room Clarity session', icon: { url16x16: 'https://roomclarity.com/meeting-decision-maker-icon.png', title: 'Room Clarity' } }
+      if (proposal.type === 'comment') {
+        // Post consolidated comment on a linked Jira issue
+        const adf = buildJiraCommentAdf(proposal.issueKey, proposal.linkedItems, dashboardUrl);
+        const commentResult = await jiraRequest('POST', '/rest/api/3/issue/' + proposal.issueKey + '/comment', { body: adf });
+        if (commentResult && commentResult.id) {
+          const issueUrl = siteBase + '/browse/' + proposal.issueKey;
+          result.comments.push({ issueKey: proposal.issueKey, url: issueUrl });
+          await jiraRequest('POST', '/rest/api/3/issue/' + proposal.issueKey + '/remotelink', {
+            globalId: 'room-clarity-' + dashboardUrl,
+            object: { url: dashboardUrl, title: 'Room Clarity session', icon: { url16x16: 'https://roomclarity.com/meeting-decision-maker-icon.png', title: 'Room Clarity' } }
+          });
+        }
+      } else if (proposal.type === 'issue') {
+        // Create a new Jira issue for an unlinked decision or action
+        const projectKey = state.jiraConfig.projectKeys[0];
+        const tag = proposal.itemType === 'decision' ? '[Decision]' : '[Action]';
+        const adf = buildJiraNewIssueAdf(proposal.itemType, proposal.item, dashboardUrl);
+        const createResult = await jiraRequest('POST', '/rest/api/3/issue', {
+          fields: {
+            project: { key: projectKey },
+            summary: tag + ' ' + proposal.item.title,
+            description: adf,
+            issuetype: { name: 'Task' }
+          }
         });
+        if (createResult && createResult.key) {
+          const issueUrl = siteBase + '/browse/' + createResult.key;
+          result.issues.push({ key: createResult.key, url: issueUrl });
+          await jiraRequest('POST', '/rest/api/3/issue/' + createResult.key + '/remotelink', {
+            globalId: 'room-clarity-' + dashboardUrl,
+            object: { url: dashboardUrl, title: 'Room Clarity session', icon: { url16x16: 'https://roomclarity.com/meeting-decision-maker-icon.png', title: 'Room Clarity' } }
+          });
+        }
       }
     }
 
