@@ -263,7 +263,23 @@ const state = {
   githubDiscussionCategories: null,
   githubDiscussionCategoryId: localStorage.getItem('githubDiscussionCategoryId') || '',
   githubPublishing: false,
-  githubPublishResult: null
+  githubPublishResult: null,
+  trackerProvider: localStorage.getItem('trackerProvider') ||
+    (localStorage.getItem('githubToken') ? 'github' : null) ||
+    (localStorage.getItem('atlassianToken') ? 'atlassian' : null),
+  // trackerProvider: 'github' | 'atlassian' | null
+  atlassianToken: localStorage.getItem('atlassianToken') || '',
+  atlassianCloudId: localStorage.getItem('atlassianCloudId') || '',
+  atlassianSite: localStorage.getItem('atlassianSite') || '',
+  jiraConfig: tryParseJson(localStorage.getItem('jiraConfig')),
+  // jiraConfig shape: { projectKeys: ['ENG'], activeSprintOnly: false, confluenceSpaceKey: '' }
+  jiraProjects: null,       // null = not loaded, [] = loaded empty, [...] = loaded
+  confluenceSpaces: null,   // null = not loaded
+  jiraRelatedIssues: {},
+  jiraItemLinks: {},
+  jiraProposals: [],
+  jiraPublishing: false,
+  jiraPublishResult: null
 };
 
 const els = {
@@ -340,12 +356,17 @@ const els = {
   briefPanel: document.querySelector('#briefPanel'),
   briefContent: document.querySelector('#briefContent'),
   copyBriefButton: document.querySelector('#copyBriefButton'),
-  runwayGithubContent: document.querySelector('#runwayGithubContent'),
+  runwayTrackerContent: document.querySelector('#runwayTrackerContent'),
   githubBriefSection: document.querySelector('#githubBriefSection'),
   githubBriefStatus: document.querySelector('#githubBriefStatus'),
   githubBriefContent: document.querySelector('#githubBriefContent'),
   modalGithubSection: document.querySelector('#modalGithubSection'),
-  modalGithubIssues: document.querySelector('#modalGithubIssues')
+  modalGithubIssues: document.querySelector('#modalGithubIssues'),
+  jiraBriefSection: document.querySelector('#jiraBriefSection'),
+  jiraBriefStatus: document.querySelector('#jiraBriefStatus'),
+  jiraBriefContent: document.querySelector('#jiraBriefContent'),
+  modalJiraSection: document.querySelector('#modalJiraSection'),
+  modalJiraIssues: document.querySelector('#modalJiraIssues')
 };
 
 function tryParseJson(value) {
@@ -472,13 +493,15 @@ function normalizeZoomMeetingContext(context) {
   const meetingId = context.meetingID || context.meetingId || context.meetingNumber || context.meetingUUID || '';
   const topic = context.meetingTopic || context.topic || context.meetingName || fakeZoomMeeting.topic;
   const agenda = context.agenda || context.meetingAgenda || context.description || '';
+  const durationMinutes = parseInt(context.duration || context.durationMinutes || context.meeting_duration || '', 10) || null;
   return {
     topic: topic,
     meetingId: String(meetingId || '').trim(),
     host: context.hostName || context.userName || 'Zoom host',
     attendees: context.userName ? [context.userName] : [],
     dashboardSlug: fakeZoomMeeting.dashboardSlug,
-    agenda: agenda
+    agenda: agenda,
+    durationMinutes: durationMinutes
   };
 }
 
@@ -1192,7 +1215,7 @@ function renderRunway() {
   els.runwayNorm.textContent = data.participationNorm;
   els.runwayOpeningPrompt.textContent = data.openingPrompt;
   renderRunwayTimer();
-  renderRunwayGithub();
+  renderRunwayTracker();
 }
 
 function runwayDefinitionRow(row) {
@@ -1253,6 +1276,7 @@ function renderAll() {
   els.progressBar.style.width = Math.min((state.currentTime / state.duration) * 100, 100) + '%';
   renderMeetingProgress();
   renderRunway();
+  renderRunwayTracker();
   renderStepper();
   renderCueHighlight();
   if (state.boardDirty) {
@@ -2311,43 +2335,277 @@ function isGithubConfigured() {
   return isGithubConnected() && Boolean(state.githubConfig && state.githubConfig.owner && state.githubConfig.repo);
 }
 
-function renderRunwayGithub() {
-  if (!els.runwayGithubContent) return;
-  const connected = isGithubConnected();
-  const config = state.githubConfig;
-  const detectedUrl = !config ? detectRepoFromContext() : null;
+// ── Atlassian / Jira / Confluence ────────────────────────────────────────────
+
+function jiraRequest(method, path, body, params) {
+  if (state.demoMode) return Promise.resolve({});
+  return fetch('/api/atlassian/proxy', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: state.atlassianToken, cloudId: state.atlassianCloudId, method, path, body, params })
+  }).then(function(r) { return r.json(); });
+}
+
+function confluenceRequest(method, path, body, params) {
+  if (state.demoMode) return Promise.resolve({});
+  return fetch('/api/confluence/proxy', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: state.atlassianToken, cloudId: state.atlassianCloudId, method, path, body, params })
+  }).then(function(r) { return r.json(); });
+}
+
+function connectAtlassian() {
+  const popup = window.open('/api/atlassian/oauth/start', 'atlassian-oauth', 'width=620,height=700,scrollbars=yes,resizable=yes');
+  if (!popup) {
+    alert('Please allow popups for this site to connect Atlassian.');
+    return;
+  }
+
+  function finish(token, cloudId, site) {
+    state.atlassianToken = token || '';
+    state.atlassianCloudId = cloudId || '';
+    state.atlassianSite = site || '';
+    state.trackerProvider = 'atlassian';
+    localStorage.setItem('atlassianToken', state.atlassianToken);
+    localStorage.setItem('atlassianCloudId', state.atlassianCloudId);
+    localStorage.setItem('atlassianSite', state.atlassianSite);
+    localStorage.setItem('trackerProvider', 'atlassian');
+    window.removeEventListener('message', handleMessage);
+    window.removeEventListener('storage', handleStorage);
+    renderAll();
+  }
+
+  // Primary: postMessage from callback popup
+  function handleMessage(event) {
+    if (!event.data || typeof event.data !== 'object') return;
+    if (event.data.type === 'atlassian_token') {
+      finish(event.data.token, event.data.cloudId, event.data.site);
+    } else if (event.data.type === 'atlassian_error') {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
+    }
+  }
+
+  // Fallback: storage event — fires when the callback page writes to localStorage
+  // directly. Needed when window.opener is nulled after cross-origin navigation
+  // through auth.atlassian.com.
+  function handleStorage(event) {
+    if (event.key === 'atlassianToken' && event.newValue) {
+      finish(
+        event.newValue,
+        localStorage.getItem('atlassianCloudId') || '',
+        localStorage.getItem('atlassianSite') || ''
+      );
+    }
+  }
+
+  window.addEventListener('message', handleMessage);
+  window.addEventListener('storage', handleStorage);
+}
+
+function disconnectAtlassian() {
+  state.atlassianToken = '';
+  state.atlassianCloudId = '';
+  state.atlassianSite = '';
+  state.jiraConfig = null;
+  state.jiraProjects = null;
+  state.confluenceSpaces = null;
+  state.jiraRelatedIssues = {};
+  state.jiraItemLinks = {};
+  localStorage.removeItem('atlassianToken');
+  localStorage.removeItem('atlassianCloudId');
+  localStorage.removeItem('atlassianSite');
+  localStorage.removeItem('jiraConfig');
+  renderAll();
+}
+
+function isAtlassianConnected() {
+  return Boolean(state.atlassianToken && state.atlassianCloudId);
+}
+
+function isJiraConfigured() {
+  return isAtlassianConnected() && Boolean(
+    state.jiraConfig &&
+    Array.isArray(state.jiraConfig.projectKeys) &&
+    state.jiraConfig.projectKeys.length > 0
+  );
+}
+
+function saveJiraConfig(config) {
+  state.jiraConfig = config;
+  if (config) {
+    localStorage.setItem('jiraConfig', JSON.stringify(config));
+  } else {
+    localStorage.removeItem('jiraConfig');
+  }
+}
+
+async function loadJiraProjects() {
+  if (!isAtlassianConnected()) return;
+  if (state.jiraProjects !== null) return; // already loaded
+  state.jiraProjects = [];  // mark as loading
+  try {
+    const result = await jiraRequest('GET', '/rest/api/3/project/search', null, { maxResults: '50', orderBy: 'name' });
+    state.jiraProjects = Array.isArray(result.values)
+      ? result.values.map(function(p) { return { key: p.key, name: p.name }; })
+      : [];
+  } catch (e) {
+    state.jiraProjects = [];
+  }
+  renderAll();
+}
+
+async function loadConfluenceSpaces() {
+  if (!isAtlassianConnected()) return;
+  if (state.confluenceSpaces !== null) return; // already loaded
+  state.confluenceSpaces = [];  // mark as loading
+  try {
+    const result = await confluenceRequest('GET', '/wiki/api/v2/spaces', null, { limit: '50' });
+    state.confluenceSpaces = Array.isArray(result.results)
+      ? result.results.map(function(s) { return { key: s.key, name: s.name }; })
+      : [];
+  } catch (e) {
+    state.confluenceSpaces = [];
+  }
+  renderAll();
+}
+
+function selectTrackerProvider(provider) {
+  // Switching providers: clear the other provider's connected state
+  if (provider === 'github' && state.atlassianToken) {
+    disconnectAtlassian();
+  }
+  if (provider === 'atlassian' && state.githubToken) {
+    disconnectGitHub();
+  }
+  state.trackerProvider = provider;
+  localStorage.setItem('trackerProvider', provider);
+  renderAll();
+}
+
+function renderRunwayTracker() {
+  if (!els.runwayTrackerContent) return;
+  const provider = state.trackerProvider;
 
   let html = '';
 
-  if (!connected) {
-    html += '<p class="github-runway-hint">Connect GitHub to surface related issues during the meeting and publish artifacts to a repo after.</p>';
-    html += '<button class="github-connect-btn" type="button" id="githubConnectBtn">Connect GitHub</button>';
-  } else {
-    html += '<p class="github-connected-label">Connected</p>';
-    html += '<div class="github-repo-form">';
-    html += '<label for="githubRepoInput">Repository URL</label>';
-    html += '<input id="githubRepoInput" type="url" placeholder="https://github.com/owner/repo" value="' + escapeHtml((config && config.repoUrl) || detectedUrl || '') + '" autocomplete="off">';
-    html += '<label for="githubFolderInput">Transcript folder</label>';
-    html += '<input id="githubFolderInput" type="text" placeholder="meetings/" value="' + escapeHtml((config && config.folder) || 'meetings') + '" autocomplete="off">';
-    html += '<button class="github-save-btn" type="button" id="githubSaveConfigBtn">Save</button>';
-    html += '</div>';
-    if (config && config.owner) {
-      html += '<p class="github-repo-bound">Bound to <strong>' + escapeHtml(config.owner + '/' + config.repo) + '</strong></p>';
+  // Provider selector
+  html += '<div class="tracker-provider-toggle">';
+  html += '<button class="tracker-provider-btn' + (provider === 'github' ? ' active' : '') + '" type="button" id="trackerSelectGithub">GitHub</button>';
+  html += '<button class="tracker-provider-btn' + (provider === 'atlassian' ? ' active' : '') + '" type="button" id="trackerSelectAtlassian">Jira &amp; Confluence</button>';
+  html += '</div>';
+
+  if (!provider) {
+    html += '<p class="github-runway-hint">Connect a tracker to surface related issues during the meeting and push decisions after.</p>';
+  } else if (provider === 'github') {
+    const connected = isGithubConnected();
+    const config = state.githubConfig;
+    const detectedUrl = !config ? detectRepoFromContext() : null;
+    if (!connected) {
+      html += '<p class="github-runway-hint">Connect GitHub to surface related issues during the meeting and publish artifacts to a repo after.</p>';
+      html += '<button class="github-connect-btn" type="button" id="githubConnectBtn">Connect GitHub</button>';
+    } else {
+      html += '<p class="github-connected-label">Connected</p>';
+      html += '<div class="github-repo-form">';
+      html += '<label for="githubRepoInput">Repository URL</label>';
+      html += '<input id="githubRepoInput" type="url" placeholder="https://github.com/owner/repo" value="' + escapeHtml((config && config.repoUrl) || detectedUrl || '') + '" autocomplete="off">';
+      html += '<label for="githubFolderInput">Transcript folder</label>';
+      html += '<input id="githubFolderInput" type="text" placeholder="meetings/" value="' + escapeHtml((config && config.folder) || 'meetings') + '" autocomplete="off">';
+      html += '<button class="github-save-btn" type="button" id="githubSaveConfigBtn">Save</button>';
+      html += '</div>';
+      if (config && config.owner) {
+        html += '<p class="github-repo-bound">Bound to <strong>' + escapeHtml(config.owner + '/' + config.repo) + '</strong></p>';
+      }
+      html += '<button class="github-disconnect-btn" type="button" id="githubDisconnectBtn">Disconnect</button>';
     }
-    html += '<button class="github-disconnect-btn" type="button" id="githubDisconnectBtn">Disconnect</button>';
+  } else if (provider === 'atlassian') {
+    const connected = isAtlassianConnected();
+    const config = state.jiraConfig;
+    if (!connected) {
+      html += '<p class="github-runway-hint">Connect Atlassian to surface related Jira issues during the meeting and publish decisions to Jira and Confluence after.</p>';
+      html += '<button class="github-connect-btn" type="button" id="jiraConnectBtn">Connect Atlassian</button>';
+    } else {
+      const siteLabel = state.atlassianSite ? state.atlassianSite.replace(/^https?:\/\//, '') : 'Atlassian';
+      html += '<p class="github-connected-label">Connected to <strong>' + escapeHtml(siteLabel) + '</strong></p>';
+      html += '<div class="github-repo-form">';
+
+      // Jira project dropdown
+      html += '<label for="jiraProjectSelect">Jira project</label>';
+      const projects = state.jiraProjects;
+      if (projects === null) {
+        html += '<p class="github-runway-hint">Loading projects…</p>';
+        loadJiraProjects();
+      } else if (projects.length === 0) {
+        html += '<p class="github-runway-hint">No projects found on this site.</p>';
+      } else {
+        const savedKey = config && config.projectKeys && config.projectKeys[0] ? config.projectKeys[0] : '';
+        html += '<select id="jiraProjectSelect" class="tracker-select">';
+        html += '<option value="">Select a project</option>';
+        projects.forEach(function(p) {
+          html += '<option value="' + escapeHtml(p.key) + '"' + (p.key === savedKey ? ' selected' : '') + '>' + escapeHtml(p.key + ' — ' + p.name) + '</option>';
+        });
+        html += '</select>';
+      }
+
+      // Active sprint toggle
+      html += '<label class="tracker-checkbox-label"><input type="checkbox" id="jiraActiveSprintOnly"' + (config && config.activeSprintOnly ? ' checked' : '') + '> Active sprint issues only</label>';
+
+      // Confluence space dropdown
+      html += '<label for="jiraConfluenceSpaceSelect">Confluence space <span class="tracker-optional">(optional — for Decision Log)</span></label>';
+      const spaces = state.confluenceSpaces;
+      if (spaces === null) {
+        html += '<p class="github-runway-hint">Loading spaces…</p>';
+        loadConfluenceSpaces();
+      } else if (spaces.length === 0) {
+        html += '<p class="github-runway-hint">No Confluence spaces found.</p>';
+      } else {
+        const savedSpace = (config && config.confluenceSpaceKey) || '';
+        html += '<select id="jiraConfluenceSpaceSelect" class="tracker-select">';
+        html += '<option value="">None</option>';
+        spaces.forEach(function(s) {
+          html += '<option value="' + escapeHtml(s.key) + '"' + (s.key === savedSpace ? ' selected' : '') + '>' + escapeHtml(s.key + ' — ' + s.name) + '</option>';
+        });
+        html += '</select>';
+      }
+
+      html += '<button class="github-save-btn" type="button" id="jiraSaveConfigBtn">Save</button>';
+      html += '</div>';
+      if (config && config.projectKeys && config.projectKeys.length > 0) {
+        html += '<p class="github-repo-bound">Bound to <strong>' + escapeHtml(config.projectKeys.join(', ')) + '</strong></p>';
+      }
+      html += '<button class="github-disconnect-btn" type="button" id="jiraDisconnectBtn">Disconnect</button>';
+    }
   }
 
-  els.runwayGithubContent.innerHTML = html;
+  els.runwayTrackerContent.innerHTML = html;
 
-  const connectBtn = document.querySelector('#githubConnectBtn');
-  if (connectBtn) connectBtn.addEventListener('click', connectGitHub);
+  // Provider toggle buttons
+  const ghBtn = document.querySelector('#trackerSelectGithub');
+  if (ghBtn) ghBtn.addEventListener('click', function() {
+    if (provider === 'github') return;
+    if (isGithubConnected() || isAtlassianConnected()) {
+      if (!confirm('Switch to GitHub? Your current tracker connection will be disconnected.')) return;
+    }
+    selectTrackerProvider('github');
+  });
+  const atBtn = document.querySelector('#trackerSelectAtlassian');
+  if (atBtn) atBtn.addEventListener('click', function() {
+    if (provider === 'atlassian') return;
+    if (isGithubConnected() || isAtlassianConnected()) {
+      if (!confirm('Switch to Jira & Confluence? Your current tracker connection will be disconnected.')) return;
+    }
+    selectTrackerProvider('atlassian');
+  });
 
-  const disconnectBtn = document.querySelector('#githubDisconnectBtn');
-  if (disconnectBtn) disconnectBtn.addEventListener('click', disconnectGitHub);
-
-  const saveBtn = document.querySelector('#githubSaveConfigBtn');
-  if (saveBtn) {
-    saveBtn.addEventListener('click', function() {
+  // GitHub sub-handlers
+  const githubConnectBtn = document.querySelector('#githubConnectBtn');
+  if (githubConnectBtn) githubConnectBtn.addEventListener('click', connectGitHub);
+  const githubDisconnectBtn = document.querySelector('#githubDisconnectBtn');
+  if (githubDisconnectBtn) githubDisconnectBtn.addEventListener('click', disconnectGitHub);
+  const githubSaveBtn = document.querySelector('#githubSaveConfigBtn');
+  if (githubSaveBtn) {
+    githubSaveBtn.addEventListener('click', function() {
       const repoInput = document.querySelector('#githubRepoInput');
       const folderInput = document.querySelector('#githubFolderInput');
       const parsed = parseGithubRepoUrl(repoInput ? repoInput.value : '');
@@ -2360,6 +2618,31 @@ function renderRunwayGithub() {
         owner: parsed.owner,
         repo: parsed.repo,
         folder: (folderInput ? folderInput.value.trim().replace(/\/$/, '') : '') || 'meetings'
+      });
+      renderAll();
+    });
+  }
+
+  // Atlassian sub-handlers
+  const jiraConnectBtn = document.querySelector('#jiraConnectBtn');
+  if (jiraConnectBtn) jiraConnectBtn.addEventListener('click', connectAtlassian);
+  const jiraDisconnectBtn = document.querySelector('#jiraDisconnectBtn');
+  if (jiraDisconnectBtn) jiraDisconnectBtn.addEventListener('click', disconnectAtlassian);
+  const jiraSaveBtn = document.querySelector('#jiraSaveConfigBtn');
+  if (jiraSaveBtn) {
+    jiraSaveBtn.addEventListener('click', function() {
+      const projectSelect = document.querySelector('#jiraProjectSelect');
+      const sprintToggle = document.querySelector('#jiraActiveSprintOnly');
+      const spaceSelect = document.querySelector('#jiraConfluenceSpaceSelect');
+      const key = projectSelect ? projectSelect.value.trim() : '';
+      if (!key) {
+        alert('Select a Jira project to continue.');
+        return;
+      }
+      saveJiraConfig({
+        projectKeys: [key],
+        activeSprintOnly: sprintToggle ? sprintToggle.checked : false,
+        confluenceSpaceKey: spaceSelect ? spaceSelect.value : ''
       });
       renderAll();
     });

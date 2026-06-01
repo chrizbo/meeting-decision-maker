@@ -1,0 +1,27 @@
+Hi Zoom team,
+
+Thank you for the review notes. We would like to proceed with Beta and have resubmitted the Technical Design section with a separate evidence attachment for each checklist item.
+
+Attached documents:
+
+Required evidence:
+- 01 - SSDLC Evidence.pdf
+- 02 - SAST CodeQL Scan Results.pdf
+- 03 - DAST OWASP ZAP Scan Results.pdf
+- 04 - Privacy Policy.pdf
+
+Additional policy evidence:
+- 05 - Security Policy.pdf
+- 06 - Incident Response Policy.pdf
+- 07 - Vulnerability Management Procedures.pdf
+- 08 - Infrastructure Dependency Management Policy.pdf
+
+TLS evidence:
+- 09 - TLS 1.2 Evidence.pdf
+
+The app is served at https://roomclarity.com and supports TLS 1.2 or higher. The service uses HSTS, Content Security Policy, X-Content-Type-Options, and Referrer-Policy headers. Zoom webhook events are verified using HMAC signatures and timestamp freshness checks. Meeting dashboard access uses scoped access tokens, and service-admin inspection routes require an admin token.
+
+Please let us know if any specific attachment needs to be provided in a different format.
+
+Thank you,
+Chris

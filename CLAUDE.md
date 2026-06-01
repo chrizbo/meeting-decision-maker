@@ -25,6 +25,7 @@
 | `docs/llm-integration-notes.md` | Changing the analysis prompt, adding models, eval workflow |
 | `docs/zoom-app-installation.md` | Zoom App manifest, OAuth, marketplace submission |
 | `docs/github-integration.md` | GitHub OAuth App setup, proxy routes, MCP server direction |
+| `docs/atlassian-integration.md` | Jira + Confluence OAuth setup, proxy routes, config concepts |
 | `docs/security-launch-plan.md` | Before touching auth, webhooks, or session tokens |
 | `docs/product-principles.md` | Before adding features — what this product is and isn't |
 
@@ -63,6 +64,8 @@ Sessions are in-memory by default. Add `SESSION_STORE=firestore` only when you h
 | `RTMS_POLL_INTERVAL_MS` | How often the client polls for RTMS state (ms) |
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID (enables GitHub integration) |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret (keep in Secret Manager) |
+| `ATLASSIAN_CLIENT_ID` | Atlassian OAuth 2.0 app client ID (enables Jira + Confluence integration) |
+| `ATLASSIAN_CLIENT_SECRET` | Atlassian OAuth 2.0 app secret (keep in Secret Manager) |
 
 ## API routes
 
@@ -80,6 +83,10 @@ Sessions are in-memory by default. Add `SESSION_STORE=firestore` only when you h
 | GET | `/api/github/oauth/start` | Redirect to GitHub OAuth authorize page |
 | GET | `/api/github/oauth/callback` | Exchange GitHub code for token; render popup-closing page |
 | POST | `/api/github/proxy` | Proxy authenticated GitHub REST API calls (rate-limited, path-allowlisted) |
+| GET | `/api/atlassian/oauth/start` | Redirect to Atlassian OAuth authorize page |
+| GET | `/api/atlassian/oauth/callback` | Exchange Atlassian code for token; resolve cloud site; render popup-closing page |
+| POST | `/api/atlassian/proxy` | Proxy authenticated Jira REST API calls (rate-limited, path-allowlisted) |
+| POST | `/api/confluence/proxy` | Proxy authenticated Confluence REST API calls (rate-limited, path-allowlisted) |
 
 ## Deploy
 
@@ -89,7 +96,7 @@ gcloud run deploy meeting-decision-maker-web \
   --region us-central1 \
   --allow-unauthenticated \
   --set-env-vars=PUBLIC_BASE_URL=https://roomclarity.com \
-  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest,ROOM_CLARITY_ADMIN_TOKEN=room-clarity-admin-token:latest,GITHUB_CLIENT_ID=github-client-id:latest,GITHUB_CLIENT_SECRET=github-client-secret:latest
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest,ROOM_CLARITY_ADMIN_TOKEN=room-clarity-admin-token:latest,GITHUB_CLIENT_ID=github-client-id:latest,GITHUB_CLIENT_SECRET=github-client-secret:latest,ATLASSIAN_CLIENT_ID=atlassian-client-id:latest,ATLASSIAN_CLIENT_SECRET=atlassian-client-secret:latest
 ```
 
 Always use `--update-secrets` with the full set so a redeploy doesn't silently remove previously attached secrets.

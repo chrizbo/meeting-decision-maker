@@ -148,9 +148,9 @@
               <h4>Decision Frame</h4>
               <dl id="runwayDecisionFrame"></dl>
             </article>
-            <article class="runway-block github-runway-block" id="runwayGithubBlock">
-              <h4>GitHub</h4>
-              <div id="runwayGithubContent"></div>
+            <article class="runway-block github-runway-block" id="runwayTrackerBlock">
+              <h4>Tracker</h4>
+              <div id="runwayTrackerContent"></div>
             </article>
           </div>
         </section>
@@ -168,6 +168,13 @@
               <span id="githubBriefStatus" class="github-brief-status"></span>
             </summary>
             <div id="githubBriefContent"></div>
+          </details>
+          <details id="jiraBriefSection" class="github-brief-section" hidden open>
+            <summary class="github-brief-summary">
+              <h3 class="github-brief-heading">Jira &amp; Confluence</h3>
+              <span id="jiraBriefStatus" class="github-brief-status"></span>
+            </summary>
+            <div id="jiraBriefContent"></div>
           </details>
         </section>
 
@@ -248,6 +255,10 @@
           <div id="modalGithubSection" class="modal-github-section" hidden>
             <h3>Related GitHub Issues</h3>
             <div id="modalGithubIssues"></div>
+          </div>
+          <div id="modalJiraSection" class="modal-github-section" hidden>
+            <h3>Related Jira Issues</h3>
+            <div id="modalJiraIssues"></div>
           </div>
         </div>
       </section>

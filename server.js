@@ -20,6 +20,8 @@ const openaiApiKey = process.env.OPENAI_API_KEY || '';
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-5.4';
 const githubClientId = process.env.GITHUB_CLIENT_ID || '';
 const githubClientSecret = process.env.GITHUB_CLIENT_SECRET || '';
+const atlassianClientId = process.env.ATLASSIAN_CLIENT_ID || '';
+const atlassianClientSecret = process.env.ATLASSIAN_CLIENT_SECRET || '';
 const openaiReasoningEffort = process.env.OPENAI_REASONING_EFFORT || 'low';
 const llmProvider = normalizeProvider(process.env.LLM_PROVIDER || 'gemini');
 const publicBaseUrl = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
@@ -66,6 +68,25 @@ function requestProto(req) {
 
 function withSecurityHeaders(headers = {}) {
   return { ...securityHeaders, ...headers };
+}
+
+// OAuth callback pages need 'unsafe-inline' for the postMessage + window.close()
+// script. Scope the relaxed CSP to only these pages rather than the global policy.
+const oauthCallbackSecurityHeaders = {
+  ...securityHeaders,
+  'content-security-policy': [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self'",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'"
+  ].join('; ')
+};
+
+function sendOAuthHtml(res, status, body) {
+  res.writeHead(status, { ...oauthCallbackSecurityHeaders, 'content-type': 'text/html; charset=utf-8' });
+  res.end(body);
 }
 
 function sendJson(res, status, body) {
@@ -1681,13 +1702,56 @@ function isAllowedGithubGraphql(query) {
     /\bmutation\s+RoomClarityCreateDiscussion\b/.test(query);
 }
 
+function isAllowedJiraPath(path) {
+  if (typeof path !== 'string') return false;
+  const allowed = [
+    /^\/rest\/api\/3\/myself$/,
+    /^\/rest\/api\/3\/project\/search$/,
+    /^\/rest\/api\/3\/project\/[^/]+$/,
+    /^\/rest\/api\/3\/issue\/search$/,
+    /^\/rest\/api\/3\/issue\/[^/]+$/,
+    /^\/rest\/api\/3\/issue\/[^/]+\/comment$/,
+    /^\/rest\/api\/3\/issue$/,
+    /^\/rest\/api\/3\/issue\/[^/]+\/remotelink$/,
+    /^\/rest\/agile\/1\.0\/board$/,
+    /^\/rest\/agile\/1\.0\/board\/\d+\/sprint$/
+  ];
+  return allowed.some(function(pattern) { return pattern.test(path); });
+}
+
+function isAllowedConfluencePath(path) {
+  if (typeof path !== 'string') return false;
+  const allowed = [
+    /^\/wiki\/api\/v2\/spaces$/,
+    /^\/wiki\/api\/v2\/pages$/,
+    /^\/wiki\/api\/v2\/pages\/\d+$/,
+    /^\/wiki\/rest\/api\/content\/\d+\/metadata\/labels$/
+  ];
+  return allowed.some(function(pattern) { return pattern.test(path); });
+}
+
+function renderAtlassianOAuthPage(res, success, token, cloudId, site) {
+  const origin = publicBaseUrl || 'null';
+  if (success && token) {
+    const safeToken = JSON.stringify(String(token));
+    const safeCloudId = JSON.stringify(String(cloudId || ''));
+    const safeSite = JSON.stringify(String(site || ''));
+    // Write directly to localStorage (same origin as main app) so the storage
+    // event fires on the opener even if window.opener is nulled by cross-origin
+    // navigation through auth.atlassian.com.
+    sendOAuthHtml(res, 200, '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Atlassian connected</title></head><body><p>Connected to Atlassian. This window will close automatically.</p><script>try{localStorage.setItem(\'atlassianToken\',' + safeToken + ');localStorage.setItem(\'atlassianCloudId\',' + safeCloudId + ');localStorage.setItem(\'atlassianSite\',' + safeSite + ');localStorage.setItem(\'trackerProvider\',\'atlassian\');}catch(e){}try{if(window.opener)window.opener.postMessage({type:\'atlassian_token\',token:' + safeToken + ',cloudId:' + safeCloudId + ',site:' + safeSite + '},' + JSON.stringify(origin) + ');}catch(e){}window.close();</script></body></html>');
+  } else {
+    sendOAuthHtml(res, 400, '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Atlassian auth failed</title></head><body><p>Atlassian authorization failed. Please close this window and try again.</p><script>try{if(window.opener)window.opener.postMessage({type:\'atlassian_error\'},' + JSON.stringify(origin) + ');}catch(e){}setTimeout(function(){window.close();},3000);</script></body></html>');
+  }
+}
+
 function renderGithubOAuthPage(res, success, token) {
   const origin = publicBaseUrl || 'null';
   if (success && token) {
     const safeToken = JSON.stringify(String(token));
-    sendHtml(res, 200, '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>GitHub connected</title></head><body><p>Connected to GitHub. This window will close automatically.</p><script>try{if(window.opener)window.opener.postMessage({type:\'github_token\',token:' + safeToken + '},' + JSON.stringify(origin) + ');}catch(e){}window.close();</script></body></html>');
+    sendOAuthHtml(res, 200, '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>GitHub connected</title></head><body><p>Connected to GitHub. This window will close automatically.</p><script>try{if(window.opener)window.opener.postMessage({type:\'github_token\',token:' + safeToken + '},' + JSON.stringify(origin) + ');}catch(e){}window.close();</script></body></html>');
   } else {
-    sendHtml(res, 400, '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>GitHub auth failed</title></head><body><p>GitHub authorization failed. Please close this window and try again.</p><script>try{if(window.opener)window.opener.postMessage({type:\'github_error\'},' + JSON.stringify(origin) + ');}catch(e){}setTimeout(function(){window.close();},3000);</script></body></html>');
+    sendOAuthHtml(res, 400, '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>GitHub auth failed</title></head><body><p>GitHub authorization failed. Please close this window and try again.</p><script>try{if(window.opener)window.opener.postMessage({type:\'github_error\'},' + JSON.stringify(origin) + ');}catch(e){}setTimeout(function(){window.close();},3000);</script></body></html>');
   }
 }
 
@@ -1943,6 +2007,173 @@ async function handleApi(req, res, pathname) {
     });
     const githubResponseBody = await githubResponse.json().catch(function() { return {}; });
     sendJson(res, githubResponse.status, githubResponseBody);
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/atlassian/oauth/start') {
+    if (!atlassianClientId) {
+      sendJson(res, 503, { error: 'Atlassian OAuth is not configured. Set ATLASSIAN_CLIENT_ID.' });
+      return;
+    }
+    const params = new URLSearchParams({
+      audience: 'api.atlassian.com',
+      client_id: atlassianClientId,
+      scope: 'read:jira-work write:jira-work read:confluence-space.summary read:confluence-content.all write:confluence-content offline_access',
+      redirect_uri: (publicBaseUrl || 'http://localhost:8787') + '/api/atlassian/oauth/callback',
+      state: randomBytes(16).toString('hex'),
+      response_type: 'code',
+      prompt: 'consent'
+    });
+    res.writeHead(302, withSecurityHeaders({ location: 'https://auth.atlassian.com/authorize?' + params }));
+    res.end();
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/atlassian/oauth/callback') {
+    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const code = url.searchParams.get('code');
+    const atlassianError = url.searchParams.get('error');
+    if (atlassianError || !code) {
+      renderAtlassianOAuthPage(res, false, null, null, null);
+      return;
+    }
+    try {
+      const tokenResponse = await fetch('https://auth.atlassian.com/oauth/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'accept': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'authorization_code',
+          client_id: atlassianClientId,
+          client_secret: atlassianClientSecret,
+          code,
+          redirect_uri: (publicBaseUrl || 'http://localhost:8787') + '/api/atlassian/oauth/callback'
+        })
+      });
+      const tokenBody = await tokenResponse.json().catch(function() { return {}; });
+      if (!tokenBody.access_token) throw new Error('No access token returned');
+      // Resolve the accessible resources (cloud sites) for this token
+      const resourcesResponse = await fetch('https://api.atlassian.com/oauth/token/accessible-resources', {
+        headers: {
+          'authorization': 'Bearer ' + tokenBody.access_token,
+          'accept': 'application/json'
+        }
+      });
+      const resources = await resourcesResponse.json().catch(function() { return []; });
+      const site = Array.isArray(resources) && resources[0] ? resources[0] : null;
+      const cloudId = site ? site.id : '';
+      const siteUrl = site ? site.url : '';
+      renderAtlassianOAuthPage(res, true, tokenBody.access_token, cloudId, siteUrl);
+    } catch (error) {
+      renderAtlassianOAuthPage(res, false, null, null, null);
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/atlassian/proxy') {
+    const limit = checkRateLimit(req, 'atlassian-proxy', { limit: 30, windowMs: 60_000 });
+    if (!limit.allowed) {
+      sendRateLimited(res, limit);
+      return;
+    }
+    let input = {};
+    try {
+      input = await readBody(req);
+    } catch (error) {
+      sendJson(res, 400, { error: 'Invalid request body' });
+      return;
+    }
+    const { token, cloudId, method, path: jiraPath, body: jiraBody } = input;
+    if (!token || typeof token !== 'string' || token.length > 2000) {
+      sendJson(res, 401, { error: 'Atlassian token required' });
+      return;
+    }
+    if (!cloudId || typeof cloudId !== 'string' || cloudId.length > 100) {
+      sendJson(res, 400, { error: 'Atlassian cloudId required' });
+      return;
+    }
+    if (!isAllowedJiraPath(jiraPath)) {
+      sendJson(res, 400, { error: 'Jira API path not allowed' });
+      return;
+    }
+    const allowedMethods = new Set(['GET', 'POST', 'PUT']);
+    const upperMethod = String(method || 'GET').toUpperCase();
+    if (!allowedMethods.has(upperMethod)) {
+      sendJson(res, 400, { error: 'Jira API method not allowed' });
+      return;
+    }
+    const jiraUrl = 'https://api.atlassian.com/ex/jira/' + cloudId + jiraPath;
+    const fetchOptions = {
+      method: upperMethod,
+      headers: {
+        'authorization': 'Bearer ' + token,
+        'accept': 'application/json',
+        'content-type': 'application/json',
+        'user-agent': 'RoomClarity/1.0'
+      }
+    };
+    if (jiraBody && upperMethod !== 'GET') {
+      fetchOptions.body = JSON.stringify(jiraBody);
+    }
+    const jiraSearchUrl = upperMethod === 'GET' && input.params
+      ? jiraUrl + '?' + new URLSearchParams(input.params).toString()
+      : jiraUrl;
+    const jiraResponse = await fetch(jiraSearchUrl, fetchOptions);
+    const jiraResponseBody = await jiraResponse.json().catch(function() { return {}; });
+    sendJson(res, jiraResponse.status, jiraResponseBody);
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/confluence/proxy') {
+    const limit = checkRateLimit(req, 'confluence-proxy', { limit: 20, windowMs: 60_000 });
+    if (!limit.allowed) {
+      sendRateLimited(res, limit);
+      return;
+    }
+    let input = {};
+    try {
+      input = await readBody(req);
+    } catch (error) {
+      sendJson(res, 400, { error: 'Invalid request body' });
+      return;
+    }
+    const { token, cloudId, method, path: confluencePath, body: confluenceBody } = input;
+    if (!token || typeof token !== 'string' || token.length > 2000) {
+      sendJson(res, 401, { error: 'Atlassian token required' });
+      return;
+    }
+    if (!cloudId || typeof cloudId !== 'string' || cloudId.length > 100) {
+      sendJson(res, 400, { error: 'Atlassian cloudId required' });
+      return;
+    }
+    if (!isAllowedConfluencePath(confluencePath)) {
+      sendJson(res, 400, { error: 'Confluence API path not allowed' });
+      return;
+    }
+    const allowedMethods = new Set(['GET', 'POST', 'PUT']);
+    const upperMethod = String(method || 'GET').toUpperCase();
+    if (!allowedMethods.has(upperMethod)) {
+      sendJson(res, 400, { error: 'Confluence API method not allowed' });
+      return;
+    }
+    const confluenceUrl = 'https://api.atlassian.com/ex/confluence/' + cloudId + confluencePath;
+    const fetchOptions = {
+      method: upperMethod,
+      headers: {
+        'authorization': 'Bearer ' + token,
+        'accept': 'application/json',
+        'content-type': 'application/json',
+        'user-agent': 'RoomClarity/1.0'
+      }
+    };
+    if (confluenceBody && upperMethod !== 'GET') {
+      fetchOptions.body = JSON.stringify(confluenceBody);
+    }
+    const confluenceSearchUrl = upperMethod === 'GET' && input.params
+      ? confluenceUrl + '?' + new URLSearchParams(input.params).toString()
+      : confluenceUrl;
+    const confluenceResponse = await fetch(confluenceSearchUrl, fetchOptions);
+    const confluenceResponseBody = await confluenceResponse.json().catch(function() { return {}; });
+    sendJson(res, confluenceResponse.status, confluenceResponseBody);
     return;
   }
 
