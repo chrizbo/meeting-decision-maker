@@ -1741,16 +1741,17 @@ function isAllowedConfluencePath(path) {
   return allowed.some(function(pattern) { return pattern.test(path); });
 }
 
-function renderAtlassianOAuthPage(res, success, token, cloudId, site) {
+function renderAtlassianOAuthPage(res, success, token, cloudId, site, refreshToken) {
   const origin = publicBaseUrl || 'null';
   if (success && token) {
     const safeToken = JSON.stringify(String(token));
     const safeCloudId = JSON.stringify(String(cloudId || ''));
     const safeSite = JSON.stringify(String(site || ''));
+    const safeRefresh = JSON.stringify(String(refreshToken || ''));
     // Write directly to localStorage (same origin as main app) so the storage
     // event fires on the opener even if window.opener is nulled by cross-origin
     // navigation through auth.atlassian.com.
-    sendOAuthHtml(res, 200, '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Atlassian connected</title></head><body><p>Connected to Atlassian. This window will close automatically.</p><script>try{localStorage.setItem(\'atlassianToken\',' + safeToken + ');localStorage.setItem(\'atlassianCloudId\',' + safeCloudId + ');localStorage.setItem(\'atlassianSite\',' + safeSite + ');localStorage.setItem(\'trackerProvider\',\'atlassian\');}catch(e){}try{if(window.opener)window.opener.postMessage({type:\'atlassian_token\',token:' + safeToken + ',cloudId:' + safeCloudId + ',site:' + safeSite + '},' + JSON.stringify(origin) + ');}catch(e){}window.close();</script></body></html>');
+    sendOAuthHtml(res, 200, '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Atlassian connected</title></head><body><p>Connected to Atlassian. This window will close automatically.</p><script>try{localStorage.setItem(\'atlassianToken\',' + safeToken + ');localStorage.setItem(\'atlassianCloudId\',' + safeCloudId + ');localStorage.setItem(\'atlassianSite\',' + safeSite + ');localStorage.setItem(\'atlassianRefreshToken\',' + safeRefresh + ');localStorage.setItem(\'trackerProvider\',\'atlassian\');}catch(e){}try{if(window.opener)window.opener.postMessage({type:\'atlassian_token\',token:' + safeToken + ',cloudId:' + safeCloudId + ',site:' + safeSite + ',refreshToken:' + safeRefresh + '},' + JSON.stringify(origin) + ');}catch(e){}window.close();</script></body></html>');
   } else {
     sendOAuthHtml(res, 400, '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Atlassian auth failed</title></head><body><p>Atlassian authorization failed. Please close this window and try again.</p><script>try{if(window.opener)window.opener.postMessage({type:\'atlassian_error\'},' + JSON.stringify(origin) + ');}catch(e){}setTimeout(function(){window.close();},3000);</script></body></html>');
   }
@@ -2076,9 +2077,52 @@ async function handleApi(req, res, pathname) {
       const site = Array.isArray(resources) && resources[0] ? resources[0] : null;
       const cloudId = site ? site.id : '';
       const siteUrl = site ? site.url : '';
-      renderAtlassianOAuthPage(res, true, tokenBody.access_token, cloudId, siteUrl);
+      renderAtlassianOAuthPage(res, true, tokenBody.access_token, cloudId, siteUrl, tokenBody.refresh_token);
     } catch (error) {
       renderAtlassianOAuthPage(res, false, null, null, null);
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/atlassian/oauth/refresh') {
+    const limit = checkRateLimit(req, 'atlassian-refresh', { limit: 10, windowMs: 60_000 });
+    if (!limit.allowed) {
+      sendRateLimited(res, limit);
+      return;
+    }
+    let input = {};
+    try { input = await readBody(req); } catch (e) { /* ignore */ }
+    const { refreshToken } = input;
+    if (!refreshToken) {
+      sendJson(res, 400, { error: 'refreshToken required' });
+      return;
+    }
+    if (!atlassianClientId || !atlassianClientSecret) {
+      sendJson(res, 503, { error: 'Atlassian OAuth not configured' });
+      return;
+    }
+    try {
+      const tokenResponse = await fetch('https://auth.atlassian.com/oauth/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'accept': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'refresh_token',
+          client_id: atlassianClientId,
+          client_secret: atlassianClientSecret,
+          refresh_token: refreshToken
+        })
+      });
+      const tokenBody = await tokenResponse.json().catch(function() { return {}; });
+      if (!tokenBody.access_token) {
+        sendJson(res, 401, { error: 'Token refresh failed' });
+        return;
+      }
+      sendJson(res, 200, {
+        accessToken: tokenBody.access_token,
+        refreshToken: tokenBody.refresh_token || refreshToken
+      });
+    } catch (e) {
+      sendJson(res, 500, { error: 'Token refresh error' });
     }
     return;
   }

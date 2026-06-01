@@ -2410,6 +2410,10 @@ body.zoom-app-surface {
   line-height: 1.4;
 }
 
+.github-runway-warning {
+  color: var(--warning, #b45309);
+}
+
 .github-connect-btn,
 .github-save-btn,
 .github-disconnect-btn {

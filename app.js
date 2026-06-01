@@ -269,8 +269,10 @@ const state = {
     (localStorage.getItem('atlassianToken') ? 'atlassian' : null),
   // trackerProvider: 'github' | 'atlassian' | null
   atlassianToken: localStorage.getItem('atlassianToken') || '',
+  atlassianRefreshToken: localStorage.getItem('atlassianRefreshToken') || '',
   atlassianCloudId: localStorage.getItem('atlassianCloudId') || '',
   atlassianSite: localStorage.getItem('atlassianSite') || '',
+  atlassianTokenExpired: false,
   jiraConfig: tryParseJson(localStorage.getItem('jiraConfig')),
   // jiraConfig shape: { projectKeys: ['ENG'], activeSprintOnly: false, confluenceSpaceKey: '' }
   jiraProjects: null,       // null = not loaded, [] = loaded empty, [...] = loaded
@@ -2340,22 +2342,60 @@ function isGithubConfigured() {
 
 // ── Atlassian / Jira / Confluence ────────────────────────────────────────────
 
-function jiraRequest(method, path, body, params) {
-  // Demo mode only blocks meeting-time calls (issue search, comments, subtasks).
-  // Config calls (project list, space list) always go through.
-  return fetch('/api/atlassian/proxy', {
+let _atlassianRefreshing = null; // single in-flight refresh promise
+
+async function refreshAtlassianToken() {
+  if (_atlassianRefreshing) return _atlassianRefreshing;
+  if (!state.atlassianRefreshToken) throw new Error('No refresh token');
+  _atlassianRefreshing = fetch('/api/atlassian/oauth/refresh', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ token: state.atlassianToken, cloudId: state.atlassianCloudId, method, path, body, params })
-  }).then(function(r) { return r.json(); });
+    body: JSON.stringify({ refreshToken: state.atlassianRefreshToken })
+  }).then(async function(r) {
+    const data = await r.json().catch(function() { return {}; });
+    if (!data.accessToken) throw new Error('Refresh failed');
+    state.atlassianToken = data.accessToken;
+    state.atlassianRefreshToken = data.refreshToken || state.atlassianRefreshToken;
+    state.atlassianTokenExpired = false;
+    localStorage.setItem('atlassianToken', state.atlassianToken);
+    localStorage.setItem('atlassianRefreshToken', state.atlassianRefreshToken);
+  }).finally(function() { _atlassianRefreshing = null; });
+  return _atlassianRefreshing;
+}
+
+async function atlassianFetch(proxyPath, method, path, body, params) {
+  const makeReq = function(token) {
+    return fetch(proxyPath, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token, cloudId: state.atlassianCloudId, method, path, body, params })
+    });
+  };
+  let r = await makeReq(state.atlassianToken);
+  if (r.status === 401 && state.atlassianRefreshToken) {
+    try {
+      await refreshAtlassianToken();
+      r = await makeReq(state.atlassianToken);
+    } catch (e) {
+      state.atlassianTokenExpired = true;
+      renderAll();
+      throw new Error('Atlassian session expired. Please reconnect.');
+    }
+  }
+  if (r.status === 401) {
+    state.atlassianTokenExpired = true;
+    renderAll();
+    throw new Error('Atlassian session expired. Please reconnect.');
+  }
+  return r.json().catch(function() { return {}; });
+}
+
+function jiraRequest(method, path, body, params) {
+  return atlassianFetch('/api/atlassian/proxy', method, path, body, params);
 }
 
 function confluenceRequest(method, path, body, params) {
-  return fetch('/api/confluence/proxy', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ token: state.atlassianToken, cloudId: state.atlassianCloudId, method, path, body, params })
-  }).then(function(r) { return r.json(); });
+  return atlassianFetch('/api/confluence/proxy', method, path, body, params);
 }
 
 function connectAtlassian() {
@@ -2365,14 +2405,17 @@ function connectAtlassian() {
     return;
   }
 
-  function finish(token, cloudId, site) {
+  function finish(token, cloudId, site, refreshToken) {
     state.atlassianToken = token || '';
+    state.atlassianRefreshToken = refreshToken || localStorage.getItem('atlassianRefreshToken') || '';
     state.atlassianCloudId = cloudId || '';
     state.atlassianSite = site || '';
+    state.atlassianTokenExpired = false;
     state.trackerProvider = 'atlassian';
     state.jiraProjects = null;     // force reload — clears any cached empty result
     state.confluenceSpaces = null; // force reload
     localStorage.setItem('atlassianToken', state.atlassianToken);
+    localStorage.setItem('atlassianRefreshToken', state.atlassianRefreshToken);
     localStorage.setItem('atlassianCloudId', state.atlassianCloudId);
     localStorage.setItem('atlassianSite', state.atlassianSite);
     localStorage.setItem('trackerProvider', 'atlassian');
@@ -2385,7 +2428,7 @@ function connectAtlassian() {
   function handleMessage(event) {
     if (!event.data || typeof event.data !== 'object') return;
     if (event.data.type === 'atlassian_token') {
-      finish(event.data.token, event.data.cloudId, event.data.site);
+      finish(event.data.token, event.data.cloudId, event.data.site, event.data.refreshToken);
     } else if (event.data.type === 'atlassian_error') {
       window.removeEventListener('message', handleMessage);
       window.removeEventListener('storage', handleStorage);
@@ -2400,7 +2443,8 @@ function connectAtlassian() {
       finish(
         event.newValue,
         localStorage.getItem('atlassianCloudId') || '',
-        localStorage.getItem('atlassianSite') || ''
+        localStorage.getItem('atlassianSite') || '',
+        localStorage.getItem('atlassianRefreshToken') || ''
       );
     }
   }
@@ -2411,14 +2455,17 @@ function connectAtlassian() {
 
 function disconnectAtlassian() {
   state.atlassianToken = '';
+  state.atlassianRefreshToken = '';
   state.atlassianCloudId = '';
   state.atlassianSite = '';
+  state.atlassianTokenExpired = false;
   state.jiraConfig = null;
   state.jiraProjects = null;
   state.confluenceSpaces = null;
   state.jiraRelatedIssues = {};
   state.jiraItemLinks = {};
   localStorage.removeItem('atlassianToken');
+  localStorage.removeItem('atlassianRefreshToken');
   localStorage.removeItem('atlassianCloudId');
   localStorage.removeItem('atlassianSite');
   localStorage.removeItem('jiraConfig');
@@ -2532,6 +2579,19 @@ function renderRunwayTracker() {
       html += '<button class="github-connect-btn" type="button" id="jiraConnectBtn">Connect Atlassian</button>';
     } else {
       const siteLabel = state.atlassianSite ? state.atlassianSite.replace(/^https?:\/\//, '') : 'Atlassian';
+
+      if (state.atlassianTokenExpired) {
+        html += '<p class="github-runway-hint github-runway-warning">Session expired — please reconnect to reload your projects.</p>';
+        html += '<button class="github-connect-btn" type="button" id="jiraConnectBtn">Reconnect Atlassian</button>';
+        html += '<button class="github-disconnect-btn" type="button" id="jiraDisconnectBtn">Disconnect</button>';
+        els.runwayTrackerContent.innerHTML = html;
+        const jiraConnectBtn2 = document.querySelector('#jiraConnectBtn');
+        if (jiraConnectBtn2) jiraConnectBtn2.addEventListener('click', connectAtlassian);
+        const jiraDisconnectBtn2 = document.querySelector('#jiraDisconnectBtn');
+        if (jiraDisconnectBtn2) jiraDisconnectBtn2.addEventListener('click', disconnectAtlassian);
+        return;
+      }
+
       html += '<p class="github-connected-label">Connected to <strong>' + escapeHtml(siteLabel) + '</strong></p>';
       html += '<div class="github-repo-form">';
 
@@ -2603,6 +2663,7 @@ function renderRunwayTracker() {
   const refreshProjectsBtn = document.querySelector('#jiraRefreshProjects');
   if (refreshProjectsBtn) refreshProjectsBtn.addEventListener('click', function() {
     state.jiraProjects = null;
+    state.atlassianTokenExpired = false;
     renderAll();
   });
   const refreshSpacesBtn = document.querySelector('#jiraRefreshSpaces');
