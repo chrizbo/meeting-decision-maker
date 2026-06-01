@@ -3062,6 +3062,371 @@ function inlineMarkdown(value) {
   return escapeHtml(value).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 }
 
+// ── ADF builder ──────────────────────────────────────────────────────────────
+// Atlassian Document Format (ADF) — used for Jira comments and Confluence pages
+
+function adfDoc(content) {
+  return { version: 1, type: 'doc', content: content };
+}
+
+function adfHeading(text, level) {
+  return { type: 'heading', attrs: { level: level || 2 }, content: [{ type: 'text', text: text }] };
+}
+
+function adfParagraph(nodes) {
+  return { type: 'paragraph', content: Array.isArray(nodes) ? nodes : [{ type: 'text', text: String(nodes) }] };
+}
+
+function adfText(text, marks) {
+  const node = { type: 'text', text: String(text) };
+  if (marks && marks.length) node.marks = marks;
+  return node;
+}
+
+function adfBulletList(items) {
+  return {
+    type: 'bulletList',
+    content: items.map(function(item) {
+      return { type: 'listItem', content: [adfParagraph(item)] };
+    })
+  };
+}
+
+function adfHr() {
+  return { type: 'rule' };
+}
+
+function adfLink(text, url) {
+  return adfText(text, [{ type: 'link', attrs: { href: url } }]);
+}
+
+function buildJiraCommentAdf(issueKey, linkedItems, dashboardUrl) {
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  const date = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const content = [];
+
+  content.push(adfHeading('Meeting update — ' + escapeText(meeting.topic || 'Meeting'), 2));
+  content.push(adfParagraph([adfText(date + ' · ')]));
+
+  const decisions = linkedItems.filter(function(i) { return i.type === 'decision'; });
+  const actions = linkedItems.filter(function(i) { return i.type === 'action'; });
+  const risks = linkedItems.filter(function(i) { return i.type === 'risk'; });
+
+  if (decisions.length) {
+    content.push(adfHeading('Decisions', 3));
+    content.push(adfBulletList(decisions.map(function(i) {
+      return [adfText(i.item.title, [{ type: 'strong' }])].concat(
+        i.item.detail ? [adfText(' — ' + i.item.detail)] : []
+      ).concat(i.item.evidence ? [adfText(' (' + i.item.evidence + ')', [{ type: 'em' }])] : []);
+    })));
+  }
+
+  if (actions.length) {
+    content.push(adfHeading('Actions', 3));
+    content.push(adfBulletList(actions.map(function(i) {
+      return [adfText(i.item.title, [{ type: 'strong' }])].concat(
+        i.item.detail ? [adfText(' — ' + i.item.detail)] : []
+      );
+    })));
+  }
+
+  if (risks.length) {
+    content.push(adfHeading('Risks', 3));
+    content.push(adfBulletList(risks.map(function(i) {
+      return [adfText(i.item.title, [{ type: 'strong' }])].concat(
+        i.item.detail ? [adfText(' — ' + i.item.detail)] : []
+      );
+    })));
+  }
+
+  content.push(adfHr());
+  content.push(adfParagraph([
+    adfText('Posted by '),
+    dashboardUrl ? adfLink('Room Clarity', dashboardUrl) : adfText('Room Clarity'),
+    adfText(' · room-clarity')
+  ]));
+
+  return adfDoc(content);
+}
+
+function escapeText(str) {
+  return String(str || '').replace(/[<>&"]/g, function(c) {
+    return c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : '&quot;';
+  });
+}
+
+// ── Jira publish ─────────────────────────────────────────────────────────────
+
+function buildJiraProposals() {
+  // Group linked items by issue key
+  const byIssue = {};
+  const items = briefItems();
+  const allItems = [
+    ...items.decisions.map(function(d) { return { type: 'decision', item: d }; }),
+    ...items.actions.map(function(a) { return { type: 'action', item: a }; }),
+    ...items.risks.map(function(r) { return { type: 'risk', item: r }; })
+  ];
+
+  allItems.forEach(function(entry) {
+    const key = state.jiraItemLinks[entry.item.id];
+    if (!key) return;
+    if (!byIssue[key]) byIssue[key] = [];
+    byIssue[key].push(entry);
+  });
+
+  return Object.keys(byIssue).map(function(issueKey) {
+    return { issueKey, linkedItems: byIssue[issueKey], include: true };
+  });
+}
+
+function renderBriefJira() {
+  if (!els.jiraBriefSection || !els.jiraBriefContent) return;
+  const configured = state.trackerProvider === 'atlassian' && isJiraConfigured();
+  els.jiraBriefSection.hidden = !configured;
+  if (!configured) return;
+
+  const projectKey = state.jiraConfig.projectKeys[0];
+  const loadedProject = state.jiraProjects && state.jiraProjects.find(function(p) { return p.key === projectKey; });
+  const projectLabel = (state.jiraConfig.projectName || (loadedProject && loadedProject.name) || projectKey) + ' Jira';
+
+  if (state.jiraPublishing) {
+    els.jiraBriefStatus.textContent = 'Publishing…';
+    els.jiraBriefContent.innerHTML = '<p class="github-brief-publishing">Publishing to Jira…</p>';
+    return;
+  }
+
+  if (state.jiraPublishResult) {
+    const result = state.jiraPublishResult;
+    els.jiraBriefStatus.textContent = result.error ? 'Error' : 'Published';
+    if (result.error) {
+      els.jiraBriefContent.innerHTML =
+        '<p class="github-brief-error">' + escapeHtml(result.error) + '</p>' +
+        '<button class="github-publish-btn" type="button" id="jiraRetryBtn">Retry</button>';
+    } else {
+      let html = '<ul class="github-publish-results">';
+      (result.comments || []).forEach(function(c) {
+        html += '<li><a href="' + escapeHtml(c.url) + '" target="_blank" rel="noopener noreferrer">Comment on ' + escapeHtml(c.issueKey) + '</a></li>';
+      });
+      if (result.confluencePage) {
+        html += '<li><a href="' + escapeHtml(result.confluencePage.url) + '" target="_blank" rel="noopener noreferrer">Decision Log updated in Confluence</a></li>';
+      }
+      html += '</ul>';
+      html += '<button class="github-publish-btn secondary" type="button" id="jiraResetBtn">Publish again</button>';
+      els.jiraBriefContent.innerHTML = html;
+    }
+    wireJiraBriefButtons();
+    return;
+  }
+
+  const proposals = buildJiraProposals();
+  state.jiraProposals = proposals;
+  const confluenceSpaceKey = state.jiraConfig.confluenceSpaceKey;
+
+  els.jiraBriefStatus.textContent = projectLabel;
+
+  if (proposals.length === 0 && !confluenceSpaceKey) {
+    els.jiraBriefContent.innerHTML = '<p class="github-brief-empty">Link decisions or actions to ' + escapeHtml(projectLabel) + ' issues in the board to propose updates here.</p>';
+    return;
+  }
+
+  let html = '';
+
+  if (proposals.length > 0) {
+    html += '<ul class="github-proposal-list">';
+    proposals.forEach(function(proposal, index) {
+      const label = proposal.issueKey + ' — ' + proposal.linkedItems.length + ' item' + (proposal.linkedItems.length === 1 ? '' : 's');
+      html += '<li class="github-proposal-item">';
+      html += '<label><input type="checkbox" class="jira-proposal-check" data-index="' + index + '"' + (proposal.include ? ' checked' : '') + '>';
+      html += '<span class="github-proposal-type comment">Comment</span>';
+      html += escapeHtml(label) + '</label>';
+      html += '</li>';
+    });
+    html += '</ul>';
+  }
+
+  if (confluenceSpaceKey) {
+    const items = briefItems();
+    const decisionCount = items.decisions.length;
+    html += '<label class="github-transcript-toggle">';
+    html += '<input type="checkbox" id="jiraConfluenceToggle"' + (state.jiraConfig.confluenceDecisionLog !== false ? ' checked' : '') + (decisionCount === 0 ? ' disabled' : '') + '>';
+    html += 'Append ' + decisionCount + ' decision' + (decisionCount === 1 ? '' : 's') + ' to Confluence Decision Log (' + escapeHtml(confluenceSpaceKey) + ')';
+    html += '</label>';
+  }
+
+  const hasAnything = proposals.some(function(p) { return p.include; }) || (confluenceSpaceKey && state.jiraConfig.confluenceDecisionLog !== false && briefItems().decisions.length > 0);
+  html += '<button class="github-publish-btn" type="button" id="jiraPublishBtn"' + (hasAnything ? '' : ' disabled') + '>Publish to Jira</button>';
+
+  els.jiraBriefContent.innerHTML = html;
+  wireJiraBriefButtons();
+}
+
+function wireJiraBriefButtons() {
+  function updatePublishBtn() {
+    const btn = document.querySelector('#jiraPublishBtn');
+    if (!btn) return;
+    const hasProposals = state.jiraProposals.some(function(p) { return p.include; });
+    const confluenceToggle = document.querySelector('#jiraConfluenceToggle');
+    const hasConfluence = confluenceToggle && confluenceToggle.checked;
+    btn.disabled = !hasProposals && !hasConfluence;
+  }
+
+  const proposalChecks = document.querySelectorAll('.jira-proposal-check');
+  proposalChecks.forEach(function(cb) {
+    cb.addEventListener('change', function() {
+      const index = Number(cb.dataset.index);
+      if (state.jiraProposals[index]) state.jiraProposals[index].include = cb.checked;
+      updatePublishBtn();
+    });
+  });
+
+  const confluenceToggle = document.querySelector('#jiraConfluenceToggle');
+  if (confluenceToggle) {
+    confluenceToggle.addEventListener('change', function() {
+      state.jiraConfig.confluenceDecisionLog = confluenceToggle.checked;
+      updatePublishBtn();
+    });
+  }
+
+  const publishBtn = document.querySelector('#jiraPublishBtn');
+  if (publishBtn) publishBtn.addEventListener('click', publishToJira);
+
+  const retryBtn = document.querySelector('#jiraRetryBtn');
+  if (retryBtn) retryBtn.addEventListener('click', function() {
+    state.jiraPublishResult = null;
+    renderAll();
+  });
+
+  const resetBtn = document.querySelector('#jiraResetBtn');
+  if (resetBtn) resetBtn.addEventListener('click', function() {
+    state.jiraPublishResult = null;
+    renderAll();
+  });
+}
+
+async function publishToJira() {
+  if (state.jiraPublishing) return;
+  state.jiraPublishing = true;
+  renderBriefJira();
+
+  const dashboardUrl = window.location.href;
+  const result = { comments: [], confluencePage: null, error: null };
+
+  try {
+    // 1. Post comments on linked Jira issues
+    const includedProposals = state.jiraProposals.filter(function(p) { return p.include; });
+    for (const proposal of includedProposals) {
+      const adf = buildJiraCommentAdf(proposal.issueKey, proposal.linkedItems, dashboardUrl);
+      const commentResult = await jiraRequest('POST', '/rest/api/3/issue/' + proposal.issueKey + '/comment', { body: adf });
+      if (commentResult && commentResult.id) {
+        const issueUrl = 'https://' + (state.atlassianSite || '').replace(/^https?:\/\//, '') + '/browse/' + proposal.issueKey;
+        result.comments.push({ issueKey: proposal.issueKey, url: issueUrl });
+        // Post remote link back to Room Clarity dashboard
+        await jiraRequest('POST', '/rest/api/3/issue/' + proposal.issueKey + '/remotelink', {
+          globalId: 'room-clarity-' + dashboardUrl,
+          object: { url: dashboardUrl, title: 'Room Clarity session', icon: { url16x16: 'https://roomclarity.com/meeting-decision-maker-icon.png', title: 'Room Clarity' } }
+        });
+      }
+    }
+
+    // 2. Append to Confluence Decision Log
+    const confluenceToggle = document.querySelector('#jiraConfluenceToggle');
+    if (confluenceToggle && confluenceToggle.checked && state.jiraConfig.confluenceSpaceKey) {
+      const confluencePage = await appendToConfluenceDecisionLog();
+      if (confluencePage) result.confluencePage = confluencePage;
+    }
+  } catch (e) {
+    result.error = 'Jira publish failed: ' + (e.message || 'Unknown error');
+  }
+
+  state.jiraPublishing = false;
+  state.jiraPublishResult = result;
+  renderAll();
+}
+
+async function appendToConfluenceDecisionLog() {
+  const spaceKey = state.jiraConfig.confluenceSpaceKey;
+  const items = briefItems();
+  const decisions = items.decisions;
+  if (!decisions.length) return null;
+
+  const meeting = state.meetingContext || fakeZoomMeeting;
+  const date = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const dashboardUrl = window.location.href;
+
+  // Find or create the Decision Log page
+  const searchResult = await confluenceRequest('GET', '/wiki/api/v2/pages', null, {
+    spaceKey,
+    title: 'Decision Log',
+    limit: '1'
+  });
+
+  let pageId = null;
+  let currentVersion = 0;
+  let currentBody = '';
+
+  if (searchResult && searchResult.results && searchResult.results.length > 0) {
+    pageId = searchResult.results[0].id;
+    // Fetch current page content
+    const pageDetail = await confluenceRequest('GET', '/wiki/api/v2/pages/' + pageId, null, { 'body-format': 'storage' });
+    currentVersion = pageDetail && pageDetail.version ? pageDetail.version.number : 1;
+    currentBody = pageDetail && pageDetail.body && pageDetail.body.storage ? pageDetail.body.storage.value : '';
+  }
+
+  // Build new rows for the decision table
+  const newRows = decisions.map(function(d) {
+    return '<tr>' +
+      '<td>' + escapeText(d.title) + '</td>' +
+      '<td>' + escapeText(d.detail || '') + '</td>' +
+      '<td>' + escapeText(date) + '</td>' +
+      '<td>' + escapeText(meeting.topic || 'Meeting') + '</td>' +
+      '<td><a href="' + escapeText(dashboardUrl) + '">Room Clarity</a></td>' +
+      '</tr>';
+  }).join('');
+
+  if (!pageId) {
+    // Create the Decision Log page from scratch
+    const tableHeader = '<table><tbody><tr><th>Decision</th><th>Detail</th><th>Date</th><th>Meeting</th><th>Source</th></tr>' + newRows + '</tbody></table>';
+    const createResult = await confluenceRequest('POST', '/wiki/api/v2/pages', {
+      spaceId: await resolveConfluenceSpaceId(spaceKey),
+      title: 'Decision Log',
+      status: 'current',
+      body: { representation: 'storage', value: tableHeader }
+    });
+    if (!createResult || !createResult.id) return null;
+    const pageUrl = 'https://' + (state.atlassianSite || '').replace(/^https?:\/\//, '') + '/wiki' + (createResult._links && createResult._links.webui ? createResult._links.webui : '');
+    return { url: pageUrl };
+  } else {
+    // Append new rows to existing table, or append a new table if none exists
+    let updatedBody;
+    if (currentBody.includes('</tbody></table>')) {
+      updatedBody = currentBody.replace('</tbody></table>', newRows + '</tbody></table>');
+    } else {
+      const tableHeader = '<table><tbody><tr><th>Decision</th><th>Detail</th><th>Date</th><th>Meeting</th><th>Source</th></tr>' + newRows + '</tbody></table>';
+      updatedBody = currentBody + tableHeader;
+    }
+    await confluenceRequest('PUT', '/wiki/api/v2/pages/' + pageId, {
+      id: pageId,
+      version: { number: currentVersion + 1 },
+      title: 'Decision Log',
+      status: 'current',
+      body: { representation: 'storage', value: updatedBody }
+    });
+    const pageUrl = 'https://' + (state.atlassianSite || '').replace(/^https?:\/\//, '') + '/wiki/spaces/' + spaceKey + '/pages/' + pageId;
+    return { url: pageUrl };
+  }
+}
+
+async function resolveConfluenceSpaceId(spaceKey) {
+  // Check loaded spaces first
+  if (state.confluenceSpaces) {
+    const space = state.confluenceSpaces.find(function(s) { return s.key === spaceKey; });
+    if (space && space.id) return space.id;
+  }
+  // Fetch from API
+  const result = await confluenceRequest('GET', '/wiki/api/v2/spaces', null, { keys: spaceKey, limit: '1' });
+  return result && result.results && result.results[0] ? result.results[0].id : null;
+}
+
 function renderBriefPanel() {
   const items = briefItems();
   const key = briefKey(items);
@@ -3335,23 +3700,6 @@ function selectedDiscussionCategory() {
   return info.categories.find(function(category) {
     return category.id === state.githubDiscussionCategoryId;
   }) || info.categories[0] || null;
-}
-
-function renderBriefJira() {
-  if (!els.jiraBriefSection || !els.jiraBriefContent) return;
-  const configured = state.trackerProvider === 'atlassian' && isJiraConfigured();
-  els.jiraBriefSection.hidden = !configured;
-  if (!configured) return;
-  const projectKey = state.jiraConfig.projectKeys[0];
-  const loadedProject = state.jiraProjects && state.jiraProjects.find(function(p) { return p.key === projectKey; });
-  const projectLabel = (state.jiraConfig.projectName || (loadedProject && loadedProject.name) || projectKey) + ' Jira';
-  const linkedCount = Object.keys(state.jiraItemLinks).length;
-  els.jiraBriefStatus.textContent = linkedCount ? linkedCount + ' linked' : '';
-  if (linkedCount === 0) {
-    els.jiraBriefContent.innerHTML = '<p class="github-brief-empty">Link decisions or actions to ' + escapeHtml(projectLabel) + ' issues in the board to propose updates here.</p>';
-  } else {
-    els.jiraBriefContent.innerHTML = '<p class="github-brief-empty">' + linkedCount + ' issue' + (linkedCount === 1 ? '' : 's') + ' linked. Jira publish coming in a future update.</p>';
-  }
 }
 
 function renderBriefGithub() {
