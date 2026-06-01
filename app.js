@@ -2571,7 +2571,6 @@ function renderRunwayTracker() {
         html += '</select>';
       }
 
-      html += '<button class="github-save-btn" type="button" id="jiraSaveConfigBtn">Save</button>';
       html += '</div>';
       if (config && config.projectKeys && config.projectKeys.length > 0) {
         html += '<p class="github-repo-bound">Bound to <strong>' + escapeHtml(config.projectKeys.join(', ')) + '</strong></p>';
@@ -2642,25 +2641,27 @@ function renderRunwayTracker() {
   if (jiraConnectBtn) jiraConnectBtn.addEventListener('click', connectAtlassian);
   const jiraDisconnectBtn = document.querySelector('#jiraDisconnectBtn');
   if (jiraDisconnectBtn) jiraDisconnectBtn.addEventListener('click', disconnectAtlassian);
-  const jiraSaveBtn = document.querySelector('#jiraSaveConfigBtn');
-  if (jiraSaveBtn) {
-    jiraSaveBtn.addEventListener('click', function() {
-      const projectSelect = document.querySelector('#jiraProjectSelect');
-      const sprintToggle = document.querySelector('#jiraActiveSprintOnly');
-      const spaceSelect = document.querySelector('#jiraConfluenceSpaceSelect');
-      const key = projectSelect ? projectSelect.value.trim() : '';
-      if (!key) {
-        alert('Select a Jira project to continue.');
-        return;
-      }
-      saveJiraConfig({
-        projectKeys: [key],
-        activeSprintOnly: sprintToggle ? sprintToggle.checked : false,
-        confluenceSpaceKey: spaceSelect ? spaceSelect.value : ''
-      });
-      renderAll();
+
+  function saveJiraConfigFromForm() {
+    const projectSelect = document.querySelector('#jiraProjectSelect');
+    const sprintToggle = document.querySelector('#jiraActiveSprintOnly');
+    const spaceSelect = document.querySelector('#jiraConfluenceSpaceSelect');
+    const key = projectSelect ? projectSelect.value.trim() : '';
+    if (!key) return; // no project selected yet — don't save
+    saveJiraConfig({
+      projectKeys: [key],
+      activeSprintOnly: sprintToggle ? sprintToggle.checked : false,
+      confluenceSpaceKey: spaceSelect ? spaceSelect.value : ''
     });
+    renderAll();
   }
+
+  const projectSelect = document.querySelector('#jiraProjectSelect');
+  if (projectSelect) projectSelect.addEventListener('change', saveJiraConfigFromForm);
+  const sprintToggle = document.querySelector('#jiraActiveSprintOnly');
+  if (sprintToggle) sprintToggle.addEventListener('change', saveJiraConfigFromForm);
+  const spaceSelect = document.querySelector('#jiraConfluenceSpaceSelect');
+  if (spaceSelect) spaceSelect.addEventListener('change', saveJiraConfigFromForm);
 }
 
 async function loadRelatedGithubIssues(itemId, text) {

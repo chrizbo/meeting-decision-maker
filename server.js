@@ -1609,10 +1609,20 @@ async function handleRtmsWebhookEvent(event) {
   if (event.event === 'meeting.rtms_stopped' || event.event === 'meeting.rtms_interrupted' ||
       event.event === 'webinar.rtms_stopped' || event.event === 'session.rtms_stopped') {
     const state = getRtmsState(payload);
-    state.status = event.event.endsWith('rtms_interrupted') ? 'interrupted' : 'stopped';
+    const isInterrupted = event.event.endsWith('rtms_interrupted');
+    state.status = isInterrupted ? 'interrupted' : 'stopped';
     state.statusReason = payload.reason || payload.error_message || null;
     state.updatedAt = new Date().toISOString();
-    return { stopped: stopRtmsClient(payload), sessionId: rtmsKey(payload) };
+    const stopped = stopRtmsClient(payload);
+    // Auto-retry when interrupted with no transcript yet (e.g. host is silent waiting for others to join).
+    // Cap at 10 retries (~5-10 min at Zoom's ~30-60s silence timeout) so real failures eventually surface an error.
+    const MAX_AUTO_RETRIES = 10;
+    if (isInterrupted && state.transcript.length === 0 && (state._autoRetryCount || 0) < MAX_AUTO_RETRIES) {
+      state._autoRetryCount = (state._autoRetryCount || 0) + 1;
+      console.log('RTMS interrupted with no transcript, auto-retrying in 3s (attempt', state._autoRetryCount + '/' + MAX_AUTO_RETRIES + '):', rtmsKey(payload));
+      setTimeout(() => startRtmsClient(payload), 3000);
+    }
+    return { stopped, sessionId: rtmsKey(payload) };
   }
 
   if (event.event === 'rtms.start_failed' ||
@@ -2114,9 +2124,15 @@ async function handleApi(req, res, pathname) {
     if (jiraBody && upperMethod !== 'GET') {
       fetchOptions.body = JSON.stringify(jiraBody);
     }
-    const jiraSearchUrl = upperMethod === 'GET' && input.params
-      ? jiraUrl + '?' + new URLSearchParams(input.params).toString()
-      : jiraUrl;
+    // For issue search, prefer POST with JSON body to avoid JQL encoding issues.
+    // For all other GETs, append params as query string using %20 encoding.
+    let jiraSearchUrl = jiraUrl;
+    if (upperMethod === 'GET' && input.params) {
+      const qs = Object.entries(input.params)
+        .map(function([k, v]) { return encodeURIComponent(k) + '=' + encodeURIComponent(v); })
+        .join('&');
+      jiraSearchUrl = jiraUrl + '?' + qs;
+    }
     const jiraResponse = await fetch(jiraSearchUrl, fetchOptions);
     const jiraResponseBody = await jiraResponse.json().catch(function() { return {}; });
     sendJson(res, jiraResponse.status, jiraResponseBody);
