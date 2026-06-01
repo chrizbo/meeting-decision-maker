@@ -2338,7 +2338,8 @@ function isGithubConfigured() {
 // ── Atlassian / Jira / Confluence ────────────────────────────────────────────
 
 function jiraRequest(method, path, body, params) {
-  if (state.demoMode) return Promise.resolve({});
+  // Demo mode only blocks meeting-time calls (issue search, comments, subtasks).
+  // Config calls (project list, space list) always go through.
   return fetch('/api/atlassian/proxy', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -2347,7 +2348,6 @@ function jiraRequest(method, path, body, params) {
 }
 
 function confluenceRequest(method, path, body, params) {
-  if (state.demoMode) return Promise.resolve({});
   return fetch('/api/confluence/proxy', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -2367,6 +2367,8 @@ function connectAtlassian() {
     state.atlassianCloudId = cloudId || '';
     state.atlassianSite = site || '';
     state.trackerProvider = 'atlassian';
+    state.jiraProjects = null;     // force reload — clears any cached empty result
+    state.confluenceSpaces = null; // force reload
     localStorage.setItem('atlassianToken', state.atlassianToken);
     localStorage.setItem('atlassianCloudId', state.atlassianCloudId);
     localStorage.setItem('atlassianSite', state.atlassianSite);
@@ -2531,13 +2533,13 @@ function renderRunwayTracker() {
       html += '<div class="github-repo-form">';
 
       // Jira project dropdown
-      html += '<label for="jiraProjectSelect">Jira project</label>';
+      html += '<div class="tracker-label-row"><label for="jiraProjectSelect">Jira project</label><button class="tracker-refresh-btn" type="button" id="jiraRefreshProjects">↻ Refresh</button></div>';
       const projects = state.jiraProjects;
       if (projects === null) {
         html += '<p class="github-runway-hint">Loading projects…</p>';
         loadJiraProjects();
       } else if (projects.length === 0) {
-        html += '<p class="github-runway-hint">No projects found on this site.</p>';
+        html += '<p class="github-runway-hint">No projects found. Try refreshing.</p>';
       } else {
         const savedKey = config && config.projectKeys && config.projectKeys[0] ? config.projectKeys[0] : '';
         html += '<select id="jiraProjectSelect" class="tracker-select">';
@@ -2552,13 +2554,13 @@ function renderRunwayTracker() {
       html += '<label class="tracker-checkbox-label"><input type="checkbox" id="jiraActiveSprintOnly"' + (config && config.activeSprintOnly ? ' checked' : '') + '> Active sprint issues only</label>';
 
       // Confluence space dropdown
-      html += '<label for="jiraConfluenceSpaceSelect">Confluence space <span class="tracker-optional">(optional — for Decision Log)</span></label>';
+      html += '<div class="tracker-label-row"><label for="jiraConfluenceSpaceSelect">Confluence space <span class="tracker-optional">(optional)</span></label><button class="tracker-refresh-btn" type="button" id="jiraRefreshSpaces">↻ Refresh</button></div>';
       const spaces = state.confluenceSpaces;
       if (spaces === null) {
         html += '<p class="github-runway-hint">Loading spaces…</p>';
         loadConfluenceSpaces();
       } else if (spaces.length === 0) {
-        html += '<p class="github-runway-hint">No Confluence spaces found.</p>';
+        html += '<p class="github-runway-hint">No Confluence spaces found. Try refreshing.</p>';
       } else {
         const savedSpace = (config && config.confluenceSpaceKey) || '';
         html += '<select id="jiraConfluenceSpaceSelect" class="tracker-select">';
@@ -2596,6 +2598,18 @@ function renderRunwayTracker() {
       if (!confirm('Switch to Jira & Confluence? Your current tracker connection will be disconnected.')) return;
     }
     selectTrackerProvider('atlassian');
+  });
+
+  // Atlassian refresh buttons
+  const refreshProjectsBtn = document.querySelector('#jiraRefreshProjects');
+  if (refreshProjectsBtn) refreshProjectsBtn.addEventListener('click', function() {
+    state.jiraProjects = null;
+    renderAll();
+  });
+  const refreshSpacesBtn = document.querySelector('#jiraRefreshSpaces');
+  if (refreshSpacesBtn) refreshSpacesBtn.addEventListener('click', function() {
+    state.confluenceSpaces = null;
+    renderAll();
   });
 
   // GitHub sub-handlers
