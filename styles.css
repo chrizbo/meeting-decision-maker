@@ -2849,6 +2849,22 @@ details[open].proposal-preview > summary::before {
   white-space: nowrap;
 }
 
+.tracker-issue-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.tracker-issue-label input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--green, #2f7d68);
+}
+
 .github-linked-issue {
   font-size: 12px;
   margin-bottom: 8px;

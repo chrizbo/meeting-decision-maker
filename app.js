@@ -1119,6 +1119,8 @@ function resetState(keepTranscript) {
   state.githubRelatedIssues = {};
   state.githubItemLinks = {};
   state.githubProposals = [];
+  state.jiraRelatedIssues = {};
+  state.jiraItemLinks = {};
   state.githubTranscriptUpload = false;
   state.githubDiscussionPost = false;
   state.githubDiscussionCategories = null;
@@ -2142,6 +2144,7 @@ function openDetailModal(type, id) {
     els.modalRejectDecision.disabled = item.status === 'rejected';
   }
   renderModalGithubSection(type, id);
+  renderModalJiraSection(type, id);
   els.modal.classList.add('open');
   els.modal.setAttribute('aria-hidden', 'false');
 }
@@ -2645,8 +2648,11 @@ function renderRunwayTracker() {
     const spaceSelect = document.querySelector('#jiraConfluenceSpaceSelect');
     const key = projectSelect ? projectSelect.value.trim() : '';
     if (!key) return; // no project selected yet — don't save
+    // Find the project name from the loaded list
+    const project = state.jiraProjects && state.jiraProjects.find(function(p) { return p.key === key; });
     saveJiraConfig({
       projectKeys: [key],
+      projectName: project ? project.name : key,
       activeSprintOnly: sprintToggle ? sprintToggle.checked : false,
       confluenceSpaceKey: spaceSelect ? spaceSelect.value : ''
     });
@@ -2711,7 +2717,7 @@ function unlinkItemFromGithubIssue(itemId) {
 
 function renderModalGithubSection(type, id) {
   if (!els.modalGithubSection || !els.modalGithubIssues) return;
-  const showGithub = isGithubConfigured() && (type === 'decision' || type === 'action' || type === 'risk');
+  const showGithub = state.trackerProvider === 'github' && isGithubConfigured() && (type === 'decision' || type === 'action' || type === 'risk');
   els.modalGithubSection.hidden = !showGithub;
   if (!showGithub) return;
 
@@ -2731,26 +2737,138 @@ function renderModalGithubSection(type, id) {
   }
 
   let html = '';
-  if (linkedNumber) {
-    html += '<p class="github-linked-issue">Linked to <strong>#' + linkedNumber + '</strong> — <button class="github-unlink-btn" type="button" data-item-id="' + escapeHtml(id) + '">Unlink</button></p>';
-  }
   if (related.issues.length === 0) {
     html += '<p class="github-no-issues">No related issues found in ' + escapeHtml(state.githubConfig.owner + '/' + state.githubConfig.repo) + '.</p>';
   } else {
     html += '<ul class="github-issues-list">';
     related.issues.forEach(function(issue) {
       const isLinked = linkedNumber === issue.number;
+      const checkId = 'gh-link-' + escapeHtml(id) + '-' + issue.number;
       html += '<li class="github-issue-item' + (isLinked ? ' linked' : '') + '">';
+      html += '<label class="tracker-issue-label">';
+      html += '<input type="checkbox" class="github-link-checkbox" data-item-id="' + escapeHtml(id) + '" data-issue-number="' + issue.number + '"' + (isLinked ? ' checked' : '') + ' id="' + checkId + '">';
       html += '<span class="github-issue-state ' + escapeHtml(issue.state) + '">' + escapeHtml(issue.state) + '</span>';
       html += '<a href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer">#' + issue.number + ' ' + escapeHtml(issue.title) + '</a>';
-      if (!isLinked) {
-        html += '<button class="github-link-btn" type="button" data-item-id="' + escapeHtml(id) + '" data-issue-number="' + issue.number + '">Link</button>';
-      }
+      html += '</label>';
       html += '</li>';
     });
     html += '</ul>';
   }
   els.modalGithubIssues.innerHTML = html;
+}
+
+// ── Jira issue surfacing ─────────────────────────────────────────────────────
+
+async function loadRelatedJiraIssues(itemId, text) {
+  if (!isJiraConfigured()) return;
+  if (state.jiraRelatedIssues[itemId]) return;
+  state.jiraRelatedIssues[itemId] = { loading: true, issues: [] };
+  const projectKey = state.jiraConfig.projectKeys[0];
+  // Extract meaningful keywords from the item title (first 5 words, skip short words)
+  const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'for', 'of', 'in', 'to', 'is', 'be', 'with']);
+  const keywords = text.trim().split(/\s+/)
+    .filter(function(w) { return w.length > 3 && !stopWords.has(w.toLowerCase()); })
+    .slice(0, 4)
+    .join(' ')
+    .replace(/"/g, '');
+  const jql = keywords
+    ? 'project = ' + projectKey + ' AND text ~ "' + keywords + '" ORDER BY updated DESC'
+    : 'project = ' + projectKey + ' ORDER BY updated DESC';
+  try {
+    const result = await jiraRequest('GET', '/rest/api/3/search/jql', null, {
+      jql,
+      maxResults: '5',
+      fields: 'summary,status'
+    });
+    state.jiraRelatedIssues[itemId] = {
+      loading: false,
+      issues: (result.issues || []).map(function(i) {
+        const statusName = i.fields && i.fields.status ? i.fields.status.name : '';
+        const isDone = statusName.toLowerCase() === 'done';
+        return {
+          key: i.key,
+          title: i.fields ? i.fields.summary : i.key,
+          url: 'https://' + (state.atlassianSite || '').replace(/^https?:\/\//, '') + '/browse/' + i.key,
+          state: isDone ? 'closed' : 'open',
+          statusName
+        };
+      })
+    };
+  } catch (e) {
+    state.jiraRelatedIssues[itemId] = { loading: false, issues: [] };
+  }
+  state.boardDirty = true;
+  refreshOpenJiraModal(itemId);
+  renderAll();
+}
+
+function refreshOpenJiraModal(itemId) {
+  if (!state.openModalItem || state.openModalItem.id !== itemId) return;
+  renderModalJiraSection(state.openModalItem.type, state.openModalItem.id);
+}
+
+function linkItemToJiraIssue(itemId, issueKey) {
+  state.jiraItemLinks[itemId] = issueKey;
+  state.boardDirty = true;
+  renderAll();
+}
+
+function unlinkItemFromJiraIssue(itemId) {
+  delete state.jiraItemLinks[itemId];
+  state.boardDirty = true;
+  renderAll();
+}
+
+function jiraLinkLabel(type) {
+  if (type === 'decision') return 'Link to decision';
+  if (type === 'action') return 'Link to action';
+  if (type === 'risk') return 'Link to risk';
+  return 'Link';
+}
+
+function renderModalJiraSection(type, id) {
+  if (!els.modalJiraSection || !els.modalJiraIssues) return;
+  const showJira = isJiraConfigured() && (type === 'decision' || type === 'action' || type === 'risk');
+  els.modalJiraSection.hidden = !showJira;
+  if (!showJira) return;
+
+  const related = state.jiraRelatedIssues[id];
+  const linkedKey = state.jiraItemLinks[id];
+
+  if (!related) {
+    const item = findBoardItem(type, id);
+    if (item) loadRelatedJiraIssues(id, item.title || '');
+    els.modalJiraIssues.innerHTML = '<p class="github-issues-loading">Searching related Jira issues…</p>';
+    return;
+  }
+
+  if (related.loading) {
+    els.modalJiraIssues.innerHTML = '<p class="github-issues-loading">Searching related Jira issues…</p>';
+    return;
+  }
+
+  const projectKey = state.jiraConfig.projectKeys[0];
+  const loadedProject = state.jiraProjects && state.jiraProjects.find(function(p) { return p.key === projectKey; });
+  const projectLabel = (state.jiraConfig.projectName || (loadedProject && loadedProject.name) || projectKey) + ' Jira';
+  let html = '';
+  if (related.issues.length === 0) {
+    html += '<p class="github-no-issues">No related issues found in ' + escapeHtml(projectLabel) + '.</p>';
+  } else {
+    html += '<ul class="github-issues-list">';
+    related.issues.forEach(function(issue) {
+      const isLinked = linkedKey === issue.key;
+      const checkId = 'jira-link-' + escapeHtml(id) + '-' + escapeHtml(issue.key);
+      html += '<li class="github-issue-item' + (isLinked ? ' linked' : '') + '">';
+      html += '<label class="tracker-issue-label">';
+      html += '<input type="checkbox" class="jira-link-checkbox" data-item-id="' + escapeHtml(id) + '" data-issue-key="' + escapeHtml(issue.key) + '"' + (isLinked ? ' checked' : '') + ' id="' + checkId + '">';
+      html += '<span class="github-issue-state ' + escapeHtml(issue.state) + '">' + escapeHtml(issue.statusName || issue.state) + '</span>';
+      html += '<a href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(issue.key) + ' ' + escapeHtml(issue.title) + '</a>';
+      html += '</label>';
+      html += '</li>';
+    });
+    html += '</ul>';
+  }
+  els.modalJiraIssues.innerHTML = html;
 }
 
 // --- BRIEF ---
@@ -2959,6 +3077,7 @@ function renderBriefPanel() {
     els.copyBriefButton.disabled = true;
     els.briefContent.innerHTML = '<div class="brief-loading"><span></span><p>Generating meeting brief from included items...</p></div>';
     renderBriefGithub();
+    renderBriefJira();
     return;
   }
   els.copyBriefButton.disabled = false;
@@ -2967,6 +3086,7 @@ function renderBriefPanel() {
   els.briefContent.innerHTML = (state.briefError ? '<p class="brief-error">' + escapeHtml(state.briefError) + '</p>' : '') +
     (markdown ? markdownToBriefHtml(markdown) : '<p class="brief-empty">No items included. Use the board below to accept decisions, promote agent issues, or re-include anything that should appear here.</p>');
   renderBriefGithub();
+  renderBriefJira();
 }
 
 async function requestBriefAnalysis(items, key) {
@@ -3217,9 +3337,26 @@ function selectedDiscussionCategory() {
   }) || info.categories[0] || null;
 }
 
+function renderBriefJira() {
+  if (!els.jiraBriefSection || !els.jiraBriefContent) return;
+  const configured = state.trackerProvider === 'atlassian' && isJiraConfigured();
+  els.jiraBriefSection.hidden = !configured;
+  if (!configured) return;
+  const projectKey = state.jiraConfig.projectKeys[0];
+  const loadedProject = state.jiraProjects && state.jiraProjects.find(function(p) { return p.key === projectKey; });
+  const projectLabel = (state.jiraConfig.projectName || (loadedProject && loadedProject.name) || projectKey) + ' Jira';
+  const linkedCount = Object.keys(state.jiraItemLinks).length;
+  els.jiraBriefStatus.textContent = linkedCount ? linkedCount + ' linked' : '';
+  if (linkedCount === 0) {
+    els.jiraBriefContent.innerHTML = '<p class="github-brief-empty">Link decisions or actions to ' + escapeHtml(projectLabel) + ' issues in the board to propose updates here.</p>';
+  } else {
+    els.jiraBriefContent.innerHTML = '<p class="github-brief-empty">' + linkedCount + ' issue' + (linkedCount === 1 ? '' : 's') + ' linked. Jira publish coming in a future update.</p>';
+  }
+}
+
 function renderBriefGithub() {
   if (!els.githubBriefSection || !els.githubBriefContent) return;
-  const configured = isGithubConfigured();
+  const configured = state.trackerProvider === 'github' && isGithubConfigured();
   els.githubBriefSection.hidden = !configured;
   if (!configured) return;
 
@@ -3718,17 +3855,26 @@ els.copyBriefButton.addEventListener('click', function() {
   });
 });
 
-els.modalGithubIssues.addEventListener('click', function(event) {
-  const linkBtn = event.target.closest('.github-link-btn');
-  if (linkBtn) {
-    linkItemToGithubIssue(linkBtn.dataset.itemId, linkBtn.dataset.issueNumber);
-    if (state.openModalItem) renderModalGithubSection(state.openModalItem.type, state.openModalItem.id);
+els.modalGithubIssues.addEventListener('change', function(event) {
+  const cb = event.target.closest('.github-link-checkbox');
+  if (!cb) return;
+  if (cb.checked) {
+    linkItemToGithubIssue(cb.dataset.itemId, cb.dataset.issueNumber);
+  } else {
+    unlinkItemFromGithubIssue(cb.dataset.itemId);
   }
-  const unlinkBtn = event.target.closest('.github-unlink-btn');
-  if (unlinkBtn) {
-    unlinkItemFromGithubIssue(unlinkBtn.dataset.itemId);
-    if (state.openModalItem) renderModalGithubSection(state.openModalItem.type, state.openModalItem.id);
+  if (state.openModalItem) renderModalGithubSection(state.openModalItem.type, state.openModalItem.id);
+});
+
+els.modalJiraIssues.addEventListener('change', function(event) {
+  const cb = event.target.closest('.jira-link-checkbox');
+  if (!cb) return;
+  if (cb.checked) {
+    linkItemToJiraIssue(cb.dataset.itemId, cb.dataset.issueKey);
+  } else {
+    unlinkItemFromJiraIssue(cb.dataset.itemId);
   }
+  if (state.openModalItem) renderModalJiraSection(state.openModalItem.type, state.openModalItem.id);
 });
 
 els.modalClose.addEventListener('click', closeDetailModal);
