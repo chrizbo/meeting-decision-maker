@@ -581,7 +581,7 @@ function buildAnalysisPrompt(input, skillSet) {
     'Risk rules: if a cue names a concrete downside, failure path, blocker, stakeholder concern, mitigation, warning sign, or option-value loss, emit or update a risk even if an agent_issue would also be useful. Risk cards are durable artifacts; agent_issue cards are live facilitation nudges.',
     'Agent issue rules: throttle only agent_issue items. Do not emit an agent_issue simply because a skill could comment. Emit one only when the host could use it immediately to improve the decision discourse, expose a central assumption, name a major failure path, or challenge weak evidence. If the same concern repeats, update the existing open agent_issue instead of creating another.',
     'Agent trigger rules: when the cue says "what has to be true", "my assumption is", or names an important untested assumption, consider an Assumptions Challenge issue. When the cue says "if we imagine this failing", "fails because", "warning sign", or names a serious failure path, consider a Pre-Mortem issue. When the cue asks "what evidence do we have", distinguishes intuition from evidence, or challenges rationale quality, consider an Argument Dissection issue. When the cue suggests agenda drift, a timebox is expiring, or the room needs opening/closing process help, consider a Facilitator issue. Emit at most one agent_issue for a cue.',
-    'Action rules: emit an action when the transcript explicitly says "Action:", "next action", "I will", "can you", or names concrete follow-up work after the meeting. The labels "Action:" and "next action" override the general caution about future product ideas. Do not emit actions for general future product ideas, mitigations, or things the current prototype might eventually need unless the cue frames them as a next action or explicit follow-up.',
+    'Action rules: emit an action when the cue contains any of these commitment signals — "Action:", "next action", "I will", "I\'ll", "we will", "we\'ll", "I\'d be happy to", "can you", "will send", "will share", "will set up", "will schedule", "let\'s", "let me", or when someone accepts a proposed next step (e.g. "yeah, that would be great", "sounds good", "absolutely"). Also emit when the cue names a concrete deliverable with an implicit owner (e.g. "I\'ll send some materials", "keep me in mind if you have people"). The labels "Action:" and "next action" override the general caution about future product ideas. Do not emit actions for vague aspirations, general future product ideas, or mitigations unless the cue frames them as a concrete next step with an owner or timeline.',
     '',
     '# Skill instructions',
     skillInstructions,
@@ -2083,7 +2083,7 @@ async function handleApi(req, res, pathname) {
       return;
     }
     const { token, cloudId, method, path: jiraPath, body: jiraBody } = input;
-    if (!token || typeof token !== 'string' || token.length > 2000) {
+    if (!token || typeof token !== 'string' || token.length > 4000) {
       sendJson(res, 401, { error: 'Atlassian token required' });
       return;
     }
@@ -2137,7 +2137,7 @@ async function handleApi(req, res, pathname) {
       return;
     }
     const { token, cloudId, method, path: confluencePath, body: confluenceBody } = input;
-    if (!token || typeof token !== 'string' || token.length > 2000) {
+    if (!token || typeof token !== 'string' || token.length > 4000) {
       sendJson(res, 401, { error: 'Atlassian token required' });
       return;
     }
