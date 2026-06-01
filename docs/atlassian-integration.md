@@ -10,43 +10,61 @@ Room Clarity integrates with Atlassian to turn meeting output into durable proje
 - Append confirmed decisions to a Confluence Decision Log page in the configured space.
 - Back-link each updated Jira issue to the Confluence page via Jira remote links.
 
-The integration is configured per meeting: the host connects Atlassian and picks one or more Jira projects during the runway step, confirms proposals in the brief/recap step, and approves each write before it happens.
+The integration is configured per meeting: the host connects Atlassian and picks a Jira project (and optionally a Confluence space) during the runway step, confirms proposals in the brief/recap step, and approves each write before it happens.
 
 One Atlassian OAuth 2.0 (3LO) app covers both Jira and Confluence — one connect flow, one token.
+
+## Tracker selector
+
+The runway **Tracker** block lets the host choose between GitHub or Jira & Confluence for a given meeting — one integration at a time. Switching disconnects the previously connected integration. Support for running both simultaneously is planned for a future release.
 
 ## 1. Create an Atlassian OAuth 2.0 App
 
 1. Go to [developer.atlassian.com/console/myapps](https://developer.atlassian.com/console/myapps).
 2. Click **Create** → **OAuth 2.0 integration**.
 3. Name it **Room Clarity** and accept the terms.
-4. Under **Permissions**, add the following API scopes:
+4. Under **Permissions**, add the following APIs and scopes:
 
-   **Jira API:**
-   - `read:jira-work`
-   - `write:jira-work`
-   - `write:comment:jira`
+   **Jira API (classic scopes):**
+   - `read:jira-work` — read issues, projects, search
+   - `write:jira-work` — create/update issues, post comments, create subtasks
 
-   **Confluence API:**
+   > Note: `write:jira-work` covers posting comments. There is no separate `write:comment:jira` classic scope — do not add it; Atlassian will reject the OAuth request.
+
+   **Confluence API (classic scopes):**
    - `read:confluence-space.summary`
    - `read:confluence-content.all`
    - `write:confluence-content`
 
-5. Under **Authorization**, set the callback URL:
+5. Under **Authorization**, add callback URLs (one per line):
 
-   | Environment | Callback URL |
-   |-------------|-------------|
-   | Production  | `https://roomclarity.com/api/atlassian/oauth/callback` |
-   | Local dev   | `http://localhost:8787/api/atlassian/oauth/callback` |
+   ```
+   https://roomclarity.com/api/atlassian/oauth/callback
+   http://localhost:8787/api/atlassian/oauth/callback
+   ```
 
-6. Copy the **Client ID** and generate a **Secret** (shown once — copy it immediately).
-
-> **Note:** Atlassian requires the app to be authorised against a specific Atlassian Cloud site before the OAuth flow will work. In the app console, go to **Settings → Authorisation** and ensure your site (`yourorg.atlassian.net`) is listed. For local dev, your personal Atlassian site (free tier) works fine.
+6. Click **Save changes**.
+7. Under **Settings**, copy the **Client ID** and generate a **Secret** (shown once — copy it immediately).
 
 ## 2. Add Secrets to Google Secret Manager
 
 ```bash
 echo -n "<client-id>"     | gcloud secrets create atlassian-client-id     --data-file=- --project gen-lang-client-0754444896
 echo -n "<client-secret>" | gcloud secrets create atlassian-client-secret  --data-file=- --project gen-lang-client-0754444896
+```
+
+Grant the Cloud Run service account access to the new secrets:
+
+```bash
+gcloud secrets add-iam-policy-binding atlassian-client-id \
+  --member="serviceAccount:60699219360-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor" \
+  --project gen-lang-client-0754444896
+
+gcloud secrets add-iam-policy-binding atlassian-client-secret \
+  --member="serviceAccount:60699219360-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor" \
+  --project gen-lang-client-0754444896
 ```
 
 If the secrets already exist, add a new version:
@@ -57,8 +75,6 @@ echo -n "<client-secret>" | gcloud secrets versions add atlassian-client-secret 
 ```
 
 ## 3. Deploy with Atlassian Secrets
-
-Add `ATLASSIAN_CLIENT_ID` and `ATLASSIAN_CLIENT_SECRET` to the deploy command alongside the existing secrets:
 
 ```bash
 gcloud run deploy meeting-decision-maker-web \
@@ -73,43 +89,44 @@ The **Connect Atlassian** button in the runway will only appear when both vars a
 
 ## 4. Local Development
 
-Create a second Atlassian OAuth app (or reuse the same one) with `http://localhost:8787/api/atlassian/oauth/callback` as the callback URL. Then pass the credentials when starting the server:
+Pass the credentials when starting the server:
 
 ```bash
 ATLASSIAN_CLIENT_ID=<client-id> ATLASSIAN_CLIENT_SECRET=<client-secret> npm start
 ```
 
-You will need a real Atlassian Cloud site to test against. The free tier at [atlassian.com](https://www.atlassian.com) (up to 10 users) is sufficient — create a Jira project with a few issues and optionally enable Confluence.
+You need a real Atlassian Cloud site to test against. The free tier at [atlassian.com](https://www.atlassian.com) (up to 10 users) is sufficient. Create a Jira project with a few issues and optionally enable Confluence (available as a free add-on from the site's app settings).
+
+The callback URL for local dev is `http://localhost:8787/api/atlassian/oauth/callback` — add it to the Atlassian OAuth app's Authorization settings alongside the production URL.
 
 ## 5. Per-Meeting Configuration
 
 The host configures the Atlassian integration during the **Runway** step:
 
-1. Open the **Jira & Confluence** block in the runway grid.
-2. Click **Connect Atlassian** to start the OAuth flow in a popup. The popup resolves the accessible cloud site automatically — no manual site URL entry needed.
-3. Enter one or more **Jira project keys** (e.g. `ENG` or `ENG, DESIGN`).
+1. In the **Tracker** block, select **Jira & Confluence**.
+2. Click **Connect Atlassian** to start the OAuth flow in a popup. The popup writes the token to `localStorage` directly (bypassing the `window.opener` limitation that can occur after cross-origin navigation through `auth.atlassian.com`) and closes automatically.
+3. Once connected, a **Jira project** dropdown appears populated from the site's projects. Select one.
 4. Optionally toggle **Active sprint issues only** to restrict issue search to the current sprint.
-5. Optionally enter a **Confluence space key** (e.g. `PROJ`) to enable Decision Log updates.
+5. Optionally select a **Confluence space** from the dropdown for Decision Log updates.
+6. Click **Save**.
 
-Project keys and the Confluence space are stored in `localStorage` and pre-filled for future meetings.
+Project and space selections are stored in `localStorage` and pre-filled for future meetings.
 
-During the **meeting**, the board surfaces related Jira issues from the configured projects when decisions and actions are captured. The host can link a board item to a specific Jira issue from the detail modal.
+During the **meeting**, the board will surface related Jira issues from the configured project when decisions and actions are captured (Phase 2 — not yet implemented).
 
-During the **brief/recap** step, the Jira & Confluence section proposes (all opt-in, host-confirmed):
+During the **brief/recap** step, the Jira & Confluence section will propose (all opt-in, host-confirmed — Phase 3, not yet implemented):
 
-- A consolidated comment on each linked Jira issue (decisions + actions + risks that reference it, plus a dashboard link).
-- Optional subtask creation for confirmed action items with known owners.
-- A Decision Log row appended to the configured Confluence space (if set).
-- A remote link from each updated Jira issue back to the Confluence page.
+- A consolidated comment on each linked Jira issue.
+- Optional subtask creation for confirmed action items.
+- A Decision Log row in the configured Confluence space.
+- A remote link from each Jira issue back to the Confluence page and Room Clarity dashboard.
 
-The host checks or unchecks each proposal, then clicks **Publish to Jira**.
-
-## API Routes Added
+## API Routes
 
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/api/atlassian/oauth/start` | Redirect to Atlassian OAuth authorize page |
-| GET | `/api/atlassian/oauth/callback` | Exchange code for token; resolve cloud site; render popup-closing page |
+| GET | `/api/atlassian/oauth/callback` | Exchange code for token; resolve cloud site; write to localStorage; close popup |
 | POST | `/api/atlassian/proxy` | Proxy authenticated Jira REST API calls |
 | POST | `/api/confluence/proxy` | Proxy authenticated Confluence REST API calls |
 
@@ -144,26 +161,50 @@ The host checks or unchecks each proposal, then clicks **Publish to Jira**.
 
 The OAuth access token is obtained by the browser via the popup flow. The token, cloud ID, and site URL are stored in `localStorage` (`atlassianToken`, `atlassianCloudId`, `atlassianSite`). They are sent to the server only on proxied API requests and are never logged.
 
+## OAuth Callback Design Note
+
+The callback page uses `'unsafe-inline'` in its Content Security Policy (scoped only to the `/api/atlassian/oauth/callback` and `/api/github/oauth/callback` routes via `sendOAuthHtml`). This is necessary because:
+
+1. The inline script must write the token to `localStorage` directly, which fires a `storage` event on the main window — the reliable cross-origin popup communication path.
+2. `window.opener.postMessage` is also attempted as the primary path, but Atlassian's OAuth flow navigates through `auth.atlassian.com`, which can null out `window.opener` in some browsers.
+3. `window.close()` must be called from the same inline script.
+
+The `unsafe-inline` exception is scoped only to these two callback endpoints and does not weaken the CSP for the rest of the application.
+
 ## Known Pitfalls
 
-- **Notification spam.** Every Jira comment triggers email to all watchers. Room Clarity sends one consolidated comment per meeting — not one per decision — to keep noise low.
-- **Automation loops.** Jira automation rules can fire on comments. All Room Clarity comments include a `room-clarity` footer so automation rules can exclude them with a condition on comment body text.
-- **Field overwriting.** The proxy uses additive label updates (`update: {labels: [{add: "..."}]}`) rather than SET operations, so existing labels are never overwritten.
-- **Confluence v1 vs v2 API.** The v2 API has a confirmed bug that strips macro body content on page update. Room Clarity uses pure ADF (no macros) in pages it creates, so this does not affect it — but do not add macros to the Decision Log page manually if you expect Room Clarity to keep updating it.
-- **`spaceId` vs space key.** The Confluence v2 API requires a numeric `spaceId`, not the human-readable key. Room Clarity resolves the key to an ID at config time using `GET /wiki/api/v2/spaces`.
-- **Version conflicts (409).** Confluence uses optimistic locking on page updates. Room Clarity always GETs the current version immediately before writing and retries once on 409.
-- **Space permissions.** If the authenticated user lacks "Add Page" permission in the configured Confluence space, the API returns 403 regardless of OAuth scopes. Room Clarity surfaces this as a clear error at publish time.
-- **Multiple Atlassian sites.** The OAuth callback resolves the first accessible resource. If the user has access to multiple Atlassian sites, the first one in the list is used. A future improvement would let users pick from a dropdown.
+- **`write:comment:jira` does not exist as a classic scope.** It is a granular scope only. `write:jira-work` covers comment posting. Do not add `write:comment:jira` to the OAuth scope string — Atlassian will reject the authorization request.
+- **Notification spam.** Every Jira comment triggers email to all watchers. Room Clarity sends one consolidated comment per meeting — not one per decision.
+- **Automation loops.** All Room Clarity comments will include a `room-clarity` footer so Jira automation rules can exclude them.
+- **Field overwriting.** Use additive label updates (`update: {labels: [{add: "..."}]}`) not SET operations.
+- **Confluence v1 vs v2 API.** The v2 API has a confirmed bug that strips macro body content on page update. Room Clarity uses pure ADF (no macros) in pages it creates.
+- **`spaceId` vs space key.** The Confluence v2 API requires a numeric `spaceId`. Room Clarity resolves the key → ID at publish time.
+- **Version conflicts (409).** Room Clarity always GETs the current version immediately before writing and retries once on 409.
+- **Space permissions.** If the authenticated user lacks "Add Page" permission in the configured Confluence space, the API returns 403. This will be surfaced as a clear error at publish time.
+- **Multiple Atlassian sites.** The OAuth callback resolves the first accessible resource. If the user has access to multiple sites, the first one is used.
 
 ## Jira Configuration Concepts
 
 | Jira concept | GitHub equivalent | Notes |
 |---|---|---|
-| Project (key e.g. `ENG`) | Repository | Primary config unit; owns issues, workflow, board |
+| Project (key e.g. `ENG`) | Repository | Primary config unit; selected from dropdown |
 | Issue | Issue | Comments, subtasks, remote links target individual issues |
 | Active sprint | Branch / milestone | Optional filter; uses Jira Agile API |
 | Confluence space | Repo wiki | Optional; used for Decision Log page only |
 
+## What's Built vs. Planned
+
+| Feature | Status |
+|---|---|
+| OAuth connect/disconnect | ✅ Built |
+| Tracker selector (GitHub or Atlassian) | ✅ Built |
+| Project + space dropdowns in runway | ✅ Built |
+| During-meeting Jira issue surfacing | 🔜 Phase 2 |
+| Post-meeting comment on linked issues | 🔜 Phase 3 |
+| Subtask creation from action items | 🔜 Phase 3 |
+| Confluence Decision Log append | 🔜 Phase 3 |
+| Remote links back to dashboard | 🔜 Phase 3 |
+
 ## Longer-term Direction
 
-This integration follows the same proxy pattern as GitHub. The longer-term plan (documented in `docs/github-integration.md`) is to replace both proxy approaches with the Atlassian Forge / MCP pattern, exposing Jira and Confluence as tool-oriented integrations that can be configured without custom OAuth apps. The host-confirmation model — Room Clarity proposes, host approves, then executes — stays the same regardless of the underlying transport.
+This integration follows the same proxy pattern as GitHub. The longer-term plan (documented in `docs/github-integration.md`) is to replace both proxy approaches with the Atlassian Forge / MCP pattern, exposing Jira and Confluence as tool-oriented integrations that can be configured without custom OAuth apps. The host-confirmation model stays the same regardless of the underlying transport.
