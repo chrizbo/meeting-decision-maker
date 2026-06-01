@@ -1718,12 +1718,13 @@ function isAllowedJiraPath(path) {
     /^\/rest\/api\/3\/myself$/,
     /^\/rest\/api\/3\/project\/search$/,
     /^\/rest\/api\/3\/project\/[^/]+$/,
-    /^\/rest\/api\/3\/issue\/search$/,
+    /^\/rest\/api\/3\/search\/jql$/,           // correct JQL search endpoint (v3)
     /^\/rest\/api\/3\/issue\/[^/]+$/,
     /^\/rest\/api\/3\/issue\/[^/]+\/comment$/,
     /^\/rest\/api\/3\/issue$/,
     /^\/rest\/api\/3\/issue\/[^/]+\/remotelink$/,
     /^\/rest\/agile\/1\.0\/board$/,
+    /^\/rest\/agile\/1\.0\/board\/\d+$/,
     /^\/rest\/agile\/1\.0\/board\/\d+\/sprint$/
   ];
   return allowed.some(function(pattern) { return pattern.test(path); });
@@ -2028,7 +2029,10 @@ async function handleApi(req, res, pathname) {
     const params = new URLSearchParams({
       audience: 'api.atlassian.com',
       client_id: atlassianClientId,
-      scope: 'read:jira-work write:jira-work read:confluence-space.summary read:confluence-content.all write:confluence-content offline_access',
+      // Classic scopes for platform (REST v3): read:jira-work, write:jira-work
+      // Granular scopes for Jira Software (Agile API): read:board-scope, read:sprint
+      // Do NOT mix classic + granular for the same product — causes 401 scope mismatch
+      scope: 'read:jira-work write:jira-work read:board-scope:jira-software read:sprint:jira-software read:confluence-space.summary read:confluence-content.all write:confluence-content offline_access',
       redirect_uri: (publicBaseUrl || 'http://localhost:8787') + '/api/atlassian/oauth/callback',
       state: randomBytes(16).toString('hex'),
       response_type: 'code',
@@ -2124,8 +2128,6 @@ async function handleApi(req, res, pathname) {
     if (jiraBody && upperMethod !== 'GET') {
       fetchOptions.body = JSON.stringify(jiraBody);
     }
-    // For issue search, prefer POST with JSON body to avoid JQL encoding issues.
-    // For all other GETs, append params as query string using %20 encoding.
     let jiraSearchUrl = jiraUrl;
     if (upperMethod === 'GET' && input.params) {
       const qs = Object.entries(input.params)
@@ -2133,6 +2135,7 @@ async function handleApi(req, res, pathname) {
         .join('&');
       jiraSearchUrl = jiraUrl + '?' + qs;
     }
+    console.log('Jira proxy:', upperMethod, jiraSearchUrl.replace(/Bearer [^ ]+/, 'Bearer [redacted]'));
     const jiraResponse = await fetch(jiraSearchUrl, fetchOptions);
     const jiraResponseBody = await jiraResponse.json().catch(function() { return {}; });
     sendJson(res, jiraResponse.status, jiraResponseBody);

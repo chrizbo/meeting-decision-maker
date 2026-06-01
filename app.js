@@ -2572,9 +2572,6 @@ function renderRunwayTracker() {
       }
 
       html += '</div>';
-      if (config && config.projectKeys && config.projectKeys.length > 0) {
-        html += '<p class="github-repo-bound">Bound to <strong>' + escapeHtml(config.projectKeys.join(', ')) + '</strong></p>';
-      }
       html += '<button class="github-disconnect-btn" type="button" id="jiraDisconnectBtn">Disconnect</button>';
     }
   }
