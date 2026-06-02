@@ -2697,6 +2697,15 @@ details[open].proposal-preview > summary::before {
   color: #9a6700;
 }
 
+.proposal-auto-linked {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-right: 2px;
+}
+
 .github-transcript-toggle {
   display: flex;
   align-items: center;

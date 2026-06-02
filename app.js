@@ -280,6 +280,7 @@ const state = {
   jiraRelatedIssues: {},
   jiraItemLinks: {},
   jiraProposals: [],
+  jiraProposalsSearching: false,
   jiraPublishing: false,
   jiraPublishResult: null
 };
@@ -3251,43 +3252,57 @@ function escapeText(str) {
 function buildJiraProposals() {
   if (!isJiraConfigured()) return [];
   const items = briefItems();
-  const proposals = [];
+  const byIssue = {};  // issueKey → { linkedItems, autoLinked, issueTitle }
+  let searching = false;
+  const newIssueProposals = [];
 
-  // Linked items → one consolidated comment proposal per Jira issue
-  const byIssue = {};
   const allItems = [
-    ...items.decisions.map(function(d) { return { type: 'decision', item: d }; }),
-    ...items.actions.map(function(a) { return { type: 'action', item: a }; }),
-    ...items.risks.map(function(r) { return { type: 'risk', item: r }; })
+    ...items.decisions.map(function(d) { return { itemType: 'decision', item: d }; }),
+    ...items.actions.map(function(a) { return { itemType: 'action', item: a }; }),
+    ...items.risks.map(function(r) { return { itemType: 'risk', item: r }; })
   ];
+
   allItems.forEach(function(entry) {
-    const key = state.jiraItemLinks[entry.item.id];
-    if (!key) return;
-    if (!byIssue[key]) byIssue[key] = [];
-    byIssue[key].push(entry);
-  });
-  Object.keys(byIssue).forEach(function(issueKey) {
-    const linkedItems = byIssue[issueKey];
-    proposals.push({
-      type: 'comment',
-      issueKey,
-      linkedItems,
-      include: true,
-      label: issueKey + ' — ' + linkedItems.length + ' item' + (linkedItems.length === 1 ? '' : 's')
-    });
+    const { itemType, item } = entry;
+    const explicitKey = state.jiraItemLinks[item.id];
+
+    if (explicitKey) {
+      // Explicitly linked in the board modal
+      if (!byIssue[explicitKey]) byIssue[explicitKey] = { linkedItems: [], autoLinked: false };
+      byIssue[explicitKey].linkedItems.push({ type: itemType, item });
+    } else if (itemType !== 'risk') {
+      // Decisions and actions: auto-link from search results
+      const related = state.jiraRelatedIssues[item.id];
+      if (!related) {
+        // Search hasn't run yet — trigger it and wait
+        loadRelatedJiraIssues(item.id, (item.title || '') + ' ' + (item.detail || item.summary || ''));
+        searching = true;
+      } else if (related.loading) {
+        searching = true;
+      } else if (related.issues.length > 0) {
+        // Auto-link to top result
+        const top = related.issues[0];
+        if (!byIssue[top.key]) byIssue[top.key] = { linkedItems: [], autoLinked: true, issueTitle: top.title };
+        byIssue[top.key].linkedItems.push({ type: itemType, item });
+      } else {
+        // No related issues found → propose a new issue
+        newIssueProposals.push({ type: 'issue', itemType, item, include: true, label: 'New issue: ' + item.title });
+      }
+    }
   });
 
-  // Unlinked accepted decisions and actions → new Jira issue proposals
-  items.decisions.forEach(function(d) {
-    if (state.jiraItemLinks[d.id]) return;
-    proposals.push({ type: 'issue', itemType: 'decision', item: d, include: true, label: 'New issue: ' + d.title });
-  });
-  items.actions.forEach(function(a) {
-    if (state.jiraItemLinks[a.id]) return;
-    proposals.push({ type: 'issue', itemType: 'action', item: a, include: true, label: 'New issue: ' + a.title });
+  state.jiraProposalsSearching = searching;
+
+  const commentProposals = Object.keys(byIssue).map(function(issueKey) {
+    const { linkedItems, autoLinked, issueTitle } = byIssue[issueKey];
+    const shortTitle = issueTitle && issueTitle.length > 50 ? issueTitle.slice(0, 50) + '…' : issueTitle;
+    const label = autoLinked && issueTitle
+      ? issueKey + ': ' + shortTitle
+      : issueKey + ' — ' + linkedItems.length + ' item' + (linkedItems.length === 1 ? '' : 's');
+    return { type: 'comment', issueKey, linkedItems, autoLinked: Boolean(autoLinked), include: true, label };
   });
 
-  return proposals;
+  return [...commentProposals, ...newIssueProposals];
 }
 
 function buildJiraProposalPreview(proposal) {
@@ -3379,15 +3394,20 @@ function renderBriefJira() {
   const proposals = buildJiraProposals();
   state.jiraProposals = proposals;
   const confluenceSpaceKey = state.jiraConfig.confluenceSpaceKey;
+  const searching = state.jiraProposalsSearching;
 
-  els.jiraBriefStatus.textContent = projectLabel;
+  els.jiraBriefStatus.textContent = searching ? 'Searching…' : projectLabel;
 
-  if (proposals.length === 0 && !confluenceSpaceKey) {
+  if (proposals.length === 0 && !confluenceSpaceKey && !searching) {
     els.jiraBriefContent.innerHTML = '<p class="github-brief-empty">Accept decisions or actions on the board to create Jira proposals.</p>';
     return;
   }
 
   let html = '';
+
+  if (searching) {
+    html += '<p class="github-issues-loading">Searching for related Jira issues…</p>';
+  }
 
   if (proposals.length > 0) {
     html += '<ul class="github-proposal-list">';
@@ -3395,6 +3415,7 @@ function renderBriefJira() {
       html += '<li class="github-proposal-item">';
       html += '<label><input type="checkbox" class="jira-proposal-check" data-index="' + index + '"' + (proposal.include ? ' checked' : '') + '>';
       html += '<span class="github-proposal-type ' + proposal.type + '">' + (proposal.type === 'issue' ? 'Issue' : 'Comment') + '</span>';
+      if (proposal.autoLinked) html += '<span class="proposal-auto-linked" title="Auto-matched from search">auto</span> ';
       html += escapeHtml(proposal.label) + '</label>';
       const previewLabel = proposal.type === 'comment' ? 'Preview comment' : 'Preview issue body';
       html += '<details class="proposal-preview"><summary>' + previewLabel + '</summary>';
@@ -3414,7 +3435,7 @@ function renderBriefJira() {
   }
 
   const hasAnything = proposals.some(function(p) { return p.include; }) || (confluenceSpaceKey && state.jiraConfig.confluenceDecisionLog !== false && briefItems().decisions.length > 0);
-  html += '<button class="github-publish-btn" type="button" id="jiraPublishBtn"' + (hasAnything ? '' : ' disabled') + '>Publish to Jira</button>';
+  html += '<button class="github-publish-btn" type="button" id="jiraPublishBtn"' + (hasAnything && !searching ? '' : ' disabled') + '>Publish to Jira</button>';
 
   els.jiraBriefContent.innerHTML = html;
   wireJiraBriefButtons();
