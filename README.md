@@ -206,7 +206,7 @@ POST /api/zoom/rtms-webhook
 
 When Zoom sends `meeting.rtms_started`, the service creates an `@zoom/rtms` client, joins the stream, and listens for `onTranscriptData`. Transcript callbacks are normalized into the same cue shape used by mock playback, sent to Gemini with the last 90 seconds of meeting-feed context, and accumulated in in-memory RTMS meeting state.
 
-Meeting chat is handled as another live feed source when the Zoom app has `meeting:read:meeting_chat`. The backend accepts chat-shaped RTMS webhook payloads, parses raw RTMS event payloads that identify chat media, and will use an SDK `onChatData` callback if a future `@zoom/rtms` version exposes one. Chat messages are stored beside transcript cues with `source: "chat"`, displayed in the Live Feed with a Chat label, and analyzed through the same decision/risk/action extraction path.
+Meeting chat is handled as another live feed source when the Zoom app subscribes to the Meetings webhook event `meeting.chat_message_sent` / In-meeting chat message received. The backend also accepts chat-shaped RTMS webhook payloads, parses raw RTMS event payloads that identify chat media, and will use an SDK `onChatData` callback if a future `@zoom/rtms` version exposes one. Chat messages are stored beside transcript cues with `source: "chat"`, displayed in the Live Feed with a Chat label, and analyzed through the same decision/risk/action extraction path.
 
 Incoming Zoom webhook events are verified with `ZOOM_WEBHOOK_SECRET_TOKEN`, `x-zm-request-timestamp`, and `x-zm-signature`. Non-validation webhook events must also be inside the configured freshness window, which defaults to five minutes. URL validation events use the same secret token to return Zoom's encrypted validation token.
 

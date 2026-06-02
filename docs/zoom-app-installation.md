@@ -117,6 +117,7 @@ Enable event subscriptions for:
 
 - `meeting.rtms_started`
 - `meeting.rtms_stopped`
+- `meeting.chat_message_sent` / In-meeting chat message received
 - interrupted/failed RTMS events if Zoom exposes them.
 
 Set the event notification endpoint URL to:
@@ -176,7 +177,7 @@ Current backend behavior:
 2. Signed Zoom webhook events are verified with `x-zm-request-timestamp` and `x-zm-signature`, and non-validation events must be inside the configured freshness window.
 3. `meeting.rtms_started` causes the backend to create an `@zoom/rtms` client and join the stream.
 4. `onTranscriptData` callbacks are normalized into transcript cues.
-5. Meeting chat is normalized into the same cue stream when Zoom sends chat-shaped RTMS webhook/raw event payloads, or when a future `@zoom/rtms` SDK exposes `onChatData`.
+5. Meeting chat is normalized into the same cue stream from the Meetings webhook event `meeting.chat_message_sent`. The backend still accepts chat-shaped RTMS webhook/raw event payloads, or a future `@zoom/rtms` SDK `onChatData` callback, but the Meetings webhook is the reliable live-chat path today.
 6. Cues are analyzed with Gemini and accumulated in in-memory RTMS session state.
 7. Browser dashboard pages can poll matching RTMS session records and display transcript/chat-derived board state.
 8. The Recap step builds a browser-state meeting brief from included decisions, actions, risks, and open questions.

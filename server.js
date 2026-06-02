@@ -1392,6 +1392,9 @@ function transcriptArrivalSeconds(state) {
 function normalizedTranscriptStart(rawTimestamp, state, metadata = {}) {
   const arrivalStart = transcriptArrivalSeconds(state);
   const previousCue = state.transcript[state.transcript.length - 1];
+  if (metadata.timestampUnit === 'arrival') {
+    return Math.max(arrivalStart, previousCue ? previousCue.end || previousCue.start + 3 : 0);
+  }
   const parsedStart = timestampToSeconds(rawTimestamp, state, metadata.timestampUnit);
   if (!previousCue || parsedStart > previousCue.start) return parsedStart;
   return Math.max(arrivalStart, previousCue.end || previousCue.start + 3);
@@ -1539,6 +1542,35 @@ function ingestRtmsRawEventChats(payload, rawEventData) {
     });
   });
   return chatPayloads.length;
+}
+
+function zoomMeetingChatPayload(event = {}) {
+  if (!/^meeting\.chat_message_/i.test(String(event.event || ''))) return null;
+  const payload = event.payload || {};
+  const object = payload.object || {};
+  const chatMessage = object.chat_message || {};
+  const text = normalizeRtmsChatText({
+    text: chatMessage.message_content || chatMessage.message || chatMessage.text || chatMessage.content
+  });
+  if (!text) return null;
+  const meetingUuid = object.meeting_uuid || object.uuid || payload.meeting_uuid || payload.uuid || '';
+  const meetingId = object.meeting_id || object.id || payload.meeting_id || payload.id || '';
+  const sentAt = chatMessage.date_time ? Date.parse(chatMessage.date_time) : Number(event.event_ts || Date.now());
+  return {
+    payload: {
+      meeting_uuid: meetingUuid,
+      meeting_id: meetingId,
+      rtms_stream_id: object.rtms_stream_id || payload.rtms_stream_id || null,
+      media_type: 'chat',
+      message_id: chatMessage.message_id || null
+    },
+    text,
+    timestamp: Number.isFinite(sentAt) ? sentAt : Date.now(),
+    metadata: {
+      userName: chatMessage.sender_name || object.sender_name || payload.sender_name || 'Zoom chat',
+      timestampUnit: 'arrival'
+    }
+  };
 }
 
 function formatServerTime(seconds) {
@@ -1693,11 +1725,18 @@ async function handleRtmsWebhookEvent(event) {
   if (event.event === 'endpoint.url_validation') {
     return handleZoomUrlValidation(event) || { ok: false, reason: 'missing validation token or secret' };
   }
+  const meetingChat = zoomMeetingChatPayload(event);
+  if (meetingChat) {
+    console.log('Zoom meeting chat webhook received:', rtmsKey(meetingChat.payload), 'message_id:', meetingChat.payload.message_id || 'n/a');
+    return ingestRtmsChat(meetingChat.payload, meetingChat.text, meetingChat.text.length, meetingChat.timestamp, meetingChat.metadata);
+  }
+
   if (event.event && event.event !== 'meeting.transcript_completed') {
     const messageLooksLikeChat = payloadLooksLikeRtmsChat(payload, event.event);
     const operationalReason = payload.reason || payload.error_message || (messageLooksLikeChat ? null : payload.message);
     console.log('RTMS webhook event:', event.event, 'key:', rtmsKey(payload), 'media_type:', payload.media_type || 'n/a', 'stream_id:', payload.rtms_stream_id || 'n/a', 'reason:', operationalReason || 'n/a');
   }
+
   if (event.event === 'meeting.rtms_started' || event.event === 'webinar.rtms_started' || event.event === 'session.rtms_started') {
     return startRtmsClient(payload);
   }

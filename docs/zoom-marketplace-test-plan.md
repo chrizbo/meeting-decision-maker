@@ -185,9 +185,10 @@ Expected result:
 
 - The app calls the Zoom Apps SDK RTMS start method.
 - Zoom sends RTMS webhook events to `https://roomclarity.com/api/zoom/rtms-webhook`.
+- Zoom sends the Meetings webhook event `meeting.chat_message_sent` to the same endpoint when a meeting chat message is sent.
 - The Room Clarity backend joins the RTMS stream.
 - Transcript cues appear in the dashboard state with correct timestamps.
-- Meeting chat messages appear in the Live Feed with a `Chat` label when Zoom sends RTMS chat data.
+- Meeting chat messages appear in the Live Feed with a `Chat` label.
 - Decision, risk, action, or agent-prompt cards update from the transcript or chat cues.
 - Stopping RTMS ends the stream and updates the app status.
 
