@@ -928,7 +928,20 @@ function loadTranscript(raw, filename) {
   state.cues = isVtt ? parseVtt(raw) : parseTxt(raw);
   state.duration = Math.max.apply(null, state.cues.map(function(cue) { return cue.end; }).concat([1]));
   if (!state.demoTranscript) {
-    state.runwayData = { agendaItems: [] };
+    const meetingName = sourceName.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+    const speakerSet = {};
+    state.cues.forEach(function(cue) { if (cue.speaker) speakerSet[cue.speaker] = true; });
+    const speakers = Object.keys(speakerSet);
+    const owner = speakers.length > 0 ? speakers[0] : '';
+    state.runwayData = {
+      title: meetingName,
+      purpose: '',
+      agendaTitle: 'Agenda',
+      agendaItems: [],
+      decisionFrame: { mode: 'Decide', owner: owner, successCondition: '' },
+      participationNorm: '',
+      openingPrompt: ''
+    };
   }
   resetState(false);
   renderTranscript();
@@ -2372,20 +2385,28 @@ async function atlassianFetch(proxyPath, method, path, body, params) {
     });
   };
   let r = await makeReq(state.atlassianToken);
-  if (r.status === 401 && state.atlassianRefreshToken) {
-    try {
-      await refreshAtlassianToken();
+  if (r.status === 401) {
+    if (state.atlassianRefreshToken) {
+      // Try a silent token refresh. Only mark the session expired if the
+      // refresh call itself fails. A 401 after a successful refresh is a
+      // permissions issue (e.g. Confluence not on this site) — not expiry.
+      try {
+        await refreshAtlassianToken();
+      } catch (e) {
+        state.atlassianTokenExpired = true;
+        renderAll();
+        throw new Error('Atlassian session expired. Please reconnect.');
+      }
       r = await makeReq(state.atlassianToken);
-    } catch (e) {
+      if (r.status === 401) {
+        throw new Error('Atlassian API permission denied (401 after token refresh).');
+      }
+    } else {
+      // No refresh token — session is expired
       state.atlassianTokenExpired = true;
       renderAll();
       throw new Error('Atlassian session expired. Please reconnect.');
     }
-  }
-  if (r.status === 401) {
-    state.atlassianTokenExpired = true;
-    renderAll();
-    throw new Error('Atlassian session expired. Please reconnect.');
   }
   return r.json().catch(function() { return {}; });
 }
