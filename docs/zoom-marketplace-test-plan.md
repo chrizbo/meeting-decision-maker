@@ -167,7 +167,7 @@ Expected result:
 
 ## Test Scenario 6: Start RTMS From the Zoom App
 
-Purpose: verify the app's end-to-end RTMS path — from SDK start to live transcript appearing on the dashboard.
+Purpose: verify the app's end-to-end RTMS path — from SDK start to live transcript and meeting chat appearing on the dashboard.
 
 Steps:
 
@@ -177,8 +177,9 @@ Steps:
 4. Click Start RTMS.
 5. If Zoom prompts for host/admin consent or disclosure, approve the prompt.
 6. Speak a few short test sentences in the meeting, including one clear decision and one action item.
-7. Watch the Room Clarity dashboard for transcript-derived updates.
-8. Click Stop RTMS when finished.
+7. Send a Zoom meeting chat message with one clear action or decision cue.
+8. Watch the Room Clarity dashboard for transcript-derived and chat-derived updates.
+9. Click Stop RTMS when finished.
 
 Expected result:
 
@@ -186,7 +187,8 @@ Expected result:
 - Zoom sends RTMS webhook events to `https://roomclarity.com/api/zoom/rtms-webhook`.
 - The Room Clarity backend joins the RTMS stream.
 - Transcript cues appear in the dashboard state with correct timestamps.
-- Decision, risk, action, or agent-prompt cards update from the transcript.
+- Meeting chat messages appear in the Live Feed with a `Chat` label when Zoom sends RTMS chat data.
+- Decision, risk, action, or agent-prompt cards update from the transcript or chat cues.
 - Stopping RTMS ends the stream and updates the app status.
 
 ## Test Scenario 7: Review and Copy the Meeting Brief

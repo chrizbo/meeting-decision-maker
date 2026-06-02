@@ -204,7 +204,9 @@ The Zoom RTMS webhook endpoint is:
 POST /api/zoom/rtms-webhook
 ```
 
-When Zoom sends `meeting.rtms_started`, the service creates an `@zoom/rtms` client, joins the stream, and listens for `onTranscriptData`. Transcript callbacks are normalized into the same cue shape used by mock playback, sent to Gemini with the last 90 seconds of transcript context, and accumulated in in-memory RTMS meeting state.
+When Zoom sends `meeting.rtms_started`, the service creates an `@zoom/rtms` client, joins the stream, and listens for `onTranscriptData`. Transcript callbacks are normalized into the same cue shape used by mock playback, sent to Gemini with the last 90 seconds of meeting-feed context, and accumulated in in-memory RTMS meeting state.
+
+Meeting chat is handled as another live feed source when the Zoom app has `meeting:read:meeting_chat`. The backend accepts chat-shaped RTMS webhook payloads, parses raw RTMS event payloads that identify chat media, and will use an SDK `onChatData` callback if a future `@zoom/rtms` version exposes one. Chat messages are stored beside transcript cues with `source: "chat"`, displayed in the Live Feed with a Chat label, and analyzed through the same decision/risk/action extraction path.
 
 Incoming Zoom webhook events are verified with `ZOOM_WEBHOOK_SECRET_TOKEN`, `x-zm-request-timestamp`, and `x-zm-signature`. Non-validation webhook events must also be inside the configured freshness window, which defaults to five minutes. URL validation events use the same secret token to return Zoom's encrypted validation token.
 
@@ -225,4 +227,4 @@ curl -H "x-admin-token: $ROOM_CLARITY_ADMIN_TOKEN" "$SERVICE_URL/api/rtms/sessio
 curl "$SERVICE_URL/api/rtms/sessions/MEETING_UUID?t=DASHBOARD_TOKEN"
 ```
 
-The `/api/rtms/sessions/:id` route accepts the meeting UUID, stream ID, or session ID — whichever the client has available. For local route testing, the webhook also accepts transcript-like payloads with `payload.text`, `payload.transcript`, `payload.caption`, or `payload.message`.
+The `/api/rtms/sessions/:id` route accepts the meeting UUID, stream ID, or session ID — whichever the client has available. For local route testing, the webhook also accepts transcript-like payloads with `payload.text`, `payload.transcript`, `payload.caption`, or `payload.message`, and chat-like payloads with chat media/type markers plus `payload.text`, `payload.message`, `payload.chat_message`, `payload.chatMessage`, or `payload.content`.

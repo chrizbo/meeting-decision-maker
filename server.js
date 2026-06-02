@@ -570,7 +570,7 @@ function buildAnalysisPrompt(input, skillSet) {
 
   return [
     'You are the analysis worker for Meeting Decision Maker.',
-    'Use the loaded meeting skills to analyze one live transcript cue.',
+    'Use the loaded meeting skills to analyze one live meeting feed cue. The cue may come from spoken transcript or Zoom meeting chat.',
     'Return only JSON with this shape: {"items":[{"type":"decision|risk|action|agent_issue","updateMode":"create|update","targetId":"existing item id when updating","title":"short title","summary":"short board-ready summary","status":"forming|pending|accepted|rejected","agent":"Assumptions Challenge|Pre-Mortem|Argument Dissection|Facilitator","priority":"low|medium|high"}]}.',
     'Rules: emit no more than 2 non-action items (decisions, risks, agent_issues); actions are not capped — emit as many actions as the cue warrants; prefer no item over weak speculation for decisions and risks; actions do not require the same confidence bar — if it sounds like future work, emit it; preserve uncertainty; do not invent owners or agreement; for agent_issue items include agent and priority.',
     'Operational priority: extract durable meeting artifacts first. Do not let agent_issue selectivity suppress real decisions, risks, or actions.',
@@ -592,7 +592,7 @@ function buildAnalysisPrompt(input, skillSet) {
     '# Current cue',
     JSON.stringify(cue, null, 2),
     '',
-    '# Recent transcript window',
+    '# Recent meeting feed window',
     JSON.stringify(transcriptWindow, null, 2),
     '',
     '# Current meeting state',
@@ -1404,12 +1404,21 @@ function transcriptWindowForServerCue(state, cue) {
   }).slice(-12);
 }
 
+function rtmsCueSource(metadata = {}) {
+  return metadata.source === 'chat' ? 'chat' : 'transcript';
+}
+
+function rtmsSpeaker(metadata = {}, source = 'transcript') {
+  return metadata.userName || metadata.displayName || metadata.user || metadata.sender || (source === 'chat' ? 'Zoom chat' : 'Zoom participant');
+}
+
 async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata = {}) {
   const state = getRtmsState(payload);
   const session = await findSessionForRtmsState(state);
   if (session) state.recordMode = normalizeRecordMode(session.recordMode);
+  const source = rtmsCueSource(metadata);
   const text = normalizeTranscriptText(buffer, size);
-  if (!text) return { ignored: true, reason: 'empty transcript' };
+  if (!text) return { ignored: true, reason: `empty ${source}` };
   if (state.recordMode === 'off') {
     state.offRecordCueCount = (state.offRecordCueCount || 0) + 1;
     state.updatedAt = new Date().toISOString();
@@ -1424,7 +1433,7 @@ async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata =
   const rawTs = timestamp != null ? timestamp : (metadata.startTs != null ? metadata.startTs : payload.event_ts);
   const cueIndex = state.transcript.length;
   if (cueIndex < 3) {
-    console.log(`RTMS cue[${cueIndex}] rawTs=${rawTs} type=${typeof rawTs} start_time=${payload.start_time} timestamp=${payload.timestamp} event_ts=${payload.event_ts} endTime=${metadata.endTime} unit=${state.firstTranscriptTimestampUnit}`);
+    console.log(`RTMS cue[${cueIndex}] source=${source} rawTs=${rawTs} type=${typeof rawTs} start_time=${payload.start_time} timestamp=${payload.timestamp} event_ts=${payload.event_ts} endTime=${metadata.endTime} unit=${state.firstTranscriptTimestampUnit}`);
   }
   const start = normalizedTranscriptStart(rawTs, state, metadata);
   if (cueIndex < 3) {
@@ -1433,13 +1442,15 @@ async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata =
   const rawEnd = metadata.endTime != null ? Number(metadata.endTime) : null;
   const parsedEnd = rawEnd != null && Number.isFinite(rawEnd) ? timestampToSeconds(rawEnd, state) : null;
   const end = (parsedEnd != null && parsedEnd > start) ? parsedEnd : start + 3;
+  const speaker = rtmsSpeaker(metadata, source);
   const cue = {
     id: randomUUID(),
     start,
     end,
-    speaker: metadata.userName || metadata.displayName || metadata.user || 'Zoom participant',
+    speaker,
     text,
-    evidence: `${formatServerTime(start)} · ${metadata.userName || metadata.displayName || 'Zoom participant'}`
+    source,
+    evidence: `${formatServerTime(start)} · ${speaker}${source === 'chat' ? ' · chat' : ''}`
   };
 
   state.transcript.push(cue);
@@ -1464,6 +1475,70 @@ async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata =
     cue,
     analysis
   };
+}
+
+function normalizeRtmsChatText(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') return value.trim();
+  if (Buffer.isBuffer(value)) return value.toString('utf8').trim();
+  if (typeof value === 'object') {
+    return String(
+      value.text || value.message || value.chat_message || value.chatMessage || value.content || ''
+    ).trim();
+  }
+  return String(value).trim();
+}
+
+function payloadLooksLikeRtmsChat(payload = {}, eventName = '') {
+  const lowerEvent = String(eventName || payload.event || payload.event_type || payload.type || '').toLowerCase();
+  const lowerMedia = String(payload.media_type || payload.mediaType || payload.media_data_type || payload.data_type || payload.dataType || '').toLowerCase();
+  const numericType = Number(payload.message_type || payload.messageType || payload.media_type || payload.mediaType || payload.media_data_type || payload.data_type);
+  return lowerEvent.includes('chat') ||
+    lowerMedia.includes('chat') ||
+    numericType === 18 ||
+    payload.chat_message != null ||
+    payload.chatMessage != null;
+}
+
+async function ingestRtmsChat(payload, buffer, size, timestamp, metadata = {}) {
+  return ingestRtmsTranscript(payload, buffer, size, timestamp, Object.assign({ source: 'chat' }, metadata));
+}
+
+function collectRtmsChatPayloads(value, eventName = '', output = []) {
+  if (!value || typeof value !== 'object') return output;
+  if (payloadLooksLikeRtmsChat(value, eventName) && normalizeRtmsChatText(value)) output.push(value);
+  Object.keys(value).forEach(function(key) {
+    const child = value[key];
+    if (Array.isArray(child)) {
+      child.forEach(function(item) { collectRtmsChatPayloads(item, eventName, output); });
+    } else if (child && typeof child === 'object' && !Buffer.isBuffer(child)) {
+      collectRtmsChatPayloads(child, eventName || key, output);
+    }
+  });
+  return output;
+}
+
+function ingestRtmsRawEventChats(payload, rawEventData) {
+  let parsed;
+  try {
+    parsed = typeof rawEventData === 'string' ? JSON.parse(rawEventData) : rawEventData;
+  } catch (_error) {
+    return 0;
+  }
+  const eventName = parsed && (parsed.event || parsed.event_type || parsed.type || '');
+  const chatPayloads = collectRtmsChatPayloads(parsed, eventName);
+  chatPayloads.forEach(function(chatPayload) {
+    const text = normalizeRtmsChatText(chatPayload);
+    const timestamp = chatPayload.start_time || chatPayload.timestamp || chatPayload.event_ts || parsed.timestamp || parsed.event_ts || Date.now();
+    ingestRtmsChat(Object.assign({}, payload, chatPayload), text, text.length, timestamp, {
+      userName: chatPayload.sender || chatPayload.sender_name || chatPayload.user_name || chatPayload.userName || chatPayload.participant_name,
+      endTime: chatPayload.end_time,
+      timestampUnit: chatPayload.timestampUnit
+    }).catch(function(error) {
+      console.error('RTMS chat analysis failed:', error.message);
+    });
+  });
+  return chatPayloads.length;
 }
 
 function formatServerTime(seconds) {
@@ -1541,6 +1616,24 @@ async function startRtmsClient(payload = {}) {
       console.error('RTMS transcript analysis failed:', error.message);
     });
   });
+  if (typeof client.onChatData === 'function') {
+    let chatCount = 0;
+    client.onChatData(function(buffer, size, timestamp, metadata) {
+      if (chatCount < 3) {
+        console.log(`RTMS SDK chat[${chatCount}] key=${key} timestamp=${timestamp} type=${typeof timestamp} user=${metadata && metadata.userName}`);
+      }
+      chatCount++;
+      ingestRtmsChat(payload, buffer, size, timestamp, Object.assign({ timestampUnit: 'us' }, metadata)).catch(function(error) {
+        console.error('RTMS chat analysis failed:', error.message);
+      });
+    });
+  }
+  if (typeof client.onEventEx === 'function') {
+    client.onEventEx(function(eventData) {
+      const count = ingestRtmsRawEventChats(payload, eventData);
+      if (count) console.log('RTMS raw chat events ingested:', key, count);
+    });
+  }
   client.onLeave(function(reason) {
     console.log('RTMS leave:', key, 'reason:', reason, 'status:', state.status);
     if (!['stopped', 'interrupted'].includes(state.status)) {
@@ -1601,7 +1694,9 @@ async function handleRtmsWebhookEvent(event) {
     return handleZoomUrlValidation(event) || { ok: false, reason: 'missing validation token or secret' };
   }
   if (event.event && event.event !== 'meeting.transcript_completed') {
-    console.log('RTMS webhook event:', event.event, 'key:', rtmsKey(payload), 'media_type:', payload.media_type || 'n/a', 'stream_id:', payload.rtms_stream_id || 'n/a', 'reason:', payload.reason || payload.error_message || payload.message || 'n/a');
+    const messageLooksLikeChat = payloadLooksLikeRtmsChat(payload, event.event);
+    const operationalReason = payload.reason || payload.error_message || (messageLooksLikeChat ? null : payload.message);
+    console.log('RTMS webhook event:', event.event, 'key:', rtmsKey(payload), 'media_type:', payload.media_type || 'n/a', 'stream_id:', payload.rtms_stream_id || 'n/a', 'reason:', operationalReason || 'n/a');
   }
   if (event.event === 'meeting.rtms_started' || event.event === 'webinar.rtms_started' || event.event === 'session.rtms_started') {
     return startRtmsClient(payload);
@@ -1633,6 +1728,18 @@ async function handleRtmsWebhookEvent(event) {
     state.statusReason = payload.reason || payload.error_message || payload.message || null;
     state.updatedAt = new Date().toISOString();
     return { received: true, event: event.event, sessionId: state.id };
+  }
+
+  const chatText = payloadLooksLikeRtmsChat(payload, event.event) ? normalizeRtmsChatText(payload) : '';
+  if (chatText) {
+    const state = getRtmsState(payload);
+    if (state.transcript.length < 2) {
+      console.log('RTMS webhook chat payload keys:', Object.keys(payload).join(', '));
+    }
+    return ingestRtmsChat(payload, chatText, chatText.length, payload.start_time || payload.timestamp || event.event_ts, {
+      userName: payload.sender || payload.sender_name || payload.user_name || payload.userName || payload.participant_name,
+      endTime: payload.end_time
+    });
   }
 
   const transcriptText = payload.text || payload.transcript || payload.caption || payload.message;

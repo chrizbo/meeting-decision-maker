@@ -111,7 +111,7 @@ Start with capabilities/scopes that let the app:
 - Read participant context if available for host/co-host users.
 - Open or share a URL/app surface.
 - Start, stop, and inspect RTMS status when Zoom grants the app those APIs.
-- Receive RTMS webhook events and transcript data.
+- Receive RTMS webhook events, transcript data, and meeting chat data.
 
 Enable event subscriptions for:
 
@@ -176,9 +176,10 @@ Current backend behavior:
 2. Signed Zoom webhook events are verified with `x-zm-request-timestamp` and `x-zm-signature`, and non-validation events must be inside the configured freshness window.
 3. `meeting.rtms_started` causes the backend to create an `@zoom/rtms` client and join the stream.
 4. `onTranscriptData` callbacks are normalized into transcript cues.
-5. Cues are analyzed with Gemini and accumulated in in-memory RTMS session state.
-6. Browser dashboard pages can poll matching RTMS session records and display transcript-derived board state.
-7. The Recap step builds a browser-state meeting brief from included decisions, actions, risks, and open questions.
+5. Meeting chat is normalized into the same cue stream when Zoom sends chat-shaped RTMS webhook/raw event payloads, or when a future `@zoom/rtms` SDK exposes `onChatData`.
+6. Cues are analyzed with Gemini and accumulated in in-memory RTMS session state.
+7. Browser dashboard pages can poll matching RTMS session records and display transcript/chat-derived board state.
+8. The Recap step builds a browser-state meeting brief from included decisions, actions, risks, and open questions.
 
 RTMS should not be used with real meetings until the app has clear consent, retention, and access-control behavior.
 

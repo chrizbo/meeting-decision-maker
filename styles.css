@@ -1023,6 +1023,16 @@ select {
   color: var(--ink);
 }
 
+.transcript-cue-chat {
+  border-left-color: #4d8b6f;
+  background: #f4faf6;
+}
+
+.transcript-cue-chat.active {
+  border-left-color: #2f7658;
+  background: #eaf6ef;
+}
+
 .transcript-meta {
   display: flex;
   align-items: center;
@@ -1032,6 +1042,19 @@ select {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+}
+
+.transcript-source {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+  border: 1px solid #bdd8ca;
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: #2f7658;
+  font-size: 10px;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .transcript-text {

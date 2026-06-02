@@ -974,7 +974,8 @@ function applyRtmsSessionState(session) {
       start,
       end,
       speaker: cue.speaker || 'Zoom participant',
-      text: cue.text || ''
+      text: cue.text || '',
+      source: cue.source || 'transcript'
     });
   });
   state.cues = nextCues;
@@ -1282,8 +1283,10 @@ function renderTranscript() {
     return;
   }
   els.transcriptList.innerHTML = state.cues.map(function(cue) {
-    return '<article class="transcript-cue" id="' + cue.id + '" data-cue-id="' + cue.id + '">' +
-      '<div class="transcript-meta"><span>' + formatTime(cue.start) + '</span><span>' + escapeHtml(cue.speaker) + '</span></div>' +
+    const isChat = cue.source === 'chat';
+    const sourceBadge = isChat ? '<span class="transcript-source">Chat</span>' : '';
+    return '<article class="transcript-cue' + (isChat ? ' transcript-cue-chat' : '') + '" id="' + cue.id + '" data-cue-id="' + cue.id + '">' +
+      '<div class="transcript-meta"><span>' + formatTime(cue.start) + '</span><span>' + sourceBadge + escapeHtml(cue.speaker) + '</span></div>' +
       '<p class="transcript-text">' + escapeHtml(cue.text) + '</p>' +
       '</article>';
   }).join('');
@@ -1689,7 +1692,8 @@ async function requestCueAnalysis(cue, evidence) {
           start: cue.start,
           end: cue.end,
           speaker: cue.speaker,
-          text: cue.text
+          text: cue.text,
+          source: cue.source || 'transcript'
         },
         transcriptWindow: transcriptWindowForCue(cue),
         meetingState: meetingStateForAnalysis()

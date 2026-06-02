@@ -44,8 +44,8 @@ Likely architecture:
 
 1. Zoom App starts or requests RTMS for the meeting.
 2. Zoom sends RTMS webhook events to our backend.
-3. Backend connects to the RTMS stream with `@zoom/rtms` and receives `onTranscriptData` callbacks.
-4. Backend normalizes transcript callbacks into cue objects and sends them through the Gemini cue analyzer with rolling transcript and board-state context.
+3. Backend connects to the RTMS stream with `@zoom/rtms` and receives transcript and meeting-chat data.
+4. Backend normalizes transcript callbacks and chat messages into cue objects and sends them through the Gemini cue analyzer with rolling meeting-feed and board-state context.
 5. Shared dashboard can poll matching RTMS session state today; WebSocket or Server-Sent Events can replace polling later.
 
 Current backend route:
@@ -89,7 +89,7 @@ This is the easiest path technically, but it does not test whether live facilita
 
 Zoom's RTMS sample app catalog is most useful as a set of patterns rather than a single reference app. For Room Clarity, the highest-signal examples are:
 
-- `rtms-quickstart-js`: the direct `@zoom/rtms` SDK path. It creates one client per RTMS stream, listens for `meeting.rtms_started`, joins with the webhook payload, handles `meeting.rtms_stopped`, and uses `onTranscriptData` for live transcript text.
+- `rtms-quickstart-js`: the direct `@zoom/rtms` SDK path. It creates one client per RTMS stream, listens for `meeting.rtms_started`, joins with the webhook payload, handles `meeting.rtms_stopped`, and uses `onTranscriptData` for live transcript text. Current Room Clarity code also parses chat-shaped webhook/raw RTMS payloads and will register `onChatData` if a future SDK exposes it.
 - `transcript/save_transcript_sdk`: a persistence pattern. It writes transcript callbacks to VTT, SRT, and TXT with meeting-scoped folders. We do not need local transcript files in production yet, but the VTT/SRT/TXT normalization is useful for export and debugging.
 - `transcript/send_transcript_to_openai_js`: a larger app pattern. It wraps webhooks and active RTMS connections in manager classes, configures transcript media explicitly, logs redacted RTMS config, and forwards transcript events into an LLM handler.
 - Zoom Apps notetaker/customer-support examples: a product-shape pattern. They keep RTMS ingestion in the backend and let the Zoom App/frontend consume derived meeting intelligence, which matches Room Clarity's decision-board approach.
