@@ -2545,15 +2545,16 @@ async function loadConfluenceSpaces() {
 }
 
 function selectTrackerProvider(provider) {
-  // Switching providers: clear the other provider's connected state
-  if (provider === 'github' && state.atlassianToken) {
-    disconnectAtlassian();
-  }
-  if (provider === 'atlassian' && state.githubToken) {
-    disconnectGitHub();
-  }
+  // Switching to a different provider: disconnect the other one
+  if (provider === 'github' && state.atlassianToken) disconnectAtlassian();
+  if (provider === 'atlassian' && state.githubToken) disconnectGitHub();
+  // Deselecting (null): keep credentials so re-selecting doesn't require re-auth
   state.trackerProvider = provider;
-  localStorage.setItem('trackerProvider', provider);
+  if (provider) {
+    localStorage.setItem('trackerProvider', provider);
+  } else {
+    localStorage.removeItem('trackerProvider');
+  }
   renderAll();
 }
 
@@ -2665,17 +2666,25 @@ function renderRunwayTracker() {
   // Provider toggle buttons
   const ghBtn = document.querySelector('#trackerSelectGithub');
   if (ghBtn) ghBtn.addEventListener('click', function() {
-    if (provider === 'github') return;
-    if (isGithubConnected() || isAtlassianConnected()) {
-      if (!confirm('Switch to GitHub? Your current tracker connection will be disconnected.')) return;
+    if (provider === 'github') {
+      // Tap active button → deselect (no tracker)
+      selectTrackerProvider(null);
+      return;
+    }
+    if (isAtlassianConnected()) {
+      if (!confirm('Switch to GitHub? Your Atlassian connection will be disconnected.')) return;
     }
     selectTrackerProvider('github');
   });
   const atBtn = document.querySelector('#trackerSelectAtlassian');
   if (atBtn) atBtn.addEventListener('click', function() {
-    if (provider === 'atlassian') return;
-    if (isGithubConnected() || isAtlassianConnected()) {
-      if (!confirm('Switch to Jira & Confluence? Your current tracker connection will be disconnected.')) return;
+    if (provider === 'atlassian') {
+      // Tap active button → deselect (no tracker)
+      selectTrackerProvider(null);
+      return;
+    }
+    if (isGithubConnected()) {
+      if (!confirm('Switch to Jira & Confluence? Your GitHub connection will be disconnected.')) return;
     }
     selectTrackerProvider('atlassian');
   });
