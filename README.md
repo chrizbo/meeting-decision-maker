@@ -136,6 +136,11 @@ Cloud Run can persist meeting sessions in Firestore by setting:
 
 - `SESSION_STORE=firestore`
 - `FIRESTORE_SESSIONS_COLLECTION=meetingSessions`
+- `FIRESTORE_MEETING_OUTPUTS_COLLECTION=meetingOutputs`
+
+When `SESSION_STORE=firestore` is enabled, Room Clarity stores durable meeting output records separately from dashboard session metadata. `meetingOutputs` contains the reopened board state: transcript cues, decisions, risks, actions, agent issues, analyses, status, and timestamps.
+
+Zoom-restricted meeting links use Zoom OAuth plus a signed `HttpOnly` cookie to identify the viewer. Set `COOKIE_SIGNING_SECRET` for stable cookie verification across deploys; if it is omitted, the service falls back to `ROOM_CLARITY_ADMIN_TOKEN` or `ZOOM_WEBHOOK_SECRET_TOKEN`.
 
 Local development defaults to in-memory sessions. Use `SESSION_STORE=firestore npm start` only when you have Google application credentials configured locally.
 
@@ -219,6 +224,8 @@ Inside the Zoom client, the meeting controls menu shows a **Start RTMS** button 
 Opening the dashboard in a normal browser is supported for viewing and mock transcript testing. The Zoom Apps SDK does not run in a normal browser, so browser mode does not start RTMS. Browser dashboards poll matching `/api/rtms/sessions/:id` records and will display RTMS transcript/analysis state when a matching server-side RTMS session exists.
 
 **Session UUID linking:** When the Zoom App creates a backend session via `POST /api/sessions`, it now passes `meetingUuid` alongside `zoomMeetingId`. The server stores this as `zoomMeetingUuid` and includes it in the `getSessionByAccessId` lookup so the RTMS access check can verify the dashboard token even when the request is made by meeting UUID rather than numeric meeting ID.
+
+Personal Meeting IDs identify a reusable room, not one meeting occurrence. When Zoom supplies a `meeting_uuid`, Room Clarity uses it exclusively for RTMS polling and session linking; the numeric meeting ID is only a fallback for contexts where Zoom does not provide an occurrence UUID.
 
 Inspect RTMS sessions:
 

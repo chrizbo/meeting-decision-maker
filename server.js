@@ -10,10 +10,13 @@ import { Firestore } from '@google-cloud/firestore';
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8787);
 const sessions = new Map();
+const meetingOutputs = new Map();
 const oauthInstallations = new Map();
+const zoomLoginStates = new Map();
 const useFirestore = process.env.SESSION_STORE === 'firestore';
 const firestore = useFirestore ? new Firestore() : null;
 const sessionsCollection = process.env.FIRESTORE_SESSIONS_COLLECTION || 'meetingSessions';
+const meetingOutputsCollection = process.env.FIRESTORE_MEETING_OUTPUTS_COLLECTION || 'meetingOutputs';
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
 const openaiApiKey = process.env.OPENAI_API_KEY || '';
@@ -149,6 +152,67 @@ function canonicalRedirectUrl(req) {
 function sendRedirect(res, location, status = 301) {
   res.writeHead(status, withSecurityHeaders({ location }));
   res.end();
+}
+
+function parseCookies(req) {
+  const header = String(req.headers.cookie || '');
+  return header.split(';').reduce(function(cookies, part) {
+    const index = part.indexOf('=');
+    if (index < 0) return cookies;
+    const key = part.slice(0, index).trim();
+    if (!key) return cookies;
+    cookies[key] = decodeURIComponent(part.slice(index + 1).trim());
+    return cookies;
+  }, {});
+}
+
+function signCookiePayload(payload) {
+  const secret = process.env.COOKIE_SIGNING_SECRET || process.env.ROOM_CLARITY_ADMIN_TOKEN || process.env.ZOOM_WEBHOOK_SECRET_TOKEN || '';
+  if (!secret) return '';
+  return createHmac('sha256', secret).update(payload).digest('base64url');
+}
+
+function encodeSignedCookie(value) {
+  const payload = Buffer.from(JSON.stringify(value)).toString('base64url');
+  const signature = signCookiePayload(payload);
+  return signature ? `${payload}.${signature}` : '';
+}
+
+function decodeSignedCookie(rawValue) {
+  const [payload, signature] = String(rawValue || '').split('.');
+  if (!payload || !signature) return null;
+  const expected = signCookiePayload(payload);
+  if (!expected) return null;
+  const expectedBuffer = Buffer.from(expected);
+  const actualBuffer = Buffer.from(signature);
+  if (expectedBuffer.length !== actualBuffer.length || !timingSafeEqual(expectedBuffer, actualBuffer)) return null;
+  try {
+    const value = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (value.expiresAt && Number(value.expiresAt) < Date.now()) return null;
+    return value;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function cookieSecurityAttributes(req) {
+  return requestProto(req) === 'https' || publicBaseUrl.startsWith('https://') ? '; Secure' : '';
+}
+
+function setZoomUserCookie(req, res, user) {
+  const cookie = encodeSignedCookie(Object.assign({}, user, {
+    expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000
+  }));
+  if (!cookie) return;
+  res.setHeader('set-cookie', `rc_zoom_user=${encodeURIComponent(cookie)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800${cookieSecurityAttributes(req)}`);
+}
+
+function clearZoomUserCookie(req, res) {
+  res.setHeader('set-cookie', `rc_zoom_user=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${cookieSecurityAttributes(req)}`);
+}
+
+function zoomUserFromRequest(req) {
+  return decodeSignedCookie(parseCookies(req).rc_zoom_user);
 }
 
 function clientIp(req) {
@@ -307,7 +371,8 @@ function emptyMeetingState() {
     decisions: [],
     risks: [],
     actions: [],
-    openAgentIssues: []
+    openAgentIssues: [],
+    dismissedItems: []
   };
 }
 
@@ -353,6 +418,7 @@ function serverMeetingStateForAnalysis(state) {
 function applyServerAnalysisItems(state, items, cue) {
   items.forEach(function(item) {
     if (item.type === 'decision' && isWeakPreferenceDecision(item, cue, state)) return;
+    if (findRelatedDismissedItem(state.dismissedItems, item)) return;
     if (item.updateMode === 'update' && updateServerBoardItem(state, item, cue)) return;
     if (item.type === 'decision') {
       const relatedDecision = findRelatedDecision(state.decisions, item);
@@ -478,6 +544,44 @@ function findRelatedAgentIssue(agentIssues, item) {
     const existing = [issue.agent, issue.title, issue.summary].filter(Boolean).join(' ');
     return topicSimilarity(candidate, existing) >= 0.58;
   }) || null;
+}
+
+function findRelatedDismissedItem(dismissedItems, item) {
+  const items = Array.isArray(dismissedItems) ? dismissedItems : [];
+  const type = item.type === 'agent_issue' ? 'agent' : item.type;
+  const candidate = [item.title, item.summary].filter(Boolean).join(' ');
+  if (!type || !candidate) return null;
+  return items.find(function(dismissed) {
+    if (dismissed.type !== type) return false;
+    const existing = [dismissed.title, dismissed.summary].filter(Boolean).join(' ');
+    return topicSimilarity(candidate, existing) >= 0.7;
+  }) || null;
+}
+
+function applyDismissedItemsToRtmsState(state, dismissedItems) {
+  const dismissed = Array.isArray(dismissedItems) ? dismissedItems : [];
+  if (!dismissed.length) return;
+  state.dismissedItems = dismissed.slice(0, 100);
+  const lists = [
+    ['decision', 'decisions'],
+    ['risk', 'risks'],
+    ['action', 'actions'],
+    ['agent', 'openAgentIssues']
+  ];
+  lists.forEach(function(entry) {
+    const [type, key] = entry;
+    state[key] = state[key].filter(function(item) {
+      return !dismissed.some(function(record) {
+        if (record.type !== type) return false;
+        if (record.originalId && record.originalId === item.id) return true;
+        return Boolean(findRelatedDismissedItem([record], {
+          type: type === 'agent' ? 'agent_issue' : type,
+          title: item.title,
+          summary: item.summary
+        }));
+      });
+    });
+  });
 }
 
 function hasDistinctDecisionObject(candidate, existing) {
@@ -1152,53 +1256,61 @@ async function updateSession(session) {
 }
 
 async function getSession(id) {
-  if (!firestore) return sessions.get(id) || null;
-  const snapshot = await firestore.collection(sessionsCollection).doc(id).get();
+  const normalizedId = id === null || id === undefined ? '' : String(id);
+  if (!normalizedId) return null;
+  if (!firestore) return sessions.get(normalizedId) || null;
+  const snapshot = await firestore.collection(sessionsCollection).doc(normalizedId).get();
   if (!snapshot.exists) return null;
   return snapshot.data();
 }
 
 async function getSessionByAccessId(id) {
-  if (!id) return null;
-  const direct = await getSession(id);
+  const normalizedId = id === null || id === undefined ? '' : String(id);
+  if (!normalizedId) return null;
+  const direct = await getSession(normalizedId);
   if (direct) return direct;
 
   if (!firestore) {
     return Array.from(sessions.values()).find(function(session) {
-      return session.publicSessionId === id || session.zoomMeetingId === id || session.zoomMeetingUuid === id;
+      return String(session.publicSessionId || '') === normalizedId ||
+        String(session.zoomMeetingId || '') === normalizedId ||
+        String(session.zoomMeetingUuid || '') === normalizedId;
     }) || null;
   }
 
   const snapshot = await firestore.collection(sessionsCollection)
-    .where('zoomMeetingId', '==', id)
+    .where('zoomMeetingId', '==', normalizedId)
     .limit(1)
     .get();
   if (!snapshot.empty) return snapshot.docs[0].data();
 
   const uuidSnapshot = await firestore.collection(sessionsCollection)
-    .where('zoomMeetingUuid', '==', id)
+    .where('zoomMeetingUuid', '==', normalizedId)
     .limit(1)
     .get();
   return uuidSnapshot.empty ? null : uuidSnapshot.docs[0].data();
 }
 
 async function getSessionsByAccessId(id) {
-  if (!id) return [];
-  const direct = await getSession(id);
+  const normalizedId = id === null || id === undefined ? '' : String(id);
+  if (!normalizedId) return [];
+  const direct = await getSession(normalizedId);
   if (direct) return [direct];
 
   if (!firestore) {
     return Array.from(sessions.values()).filter(function(session) {
-      return session.publicSessionId === id || session.zoomMeetingId === id || session.zoomMeetingUuid === id;
+      return String(session.publicSessionId || '') === normalizedId ||
+        String(session.zoomMeetingId || '') === normalizedId ||
+        String(session.zoomMeetingUuid || '') === normalizedId;
     });
   }
 
   const [meetingIdSnapshot, uuidSnapshot] = await Promise.all([
     firestore.collection(sessionsCollection)
-      .where('zoomMeetingId', '==', id)
+      .where('zoomMeetingId', '==', normalizedId)
       .get(),
     firestore.collection(sessionsCollection)
-      .where('zoomMeetingUuid', '==', id)
+      .where('zoomMeetingUuid', '==', normalizedId)
       .get()
   ]);
   const results = [];
@@ -1215,12 +1327,172 @@ async function getSessionsByAccessId(id) {
   return results;
 }
 
+function normalizeAccessMode(value) {
+  return value === 'zoomRestricted' ? 'zoomRestricted' : 'linkViewable';
+}
+
+function normalizeStringList(values) {
+  return Array.isArray(values) ? values.map(function(value) {
+    return String(value || '').trim();
+  }).filter(Boolean).slice(0, 100) : [];
+}
+
+function normalizeEmailList(values) {
+  return normalizeStringList(values).map(function(value) {
+    return value.toLowerCase();
+  });
+}
+
+function zoomUserMatchesSession(user, session) {
+  if (!user || !session) return false;
+  const userIds = normalizeStringList([
+    session.hostZoomUserId,
+    ...(session.alternativeHostZoomUserIds || []),
+    ...(session.attendeeZoomUserIds || [])
+  ]);
+  if (user.id && userIds.includes(String(user.id))) return true;
+
+  const email = String(user.email || '').trim().toLowerCase();
+  const allowedEmails = normalizeEmailList([
+    session.hostEmail,
+    ...(session.alternativeHostEmails || []),
+    ...(session.attendeeEmails || [])
+  ]);
+  return Boolean(email && allowedEmails.includes(email));
+}
+
+function hasSessionAccess(req, session) {
+  const accessMode = normalizeAccessMode(session && session.accessMode);
+  if (accessMode === 'zoomRestricted') {
+    return zoomUserMatchesSession(zoomUserFromRequest(req), session);
+  }
+  return hasValidDashboardToken(req, session);
+}
+
+function sendSessionAccessDenied(req, res, session) {
+  if (normalizeAccessMode(session && session.accessMode) === 'zoomRestricted' && !zoomUserFromRequest(req)) {
+    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    sendJson(res, 401, {
+      error: 'Zoom sign-in required',
+      loginUrl: '/api/zoom/login/start?next=' + encodeURIComponent(url.pathname + url.search)
+    });
+    return;
+  }
+  sendJson(res, 403, { error: 'Invalid or missing dashboard access' });
+}
+
+function meetingOutputFromRtmsState(session, state) {
+  const now = new Date().toISOString();
+  return {
+    sessionId: session.id,
+    publicSessionId: session.publicSessionId || session.id,
+    topic: session.topic || 'Untitled meeting',
+    host: session.host || 'Meeting host',
+    zoomMeetingId: session.zoomMeetingId || null,
+    zoomMeetingUuid: session.zoomMeetingUuid || null,
+    accessMode: normalizeAccessMode(session.accessMode),
+    recordMode: normalizeRecordMode(session.recordMode),
+    status: state.status || 'live',
+    statusReason: state.statusReason || null,
+    transcript: Array.isArray(state.transcript) ? state.transcript.slice(-500) : [],
+    decisions: Array.isArray(state.decisions) ? state.decisions.slice(0, 100) : [],
+    risks: Array.isArray(state.risks) ? state.risks.slice(0, 100) : [],
+    actions: Array.isArray(state.actions) ? state.actions.slice(0, 150) : [],
+    openAgentIssues: Array.isArray(state.openAgentIssues) ? state.openAgentIssues.slice(0, 100) : [],
+    dismissedItems: Array.isArray(state.dismissedItems) ? state.dismissedItems.slice(0, 100) : [],
+    analyses: Array.isArray(state.analyses) ? state.analyses.slice(0, 50) : [],
+    startedAt: state.startedAt || session.createdAt || now,
+    endedAt: /ended|stopped|interrupted/i.test(String(state.status || '')) ? now : null,
+    updatedAt: now
+  };
+}
+
+function initialMeetingOutput(session) {
+  const now = new Date().toISOString();
+  return {
+    sessionId: session.id,
+    publicSessionId: session.publicSessionId || session.id,
+    topic: session.topic || 'Untitled meeting',
+    host: session.host || 'Meeting host',
+    zoomMeetingId: session.zoomMeetingId || null,
+    zoomMeetingUuid: session.zoomMeetingUuid || null,
+    accessMode: normalizeAccessMode(session.accessMode),
+    recordMode: normalizeRecordMode(session.recordMode),
+    status: 'created',
+    statusReason: null,
+    transcript: [],
+    decisions: [],
+    risks: [],
+    actions: [],
+    openAgentIssues: [],
+    dismissedItems: [],
+    analyses: [],
+    briefMarkdown: '',
+    startedAt: session.createdAt || now,
+    endedAt: null,
+    createdAt: session.createdAt || now,
+    updatedAt: now
+  };
+}
+
+async function saveMeetingOutput(output) {
+  if (!output || !output.sessionId) return null;
+  if (!firestore) {
+    meetingOutputs.set(output.sessionId, output);
+    return output;
+  }
+  await firestore.collection(meetingOutputsCollection).doc(output.sessionId).set(output, { merge: true });
+  return output;
+}
+
+async function getMeetingOutput(id) {
+  if (!firestore) return meetingOutputs.get(id) || null;
+  const snapshot = await firestore.collection(meetingOutputsCollection).doc(id).get();
+  return snapshot.exists ? snapshot.data() : null;
+}
+
+async function getMeetingOutputsForSession(session) {
+  if (!session) return [];
+  const direct = await getMeetingOutput(session.id);
+  const meetingUuid = String(session.zoomMeetingUuid || '');
+  if (!meetingUuid) return direct ? [direct] : [];
+  if (!firestore) {
+    return Array.from(meetingOutputs.values()).filter(function(output) {
+      return output.sessionId === session.id || String(output.zoomMeetingUuid || '') === meetingUuid;
+    });
+  }
+  const snapshot = await firestore.collection(meetingOutputsCollection)
+    .where('zoomMeetingUuid', '==', meetingUuid)
+    .get();
+  const outputs = snapshot.docs.map(function(doc) { return doc.data(); });
+  if (direct && !outputs.some(function(output) { return output.sessionId === direct.sessionId; })) outputs.push(direct);
+  return outputs;
+}
+
+async function persistMeetingOutputForRtmsState(state) {
+  const session = await findSessionForRtmsState(state);
+  if (!session) return null;
+  const existingOutput = await getMeetingOutput(session.id);
+  applyDismissedItemsToRtmsState(state, existingOutput && existingOutput.dismissedItems);
+  const output = meetingOutputFromRtmsState(session, state);
+  await saveMeetingOutput(output);
+  return output;
+}
+
+function persistMeetingOutputForRtmsStateSafely(state, context) {
+  return persistMeetingOutputForRtmsState(state).catch(function(error) {
+    console.error(`RTMS output persistence failed (${context}):`, error.message);
+    return null;
+  });
+}
+
 async function findSessionForRtmsState(state) {
   const candidates = [
     state && state.id,
     state && state.meetingUuid,
     state && state.sessionId,
-    state && state.streamId
+    state && state.streamId,
+    state && !state.meetingUuid && state.meetingId
   ].filter(Boolean);
   for (const id of candidates) {
     const session = await getSessionByAccessId(id);
@@ -1232,14 +1504,16 @@ async function findSessionForRtmsState(state) {
 function syncRtmsStatesForSession(session) {
   if (!session) return;
   for (const state of rtmsSessionStates.values()) {
-    const matches = [
-      state.id,
-      state.meetingUuid,
-      state.sessionId,
-      state.streamId
-    ].filter(Boolean).some(function(id) {
-      return id === session.id || id === session.publicSessionId || id === session.zoomMeetingId || id === session.zoomMeetingUuid;
-    });
+    const stateUuid = String(state.meetingUuid || '');
+    const sessionUuid = String(session.zoomMeetingUuid || '');
+    const matches = stateUuid || sessionUuid
+      ? Boolean(stateUuid && sessionUuid && stateUuid === sessionUuid)
+      : [state.id, state.meetingId, state.sessionId, state.streamId].filter(Boolean).some(function(id) {
+        const normalizedId = String(id);
+        return normalizedId === String(session.id || '') ||
+          normalizedId === String(session.publicSessionId || '') ||
+          normalizedId === String(session.zoomMeetingId || '');
+      });
     if (matches) {
       state.recordMode = normalizeRecordMode(session.recordMode);
       state.updatedAt = new Date().toISOString();
@@ -1247,19 +1521,93 @@ function syncRtmsStatesForSession(session) {
   }
 }
 
+function findRtmsStateForSession(session) {
+  if (!session) return null;
+  return Array.from(rtmsSessionStates.values()).find(function(state) {
+    const stateUuid = String(state.meetingUuid || '');
+    const sessionUuid = String(session.zoomMeetingUuid || '');
+    if (stateUuid && sessionUuid && stateUuid === sessionUuid) return true;
+    return [state.id, state.meetingId, state.sessionId, state.streamId].filter(Boolean).some(function(id) {
+      const normalizedId = String(id);
+      return normalizedId === String(session.id || '') ||
+        normalizedId === String(session.publicSessionId || '') ||
+        normalizedId === String(session.zoomMeetingId || '');
+    });
+  }) || null;
+}
+
+function dismissRtmsBoardItem(state, itemId, disposition) {
+  const lists = [
+    ['decision', state.decisions],
+    ['risk', state.risks],
+    ['action', state.actions],
+    ['agent', state.openAgentIssues]
+  ];
+  for (const [type, list] of lists) {
+    const index = list.findIndex(function(item) { return item.id === itemId; });
+    if (index < 0) continue;
+    const [item] = list.splice(index, 1);
+    const dismissed = {
+      id: randomUUID(),
+      originalId: item.id,
+      type,
+      disposition: disposition === 'rejected' ? 'rejected' : 'dismissed',
+      title: item.title || item.agent || type,
+      summary: item.summary || '',
+      evidence: item.evidence || '',
+      dismissedAt: new Date().toISOString()
+    };
+    state.dismissedItems = [dismissed].concat(Array.isArray(state.dismissedItems) ? state.dismissedItems : []).slice(0, 100);
+    state.updatedAt = dismissed.dismissedAt;
+    return dismissed;
+  }
+  return null;
+}
+
+function dismissMeetingOutputItem(output, itemId, disposition) {
+  const lists = [
+    ['decision', 'decisions'],
+    ['risk', 'risks'],
+    ['action', 'actions'],
+    ['agent', 'openAgentIssues']
+  ];
+  for (const [type, key] of lists) {
+    const list = Array.isArray(output[key]) ? output[key] : [];
+    const index = list.findIndex(function(item) { return item.id === itemId; });
+    if (index < 0) continue;
+    const [item] = list.splice(index, 1);
+    const dismissed = {
+      id: randomUUID(),
+      originalId: item.id,
+      type,
+      disposition: disposition === 'rejected' ? 'rejected' : 'dismissed',
+      title: item.title || item.agent || type,
+      summary: item.summary || '',
+      evidence: item.evidence || '',
+      dismissedAt: new Date().toISOString()
+    };
+    output[key] = list;
+    output.dismissedItems = [dismissed].concat(Array.isArray(output.dismissedItems) ? output.dismissedItems : []).slice(0, 100);
+    output.updatedAt = dismissed.dismissedAt;
+    return dismissed;
+  }
+  return null;
+}
+
 async function hasRtmsDashboardAccess(req, state, requestedId) {
   const candidates = [
-    requestedId,
+    state && state.meetingUuid && String(requestedId) === String(state.meetingId) ? null : requestedId,
     state && state.id,
     state && state.meetingUuid,
     state && state.sessionId,
-    state && state.streamId
+    state && state.streamId,
+    state && !state.meetingUuid && state.meetingId
   ].filter(Boolean);
 
   for (const id of candidates) {
     const matchingSessions = await getSessionsByAccessId(id);
     if (matchingSessions.some(function(session) {
-      return hasValidDashboardToken(req, session);
+      return hasSessionAccess(req, session);
     })) return true;
   }
   return false;
@@ -1286,23 +1634,30 @@ async function createSession(input = {}) {
     dashboardPath,
     dashboardUrl: dashboardUrlForPath(dashboardPath),
     dashboardTokenHash: hashDashboardToken(dashboardToken),
-    accessMode: input.accessMode || 'linkViewable',
+    accessMode: normalizeAccessMode(input.accessMode),
     topic: input.topic || 'Untitled meeting',
     host: input.host || 'Meeting host',
     attendees: Array.isArray(input.attendees) ? input.attendees : [],
-    zoomMeetingId: input.zoomMeetingId || null,
-    zoomMeetingUuid: input.meetingUuid || null,
+    zoomMeetingId: input.zoomMeetingId ? String(input.zoomMeetingId) : null,
+    zoomMeetingUuid: input.meetingUuid ? String(input.meetingUuid) : null,
+    hostZoomUserId: input.hostZoomUserId || input.zoomUserId || null,
+    hostEmail: input.hostEmail || input.zoomUserEmail || null,
+    alternativeHostZoomUserIds: normalizeStringList(input.alternativeHostZoomUserIds),
+    alternativeHostEmails: normalizeEmailList(input.alternativeHostEmails),
+    attendeeZoomUserIds: normalizeStringList(input.attendeeZoomUserIds),
+    attendeeEmails: normalizeEmailList(input.attendeeEmails),
     platform: input.platform || 'web',
     recordMode: normalizeRecordMode(input.recordMode),
     createdAt,
     updatedAt: createdAt
   };
   await saveSession(session);
+  await saveMeetingOutput(initialMeetingOutput(session));
   return Object.assign(sessionForResponse(session, dashboardToken), { dashboardToken });
 }
 
 function rtmsKey(payload = {}) {
-  return payload.meeting_uuid || payload.webinar_uuid || payload.session_id || payload.engagement_id || payload.rtms_stream_id || 'unknown';
+  return payload.meeting_uuid || payload.webinar_uuid || payload.meeting_id || payload.session_id || payload.engagement_id || payload.rtms_stream_id || 'unknown';
 }
 
 function getRtmsState(payload = {}) {
@@ -1311,6 +1666,7 @@ function getRtmsState(payload = {}) {
     rtmsSessionStates.set(key, Object.assign(emptyMeetingState(), {
       id: key,
       meetingUuid: payload.meeting_uuid || null,
+      meetingId: payload.meeting_id || null,
       webinarUuid: payload.webinar_uuid || null,
       sessionId: payload.session_id || null,
       engagementId: payload.engagement_id || null,
@@ -1329,6 +1685,7 @@ function getRtmsState(payload = {}) {
   }
   const state = rtmsSessionStates.get(key);
   if (payload.rtms_stream_id) state.streamId = payload.rtms_stream_id;
+  if (payload.meeting_id) state.meetingId = payload.meeting_id;
   return state;
 }
 
@@ -1425,6 +1782,7 @@ async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata =
   if (state.recordMode === 'off') {
     state.offRecordCueCount = (state.offRecordCueCount || 0) + 1;
     state.updatedAt = new Date().toISOString();
+    await persistMeetingOutputForRtmsState(state);
     return {
       ignored: true,
       reason: 'off_the_record',
@@ -1462,6 +1820,9 @@ async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata =
 
   let analysis = null;
   if (analysisEnabled()) {
+    const session = await findSessionForRtmsState(state);
+    const existingOutput = session ? await getMeetingOutput(session.id) : null;
+    applyDismissedItemsToRtmsState(state, existingOutput && existingOutput.dismissedItems);
     analysis = await analyzeCueWithProvider({
       cue,
       transcriptWindow: transcriptWindowForServerCue(state, cue),
@@ -1471,6 +1832,8 @@ async function ingestRtmsTranscript(payload, buffer, size, timestamp, metadata =
     state.analyses.unshift(analysis);
     state.analyses = state.analyses.slice(0, 50);
   }
+
+  await persistMeetingOutputForRtmsState(state);
 
   return {
     ignored: false,
@@ -1618,6 +1981,7 @@ async function startRtmsClient(payload = {}) {
     state.status = 'start_failed';
     state.statusReason = 'missing rtms_stream_id or server_urls';
     state.updatedAt = new Date().toISOString();
+    await persistMeetingOutputForRtmsState(state);
     return { started: false, reason: 'missing rtms_stream_id or server_urls' };
   }
   if (rtmsClients.has(payload.rtms_stream_id)) return { started: false, reason: 'already connected' };
@@ -1631,12 +1995,16 @@ async function startRtmsClient(payload = {}) {
   state.status = 'starting';
   state.statusReason = null;
   state.updatedAt = new Date().toISOString();
+  persistMeetingOutputForRtmsStateSafely(state, 'starting');
 
   client.onJoinConfirm(function(reason) {
     console.log('RTMS join confirmed:', key, reason);
     state.status = 'active';
     state.statusReason = reason || null;
     state.updatedAt = new Date().toISOString();
+    persistMeetingOutputForRtmsState(state).catch(function(error) {
+      console.error('RTMS output persistence failed:', error.message);
+    });
   });
   let transcriptCount = 0;
   client.onTranscriptData(function(buffer, size, timestamp, metadata) {
@@ -1674,20 +2042,34 @@ async function startRtmsClient(payload = {}) {
     }
     state.updatedAt = new Date().toISOString();
     deleteRtmsClientReferences(client);
+    persistMeetingOutputForRtmsState(state).catch(function(error) {
+      console.error('RTMS output persistence failed:', error.message);
+    });
   });
 
-  const joined = client.join(Object.assign({}, payload, {
-    client: process.env.ZM_RTMS_CLIENT || process.env.ZOOM_CLIENT_ID,
-    secret: process.env.ZM_RTMS_SECRET || process.env.ZOOM_CLIENT_SECRET,
-    pollInterval: Number(process.env.RTMS_POLL_INTERVAL_MS || 10),
-    ca: process.env.RTMS_CA_PATH || '/etc/ssl/certs/ca-certificates.crt'
-  }));
+  let joined = false;
+  try {
+    joined = client.join(Object.assign({}, payload, {
+      client: process.env.ZM_RTMS_CLIENT || process.env.ZOOM_CLIENT_ID,
+      secret: process.env.ZM_RTMS_SECRET || process.env.ZOOM_CLIENT_SECRET,
+      pollInterval: Number(process.env.RTMS_POLL_INTERVAL_MS || 10),
+      ca: process.env.RTMS_CA_PATH || '/etc/ssl/certs/ca-certificates.crt'
+    }));
+  } catch (error) {
+    state.status = 'start_failed';
+    state.statusReason = error.message;
+    state.updatedAt = new Date().toISOString();
+    deleteRtmsClientReferences(client);
+    persistMeetingOutputForRtmsStateSafely(state, 'join exception');
+    console.error('RTMS join failed:', key, error.message);
+    return { started: false, reason: error.message, sessionId: key };
+  }
   if (!joined) {
     state.status = 'start_failed';
     state.statusReason = 'client.join returned false';
     state.updatedAt = new Date().toISOString();
-    rtmsClients.delete(key);
-    rtmsClients.delete(payload.rtms_stream_id);
+    deleteRtmsClientReferences(client);
+    persistMeetingOutputForRtmsStateSafely(state, 'join returned false');
   }
   return { started: joined, streamId: payload.rtms_stream_id, sessionId: key };
 }
@@ -1748,6 +2130,7 @@ async function handleRtmsWebhookEvent(event) {
     state.statusReason = payload.reason || payload.error_message || null;
     state.updatedAt = new Date().toISOString();
     const stopped = stopRtmsClient(payload);
+    await persistMeetingOutputForRtmsState(state);
     // Auto-retry when interrupted with no transcript yet (e.g. host is silent waiting for others to join).
     // Cap at 10 retries (~5-10 min at Zoom's ~30-60s silence timeout) so real failures eventually surface an error.
     const MAX_AUTO_RETRIES = 10;
@@ -1766,6 +2149,7 @@ async function handleRtmsWebhookEvent(event) {
     state.status = event.event.replace(/^rtms\./, '');
     state.statusReason = payload.reason || payload.error_message || payload.message || null;
     state.updatedAt = new Date().toISOString();
+    await persistMeetingOutputForRtmsState(state);
     return { received: true, event: event.event, sessionId: state.id };
   }
 
@@ -1835,6 +2219,49 @@ async function exchangeZoomOAuthCode(code) {
     throw error;
   }
   return body;
+}
+
+async function fetchZoomUserProfile(accessToken) {
+  const response = await fetch('https://api.zoom.us/v2/users/me', {
+    headers: {
+      authorization: 'Bearer ' + accessToken,
+      accept: 'application/json'
+    }
+  });
+  const body = await response.json().catch(function() { return {}; });
+  if (!response.ok) {
+    const error = new Error(body.message || body.reason || 'Zoom profile lookup failed');
+    error.status = 502;
+    throw error;
+  }
+  return {
+    id: body.id || body.user_id || '',
+    email: body.email || '',
+    accountId: body.account_id || '',
+    displayName: [body.first_name, body.last_name].filter(Boolean).join(' ') || body.display_name || body.email || 'Zoom user'
+  };
+}
+
+function safeReturnPath(value) {
+  const raw = String(value || '/app');
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '/app';
+  return raw.slice(0, 500);
+}
+
+function createZoomLoginState(nextPath) {
+  const nonce = randomBytes(16).toString('base64url');
+  zoomLoginStates.set(nonce, {
+    nextPath: safeReturnPath(nextPath),
+    createdAt: Date.now()
+  });
+  return nonce;
+}
+
+function consumeZoomLoginState(nonce) {
+  const state = zoomLoginStates.get(nonce);
+  zoomLoginStates.delete(nonce);
+  if (!state || Date.now() - state.createdAt > 10 * 60 * 1000) return null;
+  return state;
 }
 
 function isAllowedGithubPath(path) {
@@ -1970,15 +2397,61 @@ async function handleApi(req, res, pathname) {
       sendJson(res, 404, { error: 'Session not found' });
       return;
     }
-    if (!hasValidDashboardToken(req, session)) {
-      sendJson(res, 403, { error: 'Invalid or missing dashboard token' });
+    if (!hasSessionAccess(req, session)) {
+      sendSessionAccessDenied(req, res, session);
       return;
     }
     const input = await readBody(req);
     session.recordMode = normalizeRecordMode(input.recordMode);
     await updateSession(session);
     syncRtmsStatesForSession(session);
+    const existingOutput = await getMeetingOutput(session.id);
+    if (existingOutput) {
+      await saveMeetingOutput(Object.assign({}, existingOutput, {
+        recordMode: session.recordMode,
+        updatedAt: new Date().toISOString()
+      }));
+    }
     sendJson(res, 200, { recordMode: session.recordMode, updatedAt: session.updatedAt });
+    return;
+  }
+
+  const dispositionMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/items\/([^/]+)\/disposition$/);
+  if (req.method === 'POST' && dispositionMatch) {
+    const limit = checkRateLimit(req, 'board-item-disposition', { limit: 60, windowMs: 60_000 });
+    if (!limit.allowed) {
+      sendRateLimited(res, limit);
+      return;
+    }
+    const session = await getSessionByAccessId(decodeURIComponent(dispositionMatch[1]));
+    if (!session) {
+      sendJson(res, 404, { error: 'Session not found' });
+      return;
+    }
+    if (!hasSessionAccess(req, session)) {
+      sendSessionAccessDenied(req, res, session);
+      return;
+    }
+    const input = await readBody(req);
+    const itemId = decodeURIComponent(dispositionMatch[2]);
+    const state = findRtmsStateForSession(session);
+    let dismissed = state ? dismissRtmsBoardItem(state, itemId, input.disposition) : null;
+    if (state && dismissed) {
+      await persistMeetingOutputForRtmsState(state);
+    } else {
+      const outputs = await getMeetingOutputsForSession(session);
+      for (const output of outputs) {
+        const outputDismissal = dismissMeetingOutputItem(output, itemId, input.disposition);
+        if (!outputDismissal) continue;
+        dismissed = dismissed || outputDismissal;
+        await saveMeetingOutput(output);
+      }
+    }
+    if (!dismissed) {
+      sendJson(res, 404, { error: 'Board item not found' });
+      return;
+    }
+    sendJson(res, 200, { dismissedItem: dismissed });
     return;
   }
 
@@ -2386,6 +2859,48 @@ async function handleApi(req, res, pathname) {
     return;
   }
 
+  if (req.method === 'GET' && pathname === '/api/zoom/login/start') {
+    if (!process.env.ZOOM_CLIENT_ID || !process.env.ZOOM_REDIRECT_URI) {
+      sendJson(res, 503, { error: 'Zoom OAuth is not configured. Set ZOOM_CLIENT_ID and ZOOM_REDIRECT_URI.' });
+      return;
+    }
+    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const nonce = createZoomLoginState(url.searchParams.get('next') || '/app');
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: process.env.ZOOM_CLIENT_ID,
+      redirect_uri: process.env.ZOOM_REDIRECT_URI,
+      state: 'login:' + nonce
+    });
+    res.writeHead(302, withSecurityHeaders({ location: 'https://zoom.us/oauth/authorize?' + params.toString() }));
+    res.end();
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/zoom/me') {
+    const user = zoomUserFromRequest(req);
+    if (!user) {
+      sendJson(res, 401, { authenticated: false });
+      return;
+    }
+    sendJson(res, 200, {
+      authenticated: true,
+      user: {
+        id: user.id || '',
+        email: user.email || '',
+        accountId: user.accountId || '',
+        displayName: user.displayName || user.email || 'Zoom user'
+      }
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/zoom/logout') {
+    clearZoomUserCookie(req, res);
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
   if (req.method === 'GET' && pathname === '/api/zoom/oauth/callback') {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const code = url.searchParams.get('code');
@@ -2403,6 +2918,17 @@ async function handleApi(req, res, pathname) {
 
     try {
       const token = await exchangeZoomOAuthCode(code);
+      if (stateParam.startsWith('login:')) {
+        const loginState = consumeZoomLoginState(stateParam.slice('login:'.length));
+        if (!loginState) {
+          renderOAuthPage(req, res, 400, 'Zoom sign-in expired', 'Please return to the Room Clarity meeting link and sign in again.');
+          return;
+        }
+        const user = await fetchZoomUserProfile(token.access_token);
+        setZoomUserCookie(req, res, user);
+        sendRedirect(res, loginState.nextPath, 302);
+        return;
+      }
       const installationId = randomUUID();
       oauthInstallations.set(installationId, {
         state: stateParam,
@@ -2433,11 +2959,36 @@ async function handleApi(req, res, pathname) {
       sendJson(res, 404, { error: 'Session not found' });
       return;
     }
-    if (!hasValidDashboardToken(req, session)) {
-      sendJson(res, 403, { error: 'Invalid or missing dashboard token' });
+    if (!hasSessionAccess(req, session)) {
+      sendSessionAccessDenied(req, res, session);
       return;
     }
     sendJson(res, 200, sessionForResponse(session, getDashboardTokenFromRequest(req)));
+    return;
+  }
+
+  const meetingOutputMatch = pathname.match(/^\/api\/meeting-outputs\/([^/]+)$/);
+  if (req.method === 'GET' && meetingOutputMatch) {
+    const limit = checkRateLimit(req, 'meeting-output-read', { limit: 30, windowMs: 60_000 });
+    if (!limit.allowed) {
+      sendRateLimited(res, limit);
+      return;
+    }
+    const session = await getSession(meetingOutputMatch[1]);
+    if (!session) {
+      sendJson(res, 404, { error: 'Session not found' });
+      return;
+    }
+    if (!hasSessionAccess(req, session)) {
+      sendSessionAccessDenied(req, res, session);
+      return;
+    }
+    const output = await getMeetingOutput(session.id);
+    if (!output) {
+      sendJson(res, 404, { error: 'Meeting output not found' });
+      return;
+    }
+    sendJson(res, 200, output);
     return;
   }
 
@@ -2451,7 +3002,10 @@ async function handleApi(req, res, pathname) {
     const requestedId = decodeURIComponent(rtmsStateMatch[1]);
     const state = rtmsSessionStates.get(requestedId) ||
       Array.from(rtmsSessionStates.values()).find(function(s) {
-        return s.meetingUuid === requestedId || s.streamId === requestedId || s.sessionId === requestedId;
+        return String(s.meetingUuid || '') === requestedId ||
+          String(s.streamId || '') === requestedId ||
+          String(s.sessionId || '') === requestedId ||
+          (!s.meetingUuid && String(s.meetingId || '') === requestedId);
       });
     if (!state) {
       sendJson(res, 404, { error: 'RTMS session not found' });
@@ -2525,6 +3079,7 @@ const server = createServer(async (req, res) => {
     }
     await serveStatic(req, res, url.pathname);
   } catch (error) {
+    console.error('Request failed:', req.method, req.url, error);
     sendJson(res, error.status || 500, { error: publicErrorMessage(error, 'Internal server error') });
   }
 });

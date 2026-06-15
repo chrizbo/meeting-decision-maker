@@ -192,7 +192,30 @@ Expected result:
 - Decision, risk, action, or agent-prompt cards update from the transcript or chat cues.
 - Stopping RTMS ends the stream and updates the app status.
 
-## Test Scenario 7: Review and Copy the Meeting Brief
+## Test Scenario 7: Verify Meeting Chat Capture
+
+Purpose: verify that Zoom in-meeting chat messages can appear in the same live feed as spoken transcript cues and can contribute to captured meeting artifacts.
+
+Steps:
+
+1. Start a Zoom test meeting where Room Clarity is installed and authorized.
+2. Launch Room Clarity from the Zoom Apps panel.
+3. Start RTMS or confirm the live meeting stream is active.
+4. Send a Zoom in-meeting chat message to Everyone with a clear meeting artifact, such as `Decision: use the weekly launch checklist as the source of truth`.
+5. Send a second chat message with an action cue, such as `Action: Jordan will update the launch checklist after the meeting`.
+6. Watch the Room Clarity Live Feed and board.
+7. Open any created decision or action card and confirm the evidence references the chat cue.
+
+Expected result:
+
+- Zoom sends the in-meeting chat event to `https://roomclarity.com/api/zoom/rtms-webhook`.
+- Chat messages appear in the Live Feed with a `Chat` label.
+- Chat messages are timestamped relative to the meeting feed and shown near surrounding transcript cues.
+- Decision, action, risk, or agent-prompt cards can be created from chat messages when the message contains a strong enough cue.
+- Card evidence identifies the message as chat so reviewers can distinguish typed messages from spoken transcript.
+- If Zoom has not enabled in-meeting chat webhook delivery for the test account, transcript capture should still work and the absence of chat webhook delivery should be visible in Zoom/Room Clarity webhook logs.
+
+## Test Scenario 8: Review and Copy the Meeting Brief
 
 Purpose: verify that the host can turn captured meeting artifacts into a reviewed brief after transcript playback or RTMS capture.
 
@@ -216,7 +239,7 @@ Expected result:
 - Promoted agent prompts become human-facing risk or open-question items before appearing in the brief.
 - The copied brief contains only included sections and does not require a separate Room Clarity account.
 
-## Test Scenario 8: Verify RTMS Webhook URL Validation
+## Test Scenario 9: Verify RTMS Webhook URL Validation
 
 Purpose: verify that Zoom can validate the configured RTMS webhook endpoint.
 
@@ -236,7 +259,7 @@ Expected result:
 - Zoom receives a valid encrypted response for endpoint validation.
 - Signed runtime webhook events are accepted only when their timestamp and signature are valid.
 
-## Test Scenario 9: Verify Support and Policy Pages
+## Test Scenario 10: Verify Support and Policy Pages
 
 Purpose: verify that required Marketplace support and policy links are reachable.
 
@@ -264,6 +287,7 @@ Before submitting or resubmitting for Zoom review, run this plan with a fresh Zo
 - The dashboard URL opens in a browser.
 - App sharing or browser screen sharing works.
 - RTMS starts successfully, transcript cues appear on the dashboard, and stopping RTMS ends the stream.
+- If in-meeting chat webhook delivery is enabled for the test account, chat messages appear in the Live Feed with a `Chat` label and can create meeting artifacts.
 - The Recap step opens, item exclusion updates the brief, promoted agent prompts can be included, and Copy Brief places Markdown on the clipboard.
 - Public support, documentation, privacy, terms, and configuration pages are reachable.
 - The developer contact email for the Zoom Marketplace submission is actively monitored.
@@ -275,3 +299,5 @@ Room Clarity is currently designed for the host-led meeting flow. A reviewer sho
 The current flow can be used with anyone after the host launches the Zoom App and shares the dashboard or app surface. A separate Room Clarity account is not required for participants or reviewers in this version.
 
 RTMS is fully enabled and testable end-to-end. Reviewers can complete Scenario 6 in full: start RTMS from inside a Zoom meeting, speak test sentences, and confirm transcript-derived cards appear on the dashboard.
+
+Meeting chat capture is implemented as a live-feed source and should be tested with Scenario 7 when Zoom delivers the `In-meeting chat message received` event for the account. If Zoom does not deliver that event, transcript capture remains fully testable and chat delivery can be confirmed separately through Zoom webhook/event logs.

@@ -77,8 +77,8 @@ gcloud run deploy meeting-decision-maker-web \
   --source . \
   --region "$REGION" \
   --allow-unauthenticated \
-  --set-env-vars=PUBLIC_BASE_URL=https://roomclarity.com \
-  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest,ROOM_CLARITY_ADMIN_TOKEN=room-clarity-admin-token:latest
+  --set-env-vars=PUBLIC_BASE_URL=https://roomclarity.com,SESSION_STORE=firestore,FIRESTORE_SESSIONS_COLLECTION=meetingSessions,FIRESTORE_MEETING_OUTPUTS_COLLECTION=meetingOutputs \
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest,ROOM_CLARITY_ADMIN_TOKEN=room-clarity-admin-token:latest,COOKIE_SIGNING_SECRET=room-clarity-cookie-signing-secret:latest
 ```
 
 Use `--update-secrets` with the full set above when redeploying from local source so a later deploy does not accidentally remove previously attached secret-backed environment variables.
@@ -103,10 +103,29 @@ Enable Firestore-backed sessions in Cloud Run:
 ```bash
 gcloud run services update meeting-decision-maker-web \
   --region "$REGION" \
-  --update-env-vars=SESSION_STORE=firestore,FIRESTORE_SESSIONS_COLLECTION=meetingSessions
+  --update-env-vars=SESSION_STORE=firestore,FIRESTORE_SESSIONS_COLLECTION=meetingSessions,FIRESTORE_MEETING_OUTPUTS_COLLECTION=meetingOutputs
 ```
 
+When Firestore is enabled, dashboard session metadata is stored in `meetingSessions` and durable reopened board state is stored in `meetingOutputs`.
+
 For local service testing, `npm start` uses port `8787` unless `PORT` is set. Cloud Run injects `PORT`, and the Docker image defaults to `8080`. Local development defaults to in-memory sessions; set `SESSION_STORE=firestore` only when you have Google application credentials available locally.
+
+Zoom-restricted dashboard links use a signed `HttpOnly` cookie after Zoom OAuth sign-in. Create and attach a stable cookie signing secret so viewer sessions survive deploys:
+
+```bash
+COOKIE_SIGNING_SECRET="$(openssl rand -hex 32)"
+printf "%s" "$COOKIE_SIGNING_SECRET" | \
+  gcloud secrets create room-clarity-cookie-signing-secret \
+  --data-file=-
+
+gcloud secrets add-iam-policy-binding room-clarity-cookie-signing-secret \
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role=roles/secretmanager.secretAccessor
+
+gcloud run services update meeting-decision-maker-web \
+  --region "$REGION" \
+  --update-secrets=COOKIE_SIGNING_SECRET=room-clarity-cookie-signing-secret:latest
+```
 
 ## Service Admin Token
 

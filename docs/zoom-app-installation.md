@@ -85,7 +85,12 @@ Meeting sessions are stored in Firestore when Cloud Run has:
 ```text
 SESSION_STORE=firestore
 FIRESTORE_SESSIONS_COLLECTION=meetingSessions
+FIRESTORE_MEETING_OUTPUTS_COLLECTION=meetingOutputs
 ```
+
+Durable board output is stored in `meetingOutputs` so people with valid access can reopen the meeting link after Cloud Run restarts or the live Zoom session ends.
+
+Zoom-restricted dashboard links also need a stable `COOKIE_SIGNING_SECRET` attached to Cloud Run so Zoom OAuth viewer cookies remain valid across deploys.
 
 When deploying from local source, preserve all secret-backed environment variables:
 
@@ -94,8 +99,8 @@ gcloud run deploy meeting-decision-maker-web \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars=PUBLIC_BASE_URL=https://roomclarity.com \
-  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest,ROOM_CLARITY_ADMIN_TOKEN=room-clarity-admin-token:latest
+  --set-env-vars=PUBLIC_BASE_URL=https://roomclarity.com,SESSION_STORE=firestore,FIRESTORE_SESSIONS_COLLECTION=meetingSessions,FIRESTORE_MEETING_OUTPUTS_COLLECTION=meetingOutputs \
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ZOOM_WEBHOOK_SECRET_TOKEN=zoom-webhook-secret-token:latest,ZOOM_CLIENT_ID=zoom-client-id:latest,ZOOM_CLIENT_SECRET=zoom-client-secret:latest,ZOOM_REDIRECT_URI=zoom-redirect-uri:latest,ROOM_CLARITY_ADMIN_TOKEN=room-clarity-admin-token:latest,COOKIE_SIGNING_SECRET=room-clarity-cookie-signing-secret:latest
 ```
 
 Using `--set-secrets` with only one secret can replace the existing set of secret-backed variables. Prefer the full command above or inspect the service after deployment.

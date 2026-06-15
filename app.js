@@ -426,6 +426,10 @@ function currentDashboardToken() {
   return new URLSearchParams(window.location.search).get('t') || '';
 }
 
+function zoomLoginUrlForCurrentPage() {
+  return '/api/zoom/login/start?next=' + encodeURIComponent(window.location.pathname + window.location.search);
+}
+
 function isSharedDashboardView() {
   return Boolean(currentDashboardSessionId());
 }
@@ -465,6 +469,15 @@ async function loadDashboardSession() {
       els.meetingStatus.textContent = 'Session not found · demo mode';
       return null;
     }
+    if (response.status === 401) {
+      const result = await response.json().catch(function() { return {}; });
+      if (result.loginUrl) {
+        window.location.href = zoomLoginUrlForCurrentPage();
+        return null;
+      }
+      els.meetingStatus.textContent = 'Zoom sign-in required';
+      return null;
+    }
     if (response.status === 403) {
       els.meetingStatus.textContent = 'Dashboard link needs a valid access token';
       return null;
@@ -492,6 +505,30 @@ async function loadDashboardSession() {
   }
 }
 
+async function loadDashboardMeetingOutput(requestedSessionId) {
+  const sessionId = requestedSessionId || currentDashboardSessionId() || (state.zoomSession && state.zoomSession.id) || '';
+  if (!sessionId || sessionId === 'demo-session') return false;
+
+  try {
+    const token = currentDashboardToken() || (state.zoomSession && state.zoomSession.dashboardToken) || '';
+    const tokenParam = token ? '?t=' + encodeURIComponent(token) : '';
+    const response = await fetch('/api/meeting-outputs/' + encodeURIComponent(sessionId) + tokenParam, { cache: 'no-store' });
+    if (response.status === 401) {
+      const result = await response.json().catch(function() { return {}; });
+      if (result.loginUrl) window.location.href = zoomLoginUrlForCurrentPage();
+      return false;
+    }
+    if (response.status === 404) return false;
+    if (!response.ok) throw new Error('meeting output fetch failed');
+    const output = await response.json();
+    applyRtmsSessionState(output);
+    return true;
+  } catch (error) {
+    console.info('Meeting Decision Maker output load error', error);
+    return false;
+  }
+}
+
 function normalizeZoomMeetingContext(context) {
   const meetingId = context.meetingID || context.meetingId || context.meetingNumber || context.meetingUUID || '';
   const topic = context.meetingTopic || context.topic || context.meetingName || fakeZoomMeeting.topic;
@@ -511,6 +548,25 @@ function normalizeZoomMeetingContext(context) {
 function zoomErrorMessage(error) {
   if (!error) return 'unknown';
   return error.reason || error.message || error.errorMessage || error.errorCode || String(error);
+}
+
+function zoomUserRole(userContext) {
+  if (!userContext || typeof userContext !== 'object') return '';
+  const rawRole = userContext.role || userContext.userRole || userContext.meetingRole || userContext.userType || '';
+  return String(rawRole || '').trim().toLowerCase();
+}
+
+function normalizeZoomUserIdentity(userContext) {
+  if (!userContext || typeof userContext !== 'object') return {};
+  return {
+    zoomUserId: userContext.userId || userContext.userID || userContext.zoomUserId || userContext.id || '',
+    zoomUserEmail: userContext.email || userContext.userEmail || userContext.zoomUserEmail || '',
+    zoomUserName: userContext.displayName || userContext.userName || userContext.screenName || ''
+  };
+}
+
+function isHostNotJoinedZoomError(error) {
+  return /host (has not|hasn't|has not yet|hasn.t) joined|until the host has joined|host.*joined/i.test(zoomErrorMessage(error));
 }
 
 function showStreamError(title, summary, details) {
@@ -646,14 +702,24 @@ async function maybeAutoStartRtms(options) {
     setRtmsButton(status);
   } catch (error) {
     const message = zoomErrorMessage(error);
-    console.warn('RTMS auto-start:', message);
-    showStreamError(
-      'Unable to start the live meeting stream.',
-      'Room Clarity opened, but Zoom did not start sending live transcript data. You can retry without resetting this board.',
-      message
-    );
+    if (isHostNotJoinedZoomError(error)) {
+      console.info('RTMS waiting for host:', message);
+      showStreamError(
+        'Waiting for the meeting host.',
+        'Room Clarity opened, but Zoom cannot request live meeting content until the host has joined. Retry once the host is in the meeting.',
+        message
+      );
+      setRtmsButton('waiting for host');
+    } else {
+      console.warn('RTMS auto-start:', message);
+      showStreamError(
+        'Unable to start the live meeting stream.',
+        'Room Clarity opened, but Zoom did not start sending live transcript data. You can retry without resetting this board.',
+        message
+      );
+      setRtmsButton('start failed');
+    }
     rtmsStarted = false;
-    setRtmsButton('start failed');
   } finally {
     const status = await refreshRtmsStatus();
     if (/active|started|running|listening/i.test(status)) {
@@ -706,18 +772,19 @@ async function loadRunwayFromAgenda(meeting) {
   }
 }
 
-async function createMeetingSession(meeting) {
+async function createMeetingSession(meeting, zoomUserContext) {
+  const zoomIdentity = normalizeZoomUserIdentity(zoomUserContext);
   const response = await fetch('/api/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
+    body: JSON.stringify(Object.assign({
       platform: 'zoom',
       topic: meeting.topic,
       host: meeting.host,
       attendees: meeting.attendees,
       zoomMeetingId: meeting.meetingId,
       meetingUuid: meeting.meetingUuid || ''
-    })
+    }, zoomIdentity))
   });
   if (!response.ok) throw new Error('session request failed');
   return response.json();
@@ -809,7 +876,6 @@ async function maybeInitializeZoomApp() {
       }
     }
     await refreshRtmsStatus();
-    await maybeAutoStartRtms();
     const meeting = normalizeZoomMeetingContext(contextResult.value || {});
     const meetingUuid = uuidResult.value && (uuidResult.value.meetingUUID || uuidResult.value.uuid || '');
     if (meetingUuid) meeting.meetingUuid = meetingUuid;
@@ -829,13 +895,15 @@ async function maybeInitializeZoomApp() {
     }
     if (participants.length) meeting.attendees = participants;
 
-    const session = await createMeetingSession(meeting);
+    const session = await createMeetingSession(meeting, userContextResult.value);
     state.recordMode = normalizeRecordMode(session.recordMode);
     renderRecordMode();
     meeting.dashboardSlug = session.dashboardUrl || absoluteDashboardPath(session.dashboardPath);
     state.zoomSession = session;
     applyMeetingContext(meeting);
     loadRunwayFromAgenda(meeting);
+    const userRole = zoomUserRole(userContextResult.value);
+    await maybeAutoStartRtms();
     if (contextResult.ok) {
       els.meetingStatus.textContent = meeting.topic + ' · ready';
     } else {
@@ -843,7 +911,6 @@ async function maybeInitializeZoomApp() {
       const supportedCount = Array.isArray(supportedApisResult.value && supportedApisResult.value.apis)
         ? supportedApisResult.value.apis.length
         : 0;
-      const userRole = userContextResult.value && (userContextResult.value.role || userContextResult.value.userRole);
       const note = runningContext ? ' · ' + runningContext : '';
       els.meetingStatus.textContent = meeting.topic + note + ' · ready';
       console.info('Meeting Decision Maker Zoom diagnostics', [
@@ -953,8 +1020,39 @@ function normalizeRecordMode(value) {
   return value === 'off' ? 'off' : 'on';
 }
 
+function auditRecordMatchesServerItem(record, type, item) {
+  if (!record || record.type !== type) return false;
+  if (record.originalId && record.originalId === item.id) return true;
+  const dismissed = normalizeMatchText((record.title || '') + ' ' + (record.detail || ''));
+  const candidate = normalizeMatchText((item.title || item.agent || '') + ' ' + (item.summary || ''));
+  return Boolean(dismissed && candidate && textOverlapScore(dismissed, candidate) >= 0.7);
+}
+
+function serverDismissedItemToAudit(item) {
+  return {
+    id: item.id,
+    originalId: item.originalId,
+    type: item.type,
+    disposition: item.disposition || 'dismissed',
+    title: item.title || item.type,
+    detail: item.summary || '',
+    evidence: item.evidence || '',
+    transcriptReference: buildTranscriptReference(item.evidence, item.summary),
+    conversation: 'This item was moved out of the active board. Review whether it should stay dismissed, be restored, or become a follow-up after the meeting.',
+    steps: ['Review the original evidence.', 'Decide whether the dismissal should stand.', 'If needed, recreate the item as a new risk, action, or decision.']
+  };
+}
+
 function applyRtmsSessionState(session) {
   if (!session || !Array.isArray(session.transcript)) return;
+  const serverAudit = (session.dismissedItems || []).map(serverDismissedItemToAudit);
+  const combinedAudit = serverAudit.concat(state.audit || []).filter(function(record, index, records) {
+    return records.findIndex(function(candidate) {
+      return (record.originalId && candidate.originalId === record.originalId) ||
+        (candidate.type === record.type && candidate.title === record.title && candidate.detail === record.detail);
+    }) === index;
+  });
+  state.audit = combinedAudit;
   state.recordMode = normalizeRecordMode(session.recordMode);
   renderRecordMode();
   const previousDuration = state.duration || 0;
@@ -980,7 +1078,9 @@ function applyRtmsSessionState(session) {
   });
   state.cues = nextCues;
   state.duration = Math.max.apply(null, state.cues.map(function(cue) { return cue.end; }).concat([1]));
-  state.decisions = (session.decisions || []).map(function(item) {
+  state.decisions = (session.decisions || []).filter(function(item) {
+    return !combinedAudit.some(function(record) { return auditRecordMatchesServerItem(record, 'decision', item); });
+  }).map(function(item) {
     return {
       id: item.id,
       key: 'decision:' + item.title,
@@ -995,7 +1095,9 @@ function applyRtmsSessionState(session) {
       steps: ['Confirm the commitment.', 'Ask for objections or missing evidence.', 'Accept or reject the decision.']
     };
   });
-  state.risks = (session.risks || []).map(function(item) {
+  state.risks = (session.risks || []).filter(function(item) {
+    return !combinedAudit.some(function(record) { return auditRecordMatchesServerItem(record, 'risk', item); });
+  }).map(function(item) {
     return {
       id: item.id,
       title: item.title,
@@ -1006,7 +1108,9 @@ function applyRtmsSessionState(session) {
       steps: ['Choose mitigate, monitor, or dismiss.', 'Assign an owner if needed.', 'Define a warning sign.']
     };
   });
-  state.actions = (session.actions || []).map(function(item) {
+  state.actions = (session.actions || []).filter(function(item) {
+    return !combinedAudit.some(function(record) { return auditRecordMatchesServerItem(record, 'action', item); });
+  }).map(function(item) {
     return {
       id: item.id,
       title: item.title,
@@ -1017,7 +1121,9 @@ function applyRtmsSessionState(session) {
       steps: ['Assign an owner.', 'Set a review checkpoint.', 'Connect the action to a decision or risk.']
     };
   });
-  state.agents = (session.openAgentIssues || []).map(function(item) {
+  state.agents = (session.openAgentIssues || []).filter(function(item) {
+    return !combinedAudit.some(function(record) { return auditRecordMatchesServerItem(record, 'agent', item); });
+  }).map(function(item) {
     return {
       id: item.id,
       key: item.agent + ':' + item.summary,
@@ -1100,16 +1206,18 @@ async function loadRtmsSessionState(id) {
 
 function startRtmsPolling() {
   const meeting = state.meetingContext || {};
+  const meetingUuid = meeting.meetingUuid || (state.zoomSession && state.zoomSession.zoomMeetingUuid);
   const candidates = Array.from(new Set([
-    meeting.meetingUuid,
-    meeting.meetingId,
-    state.zoomSession && state.zoomSession.zoomMeetingUuid,
-    state.zoomSession && state.zoomSession.zoomMeetingId,
+    meetingUuid,
+    meetingUuid ? null : meeting.meetingId,
+    meetingUuid ? null : (state.zoomSession && state.zoomSession.zoomMeetingId),
     currentDashboardSessionId()
   ].filter(Boolean)));
   if (!candidates.length || rtmsPollTimer) return;
 
   async function poll() {
+    const sessionId = currentDashboardSessionId() || (state.zoomSession && state.zoomSession.id) || '';
+    if (sessionId && await loadDashboardMeetingOutput(sessionId)) return;
     for (const id of candidates) {
       if (await loadRtmsSessionState(id)) return;
     }
@@ -1714,6 +1822,7 @@ async function requestCueAnalysis(cue, evidence) {
 
 function applyAnalysisItems(items, cue, evidence) {
   items.forEach(function(item) {
+    if (isDismissedAnalysisItem(item)) return;
     if (item.updateMode === 'update' && updateBoardItem(item, cue, evidence)) return;
     if (item.type === 'decision') addDecision(item.status || 'forming', item.title, item.summary, evidence, { transcriptText: cue.text });
     if (item.type === 'risk') addRisk(item.title, item.summary, evidence, cue.text);
@@ -1725,6 +1834,17 @@ function applyAnalysisItems(items, cue, evidence) {
       evidence: evidence,
       createdCueId: cue.id
     });
+  });
+}
+
+function isDismissedAnalysisItem(item) {
+  const type = item.type === 'agent_issue' ? 'agent' : item.type;
+  const candidate = normalizeMatchText((item.title || '') + ' ' + (item.summary || ''));
+  if (!candidate) return false;
+  return state.audit.some(function(record) {
+    if (record.type !== type) return false;
+    const dismissed = normalizeMatchText((record.title || '') + ' ' + (record.detail || ''));
+    return textOverlapScore(candidate, dismissed) >= 0.7;
   });
 }
 
@@ -2179,6 +2299,7 @@ function markAgent(id, action) {
   const agent = state.agents.find(function(item) { return item.id === id; });
   if (!agent) return;
   if (action === 'dismiss') {
+    persistBoardDisposition(agent, 'dismissed');
     addAuditRecord('agent', agent, 'dismissed');
     state.agents = state.agents.filter(function(item) { return item.id !== id; });
     closeDetailModal();
@@ -2195,6 +2316,7 @@ function markAgent(id, action) {
 function removeBoardItem(type, id) {
   const item = findBoardItem(type, id);
   if (!item) return;
+  persistBoardDisposition(item, 'dismissed');
   addAuditRecord(type, item, 'dismissed');
   if (type === 'risk') state.risks = state.risks.filter(function(record) { return record.id !== id; });
   if (type === 'action') state.actions = state.actions.filter(function(record) { return record.id !== id; });
@@ -2214,6 +2336,7 @@ function markDecision(id, action) {
     decision.steps = ['Capture the owner of the decision record.', 'Confirm the next action tied to the decision.', 'Log unresolved assumptions as risks if needed.'];
   }
   if (action === 'rejected') {
+    persistBoardDisposition(decision, 'rejected');
     addAuditRecord('decision', decision, 'rejected');
     state.decisions = state.decisions.filter(function(item) { return item.id !== id; });
     closeDetailModal();
@@ -2225,6 +2348,7 @@ function markDecision(id, action) {
 function addAuditRecord(type, item, disposition) {
   state.audit.unshift({
     id: makeId('audit'),
+    originalId: item.id,
     type: type,
     disposition: disposition,
     title: item.title || item.agent || type,
@@ -4205,6 +4329,25 @@ function recordModeSessionId() {
   return currentDashboardSessionId() || (state.zoomSession && state.zoomSession.publicSessionId) || (state.zoomSession && state.zoomSession.id) || '';
 }
 
+async function persistBoardDisposition(item, disposition) {
+  const sessionId = recordModeSessionId();
+  const token = currentDashboardToken() || (state.zoomSession && state.zoomSession.dashboardToken) || '';
+  if (!sessionId || !item || !item.id) return;
+  try {
+    const response = await fetch('/api/sessions/' + encodeURIComponent(sessionId) + '/items/' + encodeURIComponent(item.id) + '/disposition', {
+      method: 'POST',
+      headers: Object.assign(
+        { 'content-type': 'application/json' },
+        token ? { 'x-dashboard-token': token } : {}
+      ),
+      body: JSON.stringify({ disposition: disposition })
+    });
+    if (!response.ok) throw new Error('board item disposition update failed');
+  } catch (error) {
+    console.info('Meeting Decision Maker disposition update unavailable', error);
+  }
+}
+
 async function setRecordMode(nextMode) {
   const previousMode = state.recordMode;
   state.recordMode = normalizeRecordMode(nextMode);
@@ -4455,6 +4598,7 @@ async function initializeApp() {
   seedAgendaDecisionCandidates(state.runwayData);
   await loadDashboardSession();
   await maybeInitializeZoomApp();
+  await loadDashboardMeetingOutput();
   await loadAnalysisConfig();
   await loadLlmOutput();
   const sessionId = currentDashboardSessionId();
