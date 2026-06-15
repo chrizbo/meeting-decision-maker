@@ -1259,6 +1259,9 @@ async function getSession(id) {
   const normalizedId = id === null || id === undefined ? '' : String(id);
   if (!normalizedId) return null;
   if (!firestore) return sessions.get(normalizedId) || null;
+  // Zoom occurrence UUIDs can contain "/", which Firestore interprets as a
+  // document path separator. Those IDs must be resolved through field queries.
+  if (normalizedId.includes('/')) return null;
   const snapshot = await firestore.collection(sessionsCollection).doc(normalizedId).get();
   if (!snapshot.exists) return null;
   return snapshot.data();
