@@ -3119,3 +3119,22 @@ body.mode-focus.focus-queue-open .agents-panel {
   border-radius: 50%;
   color: var(--muted);
 }
+
+@media (max-width: 900px) {
+  .wrapup-nudge {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    transform: none;
+    max-width: none;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    border-radius: 16px;
+    padding: 12px 14px;
+  }
+
+  .wrapup-nudge span {
+    flex: 1 1 100%;
+    margin-bottom: 2px;
+  }
+}
