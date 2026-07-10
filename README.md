@@ -76,6 +76,8 @@ The local board includes a three-step flow:
 
 Agenda items can seed `Potential` decision cards when the agenda implies a choice, commitment, owner assignment, or next step. When the transcript later names the same decision in different words, the board should merge the potential item into the live decision instead of showing duplicate cards. The meeting stepper carries the scheduled meeting progress so timing remains part of the flow without adding a separate timer row to the board header.
 
+The board header includes a `Board view` toggle (`Focus` / `Classic`) in the controls menu. `Focus` (the default) reduces every step to its single most relevant item and hides the agent queue and full board grid, with a queue toggle to reach open agent issues on demand. `Classic` shows the full board at every step. The choice is stored client-side and applies consistently across Runway, Meeting, and Recap.
+
 ## Cloud Run Service
 
 The repo also includes a tiny Node service so the prototype can be deployed as a live HTTPS app on Google Cloud Run.

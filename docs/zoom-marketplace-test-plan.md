@@ -239,7 +239,29 @@ Expected result:
 - Promoted agent prompts become human-facing risk or open-question items before appearing in the brief.
 - The copied brief contains only included sections and does not require a separate Room Clarity account.
 
-## Test Scenario 9: Verify RTMS Webhook URL Validation
+## Test Scenario 9: Verify Board View Toggle (Focus / Classic)
+
+Purpose: verify that the `Board view` toggle behaves consistently across the Runway, Meeting, and Recap steps.
+
+Steps:
+
+1. Open the Room Clarity board (Zoom App or browser dashboard).
+2. Open the controls menu and confirm `Board view` shows `Focus`.
+3. On the `Runway` step, confirm the board shows only runway content plus a compact `Agent queue` toggle in the header, with no full decision/risk/action grid visible.
+4. Click `Agent queue`, confirm the agent panel opens as an overlay, then close it.
+5. Move to the `Meeting` step and confirm the reduced view shows one decision-in-view card and one agent note instead of the full board grid.
+6. Move to the `Recap` step and confirm the Meeting Brief panel is shown without the full decision/risk/action grid or audit tray beneath it, and the `Agent queue` toggle remains available.
+7. Open the controls menu and switch `Board view` to `Classic`.
+8. Repeat steps 3–6 and confirm the full board (decision strip, risks, actions, audit tray, agent queue) is visible at every step instead of the reduced view.
+9. Switch back to `Focus`, then reload the page, and confirm the app remembers the last selected view.
+
+Expected result:
+
+- `Focus` reduces every step to its single most relevant item and hides secondary board sections, with the agent queue reachable through a toggle at every step.
+- `Classic` shows the full board at every step with no reduction.
+- The selected `Board view` persists across a page reload.
+
+## Test Scenario 10: Verify RTMS Webhook URL Validation
 
 Purpose: verify that Zoom can validate the configured RTMS webhook endpoint.
 
@@ -259,7 +281,7 @@ Expected result:
 - Zoom receives a valid encrypted response for endpoint validation.
 - Signed runtime webhook events are accepted only when their timestamp and signature are valid.
 
-## Test Scenario 10: Verify Support and Policy Pages
+## Test Scenario 11: Verify Support and Policy Pages
 
 Purpose: verify that required Marketplace support and policy links are reachable.
 
@@ -289,6 +311,7 @@ Before submitting or resubmitting for Zoom review, run this plan with a fresh Zo
 - RTMS starts successfully, transcript cues appear on the dashboard, and stopping RTMS ends the stream.
 - If in-meeting chat webhook delivery is enabled for the test account, chat messages appear in the Live Feed with a `Chat` label and can create meeting artifacts.
 - The Recap step opens, item exclusion updates the brief, promoted agent prompts can be included, and Copy Brief places Markdown on the clipboard.
+- The `Board view` toggle switches between `Focus` and `Classic` and the choice holds across Runway, Meeting, and Recap and across a page reload.
 - Public support, documentation, privacy, terms, and configuration pages are reachable.
 - The developer contact email for the Zoom Marketplace submission is actively monitored.
 

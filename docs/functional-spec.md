@@ -12,6 +12,17 @@ The product operates across three sequential phases for every meeting: **Runway*
 
 ---
 
+## Board view modes
+
+Independent of phase, the host can toggle between two board views:
+
+- **Focus** (default) — reduces each phase to the single most relevant item: one decision in view plus one agent note during the Meeting phase, with the full decision/risk/action grid and agent queue hidden. The same reduction applies during Runway and Brief. The agent queue remains reachable from a queue toggle so open agent issues aren't lost, just deferred.
+- **Classic** — shows the full board (all decisions, risks, actions, agent queue, and audit tray) at all times, at every phase.
+
+The choice persists across sessions (stored client-side) and applies uniformly across Runway, Meeting, and Brief — a host who prefers Focus should not see the full board reappear just because they moved to a different phase.
+
+---
+
 ## Phase 1 — Runway
 
 The Runway phase occurs before and at the start of the meeting. Its purpose is to orient the host and participants around what the meeting is trying to decide and how.
@@ -111,7 +122,7 @@ Each agent issue has: `type`, `title`, `summary`, `evidence`, and `status` (`act
 Any board item can be opened to show its full detail, including:
 
 - Summary and evidence (transcript quote + timestamp)
-- Conversation prompts — suggested questions the host can use to advance the discussion
+- Conversation prompts — a direct, provocative question the host can read aloud to push the room toward a real decision rather than a generic status check
 - Suggested next steps
 - For decisions: `Accept` and `Reject` actions
 - For agent issues: `Mark discussed`, `Dismiss`, `Promote to risk`, or `Promote to open question`
