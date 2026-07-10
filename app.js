@@ -233,6 +233,10 @@ const state = {
   lastTick: 0,
   speed: 1,
   filter: 'all',
+  viewMode: localStorage.getItem('rcViewMode') === 'classic' ? 'classic' : 'focus',
+  focusQueueOpen: false,
+  focusExpanded: null,
+  wrapupDismissed: false,
   transcriptVisible: true,
   recordMode: 'on',
   recordModeUpdating: false,
@@ -369,7 +373,14 @@ const els = {
   jiraBriefStatus: document.querySelector('#jiraBriefStatus'),
   jiraBriefContent: document.querySelector('#jiraBriefContent'),
   modalJiraSection: document.querySelector('#modalJiraSection'),
-  modalJiraIssues: document.querySelector('#modalJiraIssues')
+  modalJiraIssues: document.querySelector('#modalJiraIssues'),
+  viewModeButton: document.querySelector('#viewModeButton'),
+  viewModeStatus: document.querySelector('#viewModeStatus'),
+  focusPanel: document.querySelector('#focusPanel'),
+  wrapupNudge: document.querySelector('#wrapupNudge'),
+  wrapupText: document.querySelector('#wrapupText'),
+  wrapupOpenBrief: document.querySelector('#wrapupOpenBrief'),
+  wrapupDismiss: document.querySelector('#wrapupDismiss')
 };
 
 function tryParseJson(value) {
@@ -1241,6 +1252,10 @@ function resetState(keepTranscript) {
   state.playing = false;
   state.lastTick = 0;
   state.reviewMode = false;
+  state.focusQueueOpen = false;
+  state.focusExpanded = null;
+  state.wrapupDismissed = false;
+  if (els.wrapupNudge) els.wrapupNudge.hidden = true;
   state.githubRelatedIssues = {};
   state.githubItemLinks = {};
   state.githubProposals = [];
@@ -1403,6 +1418,7 @@ function renderTranscript() {
 function renderAll() {
   els.clock.textContent = formatTime(state.currentTime);
   els.progressBar.style.width = Math.min((state.currentTime / state.duration) * 100, 100) + '%';
+  applyViewMode();
   renderMeetingProgress();
   renderRunway();
   renderRunwayTracker();
@@ -1412,10 +1428,134 @@ function renderAll() {
     renderDecisions();
     renderStacks();
     renderAgents();
+    renderFocus();
     renderAudit();
     if (state.reviewMode) renderBriefPanel();
     state.boardDirty = false;
   }
+}
+
+function isFocusLive() {
+  return state.viewMode === 'focus' && currentStep() === 'meeting';
+}
+
+function applyViewMode() {
+  const focusLive = isFocusLive();
+  document.body.classList.toggle('mode-focus', state.viewMode === 'focus');
+  document.body.classList.toggle('focus-live', focusLive);
+  document.body.classList.toggle('focus-queue-open', focusLive && state.focusQueueOpen);
+  if (els.focusPanel) els.focusPanel.hidden = !focusLive;
+  if (els.viewModeStatus) els.viewModeStatus.textContent = state.viewMode === 'focus' ? 'Focus' : 'Classic';
+  if (els.viewModeButton) els.viewModeButton.setAttribute('aria-pressed', String(state.viewMode === 'focus'));
+}
+
+function setViewMode(mode) {
+  state.viewMode = mode === 'classic' ? 'classic' : 'focus';
+  try { localStorage.setItem('rcViewMode', state.viewMode); } catch (e) { /* storage unavailable */ }
+  state.focusQueueOpen = false;
+  state.boardDirty = true;
+  renderAll();
+}
+
+function agentPriorityRank(priority) {
+  if (priority === 'high') return 0;
+  if (priority === 'low') return 2;
+  return 1;
+}
+
+function currentFocusDecision() {
+  return state.decisions.find(function(item) {
+    return item.status !== 'rejected' && item.excludedFromBrief !== true;
+  }) || null;
+}
+
+function currentFocusAgent() {
+  const open = state.agents.filter(function(agent) { return agent.status === 'open'; });
+  open.sort(function(a, b) { return agentPriorityRank(a.priority) - agentPriorityRank(b.priority); });
+  return open[0] || null;
+}
+
+function glanceChip(key, label, count) {
+  return '<button type="button" class="glance-chip' + (state.focusExpanded === key ? ' active' : '') + '" data-focus-expand="' + key + '" aria-pressed="' + (state.focusExpanded === key) + '">' +
+    label + ' <span>' + count + '</span></button>';
+}
+
+function focusExpandedList(key) {
+  if (key === 'risks') {
+    return state.risks.map(function(item) { return stackItem(item, 'risk'); }).join('') || emptyStack('No risks captured');
+  }
+  if (key === 'actions') {
+    return state.actions.map(function(item) { return stackItem(item, 'action'); }).join('') || emptyStack('No actions captured');
+  }
+  if (key === 'decisions') {
+    return state.decisions.map(function(item) {
+      return '<article class="stack-item interactive" data-open-type="decision" data-open-id="' + item.id + '">' +
+        '<div class="stack-item-header"><strong>' + escapeHtml(item.title) + '</strong>' +
+        '<span class="status-pill ' + item.status + '">' + item.status + '</span></div>' +
+        '</article>';
+    }).join('') || emptyStack('No decisions captured');
+  }
+  return '';
+}
+
+function renderFocus() {
+  if (!els.focusPanel) return;
+  const decision = currentFocusDecision();
+  const openAgents = state.agents.filter(function(agent) { return agent.status === 'open'; });
+  const note = currentFocusAgent();
+  let html = '';
+
+  html += '<div class="focus-decision-block"><p class="eyebrow">Decision in view</p>';
+  if (decision) {
+    html += '<article class="focus-decision interactive-card" data-open-type="decision" data-open-id="' + decision.id + '">' +
+      '<span class="status-pill ' + decision.status + '">' + decision.status + '</span>' +
+      '<h3>' + escapeHtml(decision.title) + '</h3>' +
+      '<p>' + escapeHtml(decision.detail) + '</p>' +
+      (decision.conversation
+        ? '<div class="focus-prompt"><span>Ask the room</span><p>' + escapeHtml(decision.conversation) + '</p></div>'
+        : '') +
+      '</article>';
+  } else {
+    html += '<article class="focus-decision focus-empty">' +
+      '<h3>No decision in view yet</h3>' +
+      '<p>The board fills as the conversation surfaces decisions.</p>' +
+      '</article>';
+  }
+  html += '</div>';
+
+  html += '<div class="focus-agent-block"><div class="focus-agent-head">' +
+    '<p class="eyebrow">Agent note</p>' +
+    (openAgents.length > 1 || state.focusQueueOpen
+      ? '<button type="button" class="focus-queue-toggle" data-focus-queue-toggle>' +
+        (state.focusQueueOpen ? 'Hide full list' : 'View all (' + openAgents.length + ')') + '</button>'
+      : '') +
+    '</div>';
+  if (note) {
+    html += '<article class="agent-card focus-note" data-open-type="agent" data-open-id="' + note.id + '">' +
+      '<div class="agent-card-header"><div class="agent-name">' + escapeHtml(note.agent) + '</div>' +
+      '<span class="priority-pill ' + note.priority + '">' + note.priority + '</span></div>' +
+      '<p>' + escapeHtml(note.intervention) + '</p>' +
+      '<div class="agent-evidence">' + escapeHtml(evidenceSpeaker(note.evidence)) + '</div>' +
+      '<div class="agent-actions">' +
+      '<button type="button" data-action="discussed" data-agent-id="' + note.id + '">Discussed</button>' +
+      '<button type="button" data-action="dismiss" data-agent-id="' + note.id + '">Dismiss</button>' +
+      '</div></article>';
+  } else {
+    html += '<article class="agent-card focus-note focus-empty"><p>Nothing from the agents right now.</p></article>';
+  }
+  html += '</div>';
+
+  html += '<div class="focus-glance">' +
+    glanceChip('decisions', 'Decisions', state.decisions.length) +
+    glanceChip('risks', 'Risks', state.risks.length) +
+    glanceChip('actions', 'Actions', state.actions.length) +
+    '</div>';
+
+  if (state.focusExpanded) {
+    html += '<div class="focus-expand">' + focusExpandedList(state.focusExpanded) + '</div>';
+  }
+
+  els.focusPanel.innerHTML = html;
 }
 
 function renderMeetingProgress() {
@@ -1432,6 +1572,21 @@ function renderMeetingProgress() {
   els.meetingProgressLabel.textContent = elapsedMinutes + '/' + durationMinutes + ' min';
   els.stepMeeting.setAttribute('title', remainingMinutes + ' min left. ' + agendaText);
   els.stepMeeting.setAttribute('aria-label', 'Meeting phase, ' + elapsedMinutes + ' of ' + durationMinutes + ' minutes elapsed. ' + agendaText);
+  updateWrapupNudge(remainingMinutes, progress);
+}
+
+function updateWrapupNudge(remainingMinutes, progress) {
+  if (!els.wrapupNudge) return;
+  const transcriptProgress = state.duration ? (state.currentTime || 0) / state.duration : 0;
+  const nearEnd = (progress > 0 && (remainingMinutes <= 5 || progress >= 0.85)) || transcriptProgress >= 0.8;
+  const active = nearEnd && !state.reviewMode && !state.runwayVisible && !state.wrapupDismissed &&
+    (state.currentTime || 0) > 60;
+  els.wrapupNudge.hidden = !active;
+  if (active) {
+    els.wrapupText.textContent = remainingMinutes > 0
+      ? 'About ' + remainingMinutes + ' min left — trim the brief together before people drop.'
+      : 'Time is up — trim the brief together before people drop.';
+  }
 }
 
 function agendaDurationMinutes(runwayData) {
@@ -1611,6 +1766,7 @@ function currentStep() {
 function renderStepper() {
   if (!els.stepper) return;
   els.stepper.dataset.step = currentStep();
+  applyViewMode();
 }
 
 function goToStep(step) {
@@ -1624,6 +1780,9 @@ function goToStep(step) {
     if (state.runwayVisible) hideRunway();
     setReviewMode(true);
   }
+  state.focusQueueOpen = false;
+  state.boardDirty = true;
+  renderAll();
 }
 
 function setReviewMode(active) {
@@ -4482,8 +4641,51 @@ document.addEventListener('click', function(event) {
     return;
   }
 
+  const queueToggle = event.target.closest('[data-focus-queue-toggle]');
+  if (queueToggle) {
+    event.preventDefault();
+    event.stopPropagation();
+    state.focusQueueOpen = !state.focusQueueOpen;
+    state.boardDirty = true;
+    renderAll();
+    return;
+  }
+
+  const glanceButton = event.target.closest('[data-focus-expand]');
+  if (glanceButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    const key = glanceButton.dataset.focusExpand;
+    state.focusExpanded = state.focusExpanded === key ? null : key;
+    state.boardDirty = true;
+    renderAll();
+    return;
+  }
+
   handleOpenClick(event);
 });
+
+if (els.viewModeButton) {
+  els.viewModeButton.addEventListener('click', function(event) {
+    event.stopPropagation();
+    setViewMode(state.viewMode === 'focus' ? 'classic' : 'focus');
+  });
+}
+
+if (els.wrapupOpenBrief) {
+  els.wrapupOpenBrief.addEventListener('click', function() {
+    state.wrapupDismissed = true;
+    els.wrapupNudge.hidden = true;
+    goToStep('recap');
+  });
+}
+
+if (els.wrapupDismiss) {
+  els.wrapupDismiss.addEventListener('click', function() {
+    state.wrapupDismissed = true;
+    els.wrapupNudge.hidden = true;
+  });
+}
 
 els.modalAcceptDecision.addEventListener('click', function() {
   if (!state.openModalItem || state.openModalItem.type !== 'decision') return;
