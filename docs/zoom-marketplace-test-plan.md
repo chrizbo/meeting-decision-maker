@@ -196,6 +196,12 @@ Expected result:
 
 Purpose: verify that Zoom in-meeting chat messages can appear in the same live feed as spoken transcript cues and can contribute to captured meeting artifacts.
 
+Prerequisites:
+
+- Zoom DLP / in-meeting chat webhook enablement is approved and enabled for the testing account or app.
+- The Production Zoom app includes the `meeting:read:meeting_chat` scope.
+- The Production Zoom app subscribes to the Meeting event labeled `In-meeting chat message received`.
+
 Steps:
 
 1. Start a Zoom test meeting where Room Clarity is installed and authorized.
@@ -213,7 +219,7 @@ Expected result:
 - Chat messages are timestamped relative to the meeting feed and shown near surrounding transcript cues.
 - Decision, action, risk, or agent-prompt cards can be created from chat messages when the message contains a strong enough cue.
 - Card evidence identifies the message as chat so reviewers can distinguish typed messages from spoken transcript.
-- If Zoom has not enabled in-meeting chat webhook delivery for the test account, transcript capture should still work and the absence of chat webhook delivery should be visible in Zoom/Room Clarity webhook logs.
+- Zoom Events dashboard and Room Clarity Cloud Run logs show the `meeting.chat_message_sent` delivery; Room Clarity logs include `Zoom meeting chat webhook received`.
 
 ## Test Scenario 8: Review and Copy the Meeting Brief
 

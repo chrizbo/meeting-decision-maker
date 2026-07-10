@@ -118,6 +118,8 @@ Start with capabilities/scopes that let the app:
 - Start, stop, and inspect RTMS status when Zoom grants the app those APIs.
 - Receive RTMS webhook events, transcript data, and meeting chat data.
 
+Meeting chat delivery requires Zoom DLP / in-meeting chat webhook enablement for the account or app. Confirm that enablement before testing `meeting.chat_message_sent`; without it, transcript RTMS events can work while chat webhooks are never delivered.
+
 Enable event subscriptions for:
 
 - `meeting.rtms_started`
