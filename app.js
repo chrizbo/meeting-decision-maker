@@ -297,6 +297,7 @@ const els = {
   resetButton: document.querySelector('#resetButton'),
   transcriptHeaderToggle: document.querySelector('#transcriptHeaderToggle'),
   showFeedButton: document.querySelector('#showFeedButton'),
+  focusQueueToggle: document.querySelector('#focusQueueToggle'),
   workspace: document.querySelector('.workspace'),
   transcriptFile: document.querySelector('#transcriptFile'),
   speedSelect: document.querySelector('#speedSelect'),
@@ -1440,13 +1441,19 @@ function isFocusLive() {
 }
 
 function applyViewMode() {
+  const focusMode = state.viewMode === 'focus';
   const focusLive = isFocusLive();
-  document.body.classList.toggle('mode-focus', state.viewMode === 'focus');
+  document.body.classList.toggle('mode-focus', focusMode);
   document.body.classList.toggle('focus-live', focusLive);
-  document.body.classList.toggle('focus-queue-open', focusLive && state.focusQueueOpen);
+  document.body.classList.toggle('focus-queue-open', focusMode && state.focusQueueOpen);
   if (els.focusPanel) els.focusPanel.hidden = !focusLive;
-  if (els.viewModeStatus) els.viewModeStatus.textContent = state.viewMode === 'focus' ? 'Focus' : 'Classic';
-  if (els.viewModeButton) els.viewModeButton.setAttribute('aria-pressed', String(state.viewMode === 'focus'));
+  if (els.focusQueueToggle) {
+    els.focusQueueToggle.hidden = !focusMode || focusLive;
+    const openCount = state.agents.filter(function(agent) { return agent.status === 'open'; }).length;
+    els.focusQueueToggle.textContent = (state.focusQueueOpen ? 'Hide agent queue' : 'Agent queue') + (openCount ? ' (' + openCount + ')' : '');
+  }
+  if (els.viewModeStatus) els.viewModeStatus.textContent = focusMode ? 'Focus' : 'Classic';
+  if (els.viewModeButton) els.viewModeButton.setAttribute('aria-pressed', String(focusMode));
 }
 
 function setViewMode(mode) {
@@ -2269,15 +2276,15 @@ function normalizeDecisionStatus(status) {
 
 function decisionConversation(status) {
   if (status === 'potential') {
-    return 'This decision was inferred from the agenda. Ask whether it is actually something the room needs to decide today.';
+    return 'Is this actually a decision the room needs to make today, or are we manufacturing urgency? Say so before spending time on it.';
   }
   if (status === 'forming') {
-    return 'Name the decision that appears to be forming and ask what options, tradeoffs, or missing evidence the group needs before it becomes a commitment.';
+    return 'Name the decision out loud. What would have to be true for you to bet on this right now — and what evidence is still missing?';
   }
   if (status === 'accepted') {
-    return 'The transcript suggests this decision was accepted. Confirm the wording, owner, and any unresolved assumptions before relying on it later.';
+    return 'You just decided this. Say it back in one sentence with an owner attached — if nobody can, you haven\'t actually decided.';
   }
-  return 'Name the pending decision out loud and ask whether the room accepts, rejects, or needs to revise it before it becomes part of the meeting record.';
+  return 'This is on the table. Accept it, kill it, or say exactly what\'s wrong with it — don\'t let it drift into the record by default.';
 }
 
 function decisionSteps(status) {

@@ -2923,23 +2923,26 @@ body.focus-live .focus-panel {
 
 body.focus-live .decision-strip,
 body.focus-live .board-grid,
-body.focus-live .audit-section {
+body.focus-live .audit-section,
+body.mode-focus.review-mode-active .decision-strip,
+body.mode-focus.review-mode-active .board-grid,
+body.mode-focus.review-mode-active .audit-section {
   display: none;
 }
 
-body.focus-live .workspace {
+body.mode-focus .workspace {
   grid-template-columns: 320px minmax(470px, 1fr);
 }
 
-body.focus-live .workspace.transcript-hidden {
+body.mode-focus .workspace.transcript-hidden {
   grid-template-columns: minmax(620px, 1fr);
 }
 
-body.focus-live .agents-panel {
+body.mode-focus .agents-panel {
   display: none;
 }
 
-body.focus-live.focus-queue-open .agents-panel {
+body.mode-focus.focus-queue-open .agents-panel {
   display: flex;
   position: fixed;
   top: 84px;
@@ -2949,6 +2952,13 @@ body.focus-live.focus-queue-open .agents-panel {
   max-width: calc(100vw - 36px);
   z-index: 60;
   box-shadow: 0 22px 60px rgba(35, 37, 36, 0.25);
+}
+
+.focus-queue-toggle.persistent {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+  border-radius: 999px;
 }
 
 .focus-decision {
