@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /app
+Disallow: /m/
+
+Sitemap: https://roomclarity.com/sitemap.xml

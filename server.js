@@ -42,6 +42,7 @@ const mimeTypes = {
   '.json': 'application/json; charset=utf-8',
   '.vtt': 'text/vtt; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png'
 };
@@ -3059,9 +3060,14 @@ async function handleApi(req, res, pathname) {
       sendJson(res, 401, { error: 'Invalid Zoom webhook signature' });
       return;
     }
-    const result = await handleRtmsWebhookEvent(event);
-    const status = event.event === 'endpoint.url_validation' ? 200 : 202;
-    sendJson(res, status, result);
+    if (event.event === 'endpoint.url_validation') {
+      sendJson(res, 200, await handleRtmsWebhookEvent(event));
+      return;
+    }
+    sendJson(res, 202, { received: true, event: event.event || null });
+    handleRtmsWebhookEvent(event).catch(function(error) {
+      console.error('RTMS webhook processing failed:', event.event || 'unknown', error.message);
+    });
     return;
   }
 
