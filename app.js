@@ -1517,7 +1517,6 @@ function renderFocus() {
   html += '<div class="focus-decision-block"><p class="eyebrow">Decision in view</p>';
   if (decision) {
     html += '<article class="focus-decision interactive-card" data-open-type="decision" data-open-id="' + decision.id + '">' +
-      '<span class="status-pill ' + decision.status + '">' + decision.status + '</span>' +
       '<h3>' + escapeHtml(decision.title) + '</h3>' +
       '<p>' + escapeHtml(decision.detail) + '</p>' +
       (decision.conversation
@@ -1704,18 +1703,44 @@ function agendaDecisionCandidates(runwayData) {
     return {
       title: agendaDecisionTitle(title, outcome),
       agendaItemTitle: title || 'Agenda item',
-      detail: outcome || 'Agenda suggests this item may need a decision before the meeting ends.'
+      detail: agendaDecisionDetail(title, outcome)
     };
   }).filter(Boolean).slice(0, 4);
 }
 
 function agendaDecisionTitle(title, outcome) {
-  const text = (outcome || title || 'Potential decision').replace(/\.$/, '');
+  const text = (outcome || title || 'Potential decision').replace(/\.$/, '').trim();
+  const titleTopic = agendaDecisionTopic(title);
   if (/\b(agree|assign|choose|commit|confirm|decide|make the call|pick|resolve|select)\b/i.test(title)) return title;
+  if (/\b(risks?|assumptions?)\b/i.test(title + ' ' + outcome)) return 'Key risks and assumptions';
   if (/\b(one direction chosen|choose a direction|chosen)\b/i.test(text)) return 'Choose first prototype direction';
   if (/\b(assign|owner|next step)\b/i.test(text)) return 'Confirm owner and next action';
+  if (titleTopic) return titleTopic;
   if (/\b(agree|confirm|clarify)\b/i.test(text)) return title || text;
   return text.length > 72 ? text.slice(0, 69).trim() + '...' : text;
+}
+
+function agendaDecisionTopic(title) {
+  const text = String(title || '').trim().replace(/\.$/, '');
+  if (!text) return '';
+  const topic = text
+    .replace(/^a\s+list\s+of\s+(the\s+)?/i, '')
+    .replace(/^(agree on|align on|choose|commit to|confirm|decide|make the call on|name|pick|resolve|select|surface)\s+/i, '')
+    .replace(/^the\s+/i, '')
+    .replace(/\b(on|about)\s+what\s+this\s+decision\s+is\s+really\s+about\b/i, 'decision frame')
+    .replace(/\bfor\s+both\s+.+$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!topic) return text;
+  return topic.charAt(0).toUpperCase() + topic.slice(1);
+}
+
+function agendaDecisionDetail(title, outcome) {
+  const detail = String(outcome || '').trim();
+  if (detail) return detail;
+  const topic = agendaDecisionTopic(title);
+  if (topic) return 'Clarify what the room needs to decide about ' + topic.toLowerCase() + ' before the meeting moves on.';
+  return 'Agenda suggests this item may need a decision before the meeting ends.';
 }
 
 function renderStacks() {
@@ -2036,6 +2061,11 @@ function updateBoardItem(item, cue, evidence) {
     existing.conversation = decisionConversation(normalizedStatus);
     existing.steps = decisionSteps(normalizedStatus);
   }
+  if (item.type === 'decision') {
+    const copy = normalizeDecisionCopy(existing.title, existing.detail);
+    existing.title = copy.title;
+    existing.detail = copy.detail;
+  }
   if (item.priority && item.type === 'agent_issue') existing.priority = item.priority;
 
   existing.evidence = evidence;
@@ -2236,6 +2266,9 @@ function buildTranscriptReference(evidence, detail) {
 }
 
 function addDecision(status, title, detail, evidence, options) {
+  const copy = normalizeDecisionCopy(title, detail);
+  title = copy.title;
+  detail = copy.detail;
   const suggestedStatus = normalizeDecisionStatus(status);
   const decisionStatus = suggestedStatus === 'accepted' ? 'accepted' : suggestedStatus;
   const key = 'decision:' + title;
@@ -2269,6 +2302,34 @@ function addDecision(status, title, detail, evidence, options) {
     conversation: decisionConversation(suggestedStatus),
     steps: decisionSteps(suggestedStatus)
   });
+}
+
+function normalizeDecisionCopy(title, detail) {
+  const cleanTitle = String(title || '').trim();
+  const cleanDetail = String(detail || '').trim();
+  if (!cleanTitle) return { title: 'Potential decision', detail: cleanDetail || 'Clarify what the room is deciding and what evidence is still missing.' };
+  if (normalizeMatchText(cleanTitle) !== normalizeMatchText(cleanDetail)) return { title: cleanTitle, detail: cleanDetail };
+
+  if (/\b(risks?|assumptions?)\b/i.test(cleanTitle)) {
+    return { title: 'Key risks and assumptions', detail: cleanDetail };
+  }
+  if (/\b(live board|live facilitation|post-meeting|summary|recap|prototype)\b/i.test(cleanTitle)) {
+    return { title: 'Prototype direction', detail: cleanDetail };
+  }
+  if (/\b(owner|action|next step)\b/i.test(cleanTitle)) {
+    return { title: 'Owner and next action', detail: cleanDetail };
+  }
+
+  const shortTitle = cleanTitle
+    .replace(/^a\s+list\s+of\s+(the\s+)?/i, '')
+    .replace(/^(agree on|align on|choose|commit to|confirm|decide|make the call on|name|pick|resolve|select|surface)\s+/i, '')
+    .replace(/\bfor\s+both\s+.+$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return {
+    title: shortTitle ? shortTitle.charAt(0).toUpperCase() + shortTitle.slice(1) : 'Potential decision',
+    detail: cleanDetail
+  };
 }
 
 function normalizeDecisionStatus(status) {
