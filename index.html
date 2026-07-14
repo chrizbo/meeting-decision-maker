@@ -92,7 +92,7 @@
             </div>
             <div class="meeting-link">
               <div class="dashboard-actions">
-                <button id="focusQueueToggle" class="focus-queue-toggle persistent" type="button" data-focus-queue-toggle hidden>Agent queue</button>
+                <button id="focusQueueToggle" class="focus-queue-toggle" type="button" data-focus-queue-toggle aria-controls="agentsPanel" aria-expanded="false" hidden>Agent queue</button>
                 <button id="showFeedButton" class="show-feed-button" type="button">‹ Transcript</button>
                 <button id="openDashboardButton" type="button" hidden>Open</button>
                 <button id="copyDashboardButton" type="button">Copy</button>
@@ -220,12 +220,15 @@
         </section>
       </section>
 
-      <aside class="panel agents-panel" aria-labelledby="agentsTitle">
+      <aside class="panel agents-panel" id="agentsPanel" aria-labelledby="agentsTitle">
         <div class="panel-header compact">
           <div>
             <h2 id="agentsTitle">Agent Queue</h2>
           </div>
-          <div class="queue-count" id="queueCount">0</div>
+          <div class="panel-header-actions">
+            <div class="queue-count" id="queueCount">0</div>
+            <button id="agentQueueClose" class="panel-icon-button agent-panel-close" type="button" data-focus-queue-close aria-label="Hide agent queue" title="Hide queue">x</button>
+          </div>
         </div>
 
         <div class="agent-tabs" role="tablist" aria-label="Agent filters">

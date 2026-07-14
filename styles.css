@@ -2954,11 +2954,12 @@ body.mode-focus.focus-queue-open .agents-panel {
   box-shadow: 0 22px 60px rgba(35, 37, 36, 0.25);
 }
 
-.focus-queue-toggle.persistent {
-  min-height: 34px;
-  padding: 0 14px;
-  font-size: 13px;
-  border-radius: 999px;
+.agent-panel-close {
+  display: none;
+}
+
+body.mode-focus.focus-queue-open .agent-panel-close {
+  display: grid;
 }
 
 .focus-decision {

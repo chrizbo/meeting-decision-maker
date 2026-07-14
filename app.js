@@ -340,6 +340,7 @@ const els = {
   riskCount: document.querySelector('#riskCount'),
   actionCount: document.querySelector('#actionCount'),
   queueCount: document.querySelector('#queueCount'),
+  agentQueueClose: document.querySelector('#agentQueueClose'),
   agentQueue: document.querySelector('#agentQueue'),
   filters: document.querySelectorAll('.agent-filter'),
   modal: document.querySelector('#detailModal'),
@@ -1451,6 +1452,7 @@ function applyViewMode() {
     els.focusQueueToggle.hidden = !focusMode || focusLive;
     const openCount = state.agents.filter(function(agent) { return agent.status === 'open'; }).length;
     els.focusQueueToggle.textContent = (state.focusQueueOpen ? 'Hide agent queue' : 'Agent queue') + (openCount ? ' (' + openCount + ')' : '');
+    els.focusQueueToggle.setAttribute('aria-expanded', String(focusMode && state.focusQueueOpen));
   }
   if (els.viewModeStatus) els.viewModeStatus.textContent = focusMode ? 'Focus' : 'Classic';
   if (els.viewModeButton) els.viewModeButton.setAttribute('aria-pressed', String(focusMode));
@@ -4653,6 +4655,16 @@ document.addEventListener('click', function(event) {
     event.preventDefault();
     event.stopPropagation();
     state.focusQueueOpen = !state.focusQueueOpen;
+    state.boardDirty = true;
+    renderAll();
+    return;
+  }
+
+  const queueClose = event.target.closest('[data-focus-queue-close]');
+  if (queueClose) {
+    event.preventDefault();
+    event.stopPropagation();
+    state.focusQueueOpen = false;
     state.boardDirty = true;
     renderAll();
     return;
